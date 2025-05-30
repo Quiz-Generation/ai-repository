@@ -5,15 +5,18 @@ import uvicorn
 import logging
 from datetime import datetime
 
+# API 라우터 임포트
+from app.api.pdf_routes import router as pdf_router
+
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # FastAPI 앱 인스턴스 생성
 app = FastAPI(
-    title="LangChain FastAPI Application",
-    description="LangChain과 FastAPI를 활용한 AI 애플리케이션",
-    version="1.0.0",
+    title="최적화된 PDF 처리 API",
+    description="PyMuPDF 기반 고성능 PDF 텍스트 추출 서비스",
+    version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -27,6 +30,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# API 라우터 등록
+app.include_router(pdf_router)
+
+# 루트 엔드포인트
+@app.get("/")
+async def root():
+    """API 정보"""
+    return {
+        "message": "최적화된 PDF 처리 API",
+        "version": "2.0.0",
+        "features": [
+            "🚀 PyMuPDF 기반 고속 처리",
+            "🔧 팩토리 패턴으로 확장 가능",
+            "📊 상세한 성능 메트릭",
+            "🎯 실시간 처리 최적화"
+        ],
+        "endpoints": {
+            "upload_and_extract": "/pdf/upload-and-extract",
+            "extract_fast": "/pdf/extract-fast",
+            "extractors": "/pdf/extractors",
+            "health": "/pdf/health"
+        }
+    }
 
 # 예외 처리 핸들러
 @app.exception_handler(HTTPException)
