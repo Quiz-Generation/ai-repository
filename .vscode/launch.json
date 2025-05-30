@@ -12,7 +12,9 @@
             "module": "uvicorn",
             "args": [
                 "lagnchain_fastapi_app.app.main:app",
-                "--reload"
+                "--reload",
+                "--port",
+                "7000"
             ],
             "jinja": true
         }
