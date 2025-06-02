@@ -1,42 +1,92 @@
 """
 PDF 업로드 → 벡터 DB 저장 API 라우터
 
-엔드포인트:
-- POST /pdf/upload: PDF 파일 업로드 및 벡터 저장
-- GET /pdf/search: 벡터 검색
+핵심 기능:
+- POST /pdf/upload: PDF 파일 업로드 및 벡터 저장 → document_id 반환
+- GET /pdf/documents: 업로드된 문서 목록 조회
+- GET /pdf/documents/{document_id}: 특정 문서 정보 조회
+- GET /pdf/search: 전체 문서에서 검색
+- GET /pdf/search/{document_id}: 특정 문서에서 검색
+- GET /pdf/health: 서비스 상태 확인
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Query
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Path
 from fastapi.responses import JSONResponse
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+import logging
 import tempfile
 import os
-import logging
 
-# 기존 서비스들 import
-from lagnchain_fastapi_app.app.services.pdf_service import DynamicPDFService
+# PDF 추출용
+try:
+    import fitz  # PyMuPDF
+    HAS_PYMUPDF = True
+except ImportError:
+    HAS_PYMUPDF = False
+
+# 벡터 서비스 import (상대 경로로 변경)
+from ..services.vector_service import PDFVectorService
+
+# Swagger 문서 설명 import
+from ..docs.api_descriptions import (
+    desc_upload_pdf,
+    desc_get_documents,
+    desc_get_document_info,
+    desc_search_all_documents,
+    desc_search_in_document,
+    desc_health_check,
+    desc_switch_database,
+    desc_get_stats
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/pdf", tags=["PDF Vector"])
 
-# 전역 서비스 인스턴스들 (싱글톤 패턴)
-pdf_service = DynamicPDFService()
+# 전역 벡터 서비스 인스턴스 (WEAVIATE 기본 사용)
+vector_service = PDFVectorService(db_type="weaviate")
 
-@router.get("/health")
+
+class SimplePDFReader:
+    """간단한 PDF 텍스트 추출기"""
+
+    def extract_text(self, pdf_path: str) -> str:
+        if not HAS_PYMUPDF:
+            raise Exception("PyMuPDF not available")
+
+        try:
+            doc = fitz.open(pdf_path)
+            text = ""
+            for page in doc:
+                text += page.get_text()
+            doc.close()
+            return text
+        except Exception as e:
+            raise Exception(f"PDF 추출 실패: {str(e)}")
+
+
+@router.get("/health", description=desc_health_check)
 async def health_check() -> JSONResponse:
     """벡터 DB 서비스 상태 확인"""
     try:
+        stats = vector_service.get_stats()
         return JSONResponse(
             status_code=200,
             content={
                 "status": "healthy",
                 "service": "PDF Vector Service",
-                "vector_db": "chroma",
+                "vector_db": stats["db_type"],
+                "total_documents": stats["total_documents"],
+                "total_uploaded_files": stats["total_uploaded_files"],
+                "supported_dbs": stats["supported_dbs"],
                 "endpoints": [
                     "POST /pdf/upload",
+                    "GET /pdf/documents",
+                    "GET /pdf/documents/{document_id}",
                     "GET /pdf/search",
-                    "GET /pdf/health"
+                    "GET /pdf/search/{document_id}",
+                    "GET /pdf/health",
+                    "POST /pdf/switch-db"
                 ]
             }
         )
@@ -48,3 +98,264 @@ async def health_check() -> JSONResponse:
                 "error": str(e)
             }
         )
+
+
+@router.post("/upload", description=desc_upload_pdf)
+async def upload_pdf(file: UploadFile = File(...)) -> JSONResponse:
+    """📤 PDF 파일 업로드 및 벡터 저장 → document_id 반환"""
+    if not file.filename or not file.filename.endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="PDF 파일만 지원됩니다")
+
+    filename = file.filename
+
+    try:
+        # 임시 파일 생성
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_path = temp_file.name
+
+        try:
+            # PDF 텍스트 추출
+            pdf_reader = SimplePDFReader()
+            pdf_text = pdf_reader.extract_text(temp_path)
+
+            if len(pdf_text.strip()) < 100:
+                raise HTTPException(status_code=400, detail="PDF에서 충분한 텍스트를 추출할 수 없습니다")
+
+            # 벡터 저장
+            result = vector_service.process_pdf_text(pdf_text, filename)
+
+            if not result["success"]:
+                raise HTTPException(status_code=500, detail=result.get("error", "벡터 저장 실패"))
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "message": "PDF 업로드 및 벡터 저장 성공",
+                    "document_id": result["document_id"],  # 🔑 RAG용 문서 ID
+                    "filename": filename,
+                    "file_size": len(content),
+                    "text_length": len(pdf_text),
+                    "total_chunks": result["total_chunks"],
+                    "stored_chunks": result["stored_chunks"],
+                    "db_type": result["db_type"],
+                    "upload_timestamp": result["upload_timestamp"],
+                    "note": "document_id를 저장하여 나중에 RAG 퀴즈 생성 시 사용하세요"
+                }
+            )
+
+        finally:
+            # 임시 파일 삭제
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"PDF 업로드 처리 중 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"서버 오류: {str(e)}")
+
+
+@router.get("/documents", description=desc_get_documents)
+async def get_document_list() -> JSONResponse:
+    """📋 업로드된 문서 목록 조회 (RAG용)"""
+    try:
+        documents = vector_service.get_document_list()
+
+        # RAG용 정보 추가
+        for doc in documents:
+            doc["available_for_rag"] = True
+            doc["recommended_for_quiz"] = doc["chunk_count"] >= 5  # 5개 이상 청크면 퀴즈 생성 권장
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "문서 목록 조회 성공",
+                "total_documents": len(documents),
+                "db_type": vector_service.db_type,
+                "documents": documents,
+                "note": "document_id를 사용하여 특정 문서로 RAG 퀴즈를 생성할 수 있습니다"
+            }
+        )
+    except Exception as e:
+        logger.error(f"문서 목록 조회 중 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"문서 목록 조회 오류: {str(e)}")
+
+
+@router.get("/documents/{document_id}", description=desc_get_document_info)
+async def get_document_info(
+    document_id: str = Path(..., description="문서 ID")
+) -> JSONResponse:
+    """📄 특정 문서 정보 조회 (RAG용 상세 정보)"""
+    try:
+        document_info = vector_service.get_document_info(document_id)
+
+        if not document_info:
+            raise HTTPException(status_code=404, detail=f"문서를 찾을 수 없습니다: {document_id}")
+
+        # RAG용 추가 정보
+        document_info["rag_ready"] = True
+        document_info["chunk_size_avg"] = document_info["total_chars"] // document_info["chunk_count"]
+        document_info["quiz_generation_score"] = min(10, document_info["chunk_count"] * 2)  # 점수 계산
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "문서 정보 조회 성공",
+                "document": document_info,
+                "db_type": vector_service.db_type,
+                "rag_info": {
+                    "can_generate_quiz": document_info["chunk_count"] >= 3,
+                    "recommended_questions": min(10, document_info["chunk_count"] // 2),
+                    "content_quality": "high" if document_info["chunk_count"] >= 10 else "medium"
+                }
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"문서 정보 조회 중 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"문서 정보 조회 오류: {str(e)}")
+
+
+@router.get("/search", description=desc_search_all_documents)
+async def search_all_documents(
+    query: str = Query(..., description="검색 쿼리"),
+    top_k: int = Query(5, ge=1, le=20, description="결과 개수")
+) -> JSONResponse:
+    """🔍 전체 문서에서 검색"""
+    if not query.strip():
+        raise HTTPException(status_code=400, detail="검색 쿼리가 비어있습니다")
+
+    try:
+        results = vector_service.search_documents(query, top_k)
+
+        # 결과 정리
+        formatted_results = []
+        for result in results:
+            formatted_results.append({
+                "doc_id": result["doc_id"],
+                "document_id": result["metadata"].get("document_id", ""),
+                "source_filename": result["metadata"].get("source", ""),
+                "text_preview": result["text"][:200] + "..." if len(result["text"]) > 200 else result["text"],
+                "similarity": round(result["similarity"], 4),
+                "chunk_index": result["metadata"].get("chunk_index", 0)
+            })
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "전체 검색 완료",
+                "query": query,
+                "total_results": len(formatted_results),
+                "db_type": vector_service.db_type,
+                "results": formatted_results
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"검색 처리 중 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"검색 오류: {str(e)}")
+
+
+@router.get("/search/{document_id}", description=desc_search_in_document)
+async def search_in_document(
+    document_id: str = Path(..., description="문서 ID"),
+    query: str = Query(..., description="검색 쿼리"),
+    top_k: int = Query(5, ge=1, le=10, description="결과 개수")
+) -> JSONResponse:
+    """🎯 특정 문서 내에서만 검색 (RAG용 컨텍스트 추출)"""
+    if not query.strip():
+        raise HTTPException(status_code=400, detail="검색 쿼리가 비어있습니다")
+
+    try:
+        # 문서 존재 확인
+        document_info = vector_service.get_document_info(document_id)
+        if not document_info:
+            raise HTTPException(status_code=404, detail=f"문서를 찾을 수 없습니다: {document_id}")
+
+        # 특정 문서에서 검색
+        results = vector_service.search_in_document(query, document_id, top_k)
+
+        # RAG용 결과 정리
+        formatted_results = []
+        full_context = ""
+
+        for result in results:
+            formatted_result = {
+                "doc_id": result["doc_id"],
+                "text_preview": result["text"][:200] + "..." if len(result["text"]) > 200 else result["text"],
+                "full_text": result["text"],  # RAG 컨텍스트용
+                "similarity": round(result["similarity"], 4),
+                "chunk_index": result["metadata"].get("chunk_index", 0)
+            }
+            formatted_results.append(formatted_result)
+            full_context += result["text"] + "\n\n"
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": f"문서 내 검색 완료",
+                "document_id": document_id,
+                "document_filename": document_info["source_filename"],
+                "query": query,
+                "total_results": len(formatted_results),
+                "db_type": vector_service.db_type,
+                "results": formatted_results,
+                "rag_context": {
+                    "combined_text": full_context.strip(),
+                    "context_length": len(full_context),
+                    "ready_for_rag": len(full_context) > 100
+                }
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"문서 내 검색 처리 중 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"문서 내 검색 오류: {str(e)}")
+
+
+@router.post("/switch-db", description=desc_switch_database)
+async def switch_database(db_type: str) -> JSONResponse:
+    """벡터 데이터베이스 변경"""
+    try:
+        success = vector_service.switch_database(db_type)
+
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail=f"지원하지 않는 DB 타입: {db_type}. 지원 타입: {vector_service.get_stats()['supported_dbs']}"
+            )
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": f"데이터베이스가 {db_type}으로 변경되었습니다",
+                "previous_db": vector_service.db_type,
+                "current_db": db_type,
+                "total_documents": 0  # 새 DB이므로 0
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"DB 변경 중 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"DB 변경 오류: {str(e)}")
+
+
+@router.get("/stats", description=desc_get_stats)
+async def get_stats() -> JSONResponse:
+    """벡터 DB 통계"""
+    try:
+        stats = vector_service.get_stats()
+        return JSONResponse(
+            status_code=200,
+            content=stats
+        )
+    except Exception as e:
+        logger.error(f"통계 조회 중 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"통계 조회 오류: {str(e)}")
