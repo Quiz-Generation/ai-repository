@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 
 # API 라우터 임포트
-from app.api.pdf_routes import router as pdf_router
+from lagnchain_fastapi_app.app.api.pdf_service import router as pdf_router
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
