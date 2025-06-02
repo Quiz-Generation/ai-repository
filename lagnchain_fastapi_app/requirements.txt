@@ -5,3 +5,6 @@ pytest==7.4.0
 PyPDF2==3.0.1
 PyMuPDF==1.26.0
 langchain-community==0.0.13
+# 퀴즈 생성 최적화를 위한 PDF 라이브러리
+pdfminer.six==20221105
+pdfplumber==0.10.0
