@@ -5,7 +5,7 @@ AutoRAG 실험 결과와 실제 성능을 비교해봅시다
 """
 import time
 import os
-from app.services.pdf_extractor import PDFExtractorFactory
+from lagnchain_fastapi_app.app.services.pdf_extractor import PDFExtractorFactory
 
 
 def performance_test():

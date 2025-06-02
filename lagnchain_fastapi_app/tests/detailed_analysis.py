@@ -10,7 +10,7 @@ import time
 import os
 import re
 from collections import Counter
-from app.services.pdf_extractor import PDFExtractorFactory
+from lagnchain_fastapi_app.app.services.pdf_extractor import PDFExtractorFactory
 
 
 def detailed_analysis():

@@ -7,7 +7,7 @@ import os
 import time
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
-from app.services.pdf_extractor import PDFExtractorFactory
+from lagnchain_fastapi_app.app.services.pdf_extractor import PDFExtractorFactory
 
 
 class ContentType(Enum):
