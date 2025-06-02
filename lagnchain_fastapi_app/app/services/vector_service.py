@@ -7,10 +7,12 @@ import numpy as np
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional
 from pathlib import Path
+import uuid
+from datetime import datetime
 
 
 class VectorDatabase(ABC):
-    """벡터 데이터베이스 추상 클래스"""
+    """벡터 데이터베이스 인터페이스"""
 
     @abstractmethod
     def store_document(self, doc_id: str, text: str, vector: List[float], metadata: Dict[str, Any]) -> bool:
@@ -18,7 +20,7 @@ class VectorDatabase(ABC):
         pass
 
     @abstractmethod
-    def search_similar(self, query_vector: List[float], top_k: int = 5) -> List[Dict[str, Any]]:
+    def search_similar(self, query_vector: List[float], top_k: int = 5, document_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """유사 문서 검색"""
         pass
 
@@ -27,9 +29,19 @@ class VectorDatabase(ABC):
         """저장된 문서 수"""
         pass
 
+    @abstractmethod
+    def get_documents_by_source(self, source_name: str) -> List[Dict[str, Any]]:
+        """특정 소스(파일)의 모든 문서 조회"""
+        pass
+
+    @abstractmethod
+    def list_document_sources(self) -> List[Dict[str, Any]]:
+        """업로드된 문서 소스 목록 조회"""
+        pass
+
 
 class WeaviateDB(VectorDatabase):
-    """Weaviate 벡터 데이터베이스 (추천 선택)"""
+    """Weaviate 벡터 데이터베이스 (시뮬레이션)"""
 
     def __init__(self):
         self.documents = {}
@@ -46,10 +58,14 @@ class WeaviateDB(VectorDatabase):
         except Exception:
             return False
 
-    def search_similar(self, query_vector: List[float], top_k: int = 5) -> List[Dict[str, Any]]:
+    def search_similar(self, query_vector: List[float], top_k: int = 5, document_id: Optional[str] = None) -> List[Dict[str, Any]]:
         results = []
 
         for doc_id, doc_data in self.documents.items():
+            # 특정 문서 ID로 필터링
+            if document_id and not doc_data["metadata"].get("document_id") == document_id:
+                continue
+
             doc_vector = doc_data["vector"]
             similarity = np.dot(query_vector, doc_vector) / (
                 np.linalg.norm(query_vector) * np.linalg.norm(doc_vector)
@@ -67,6 +83,39 @@ class WeaviateDB(VectorDatabase):
 
     def count_documents(self) -> int:
         return len(self.documents)
+
+    def get_documents_by_source(self, source_name: str) -> List[Dict[str, Any]]:
+        """특정 소스 파일의 모든 문서 조회"""
+        docs = []
+        for doc_id, doc_data in self.documents.items():
+            if doc_data["metadata"].get("source") == source_name:
+                docs.append({
+                    "doc_id": doc_id,
+                    "text": doc_data["text"],
+                    "metadata": doc_data["metadata"]
+                })
+        return docs
+
+    def list_document_sources(self) -> List[Dict[str, Any]]:
+        """업로드된 문서 소스 목록 조회"""
+        sources = {}
+        for doc_id, doc_data in self.documents.items():
+            source = doc_data["metadata"].get("source")
+            document_id = doc_data["metadata"].get("document_id")
+
+            if source and document_id:
+                if document_id not in sources:
+                    sources[document_id] = {
+                        "document_id": document_id,
+                        "source_filename": source,
+                        "chunk_count": 0,
+                        "upload_timestamp": doc_data["metadata"].get("upload_timestamp", ""),
+                        "total_chars": 0
+                    }
+                sources[document_id]["chunk_count"] += 1
+                sources[document_id]["total_chars"] += len(doc_data["text"])
+
+        return list(sources.values())
 
 
 class ChromaDB(VectorDatabase):
@@ -87,10 +136,14 @@ class ChromaDB(VectorDatabase):
         except Exception:
             return False
 
-    def search_similar(self, query_vector: List[float], top_k: int = 5) -> List[Dict[str, Any]]:
+    def search_similar(self, query_vector: List[float], top_k: int = 5, document_id: Optional[str] = None) -> List[Dict[str, Any]]:
         results = []
 
         for doc_id, doc_data in self.documents.items():
+            # 특정 문서 ID로 필터링
+            if document_id and not doc_data["metadata"].get("document_id") == document_id:
+                continue
+
             doc_vector = doc_data["vector"]
             similarity = np.dot(query_vector, doc_vector) / (
                 np.linalg.norm(query_vector) * np.linalg.norm(doc_vector)
@@ -108,6 +161,39 @@ class ChromaDB(VectorDatabase):
 
     def count_documents(self) -> int:
         return len(self.documents)
+
+    def get_documents_by_source(self, source_name: str) -> List[Dict[str, Any]]:
+        """특정 소스 파일의 모든 문서 조회"""
+        docs = []
+        for doc_id, doc_data in self.documents.items():
+            if doc_data["metadata"].get("source") == source_name:
+                docs.append({
+                    "doc_id": doc_id,
+                    "text": doc_data["text"],
+                    "metadata": doc_data["metadata"]
+                })
+        return docs
+
+    def list_document_sources(self) -> List[Dict[str, Any]]:
+        """업로드된 문서 소스 목록 조회"""
+        sources = {}
+        for doc_id, doc_data in self.documents.items():
+            source = doc_data["metadata"].get("source")
+            document_id = doc_data["metadata"].get("document_id")
+
+            if source and document_id:
+                if document_id not in sources:
+                    sources[document_id] = {
+                        "document_id": document_id,
+                        "source_filename": source,
+                        "chunk_count": 0,
+                        "upload_timestamp": doc_data["metadata"].get("upload_timestamp", ""),
+                        "total_chars": 0
+                    }
+                sources[document_id]["chunk_count"] += 1
+                sources[document_id]["total_chars"] += len(doc_data["text"])
+
+        return list(sources.values())
 
 
 class VectorDBFactory:
@@ -182,6 +268,10 @@ class PDFVectorService:
 
     def process_pdf_text(self, pdf_text: str, source_name: str) -> Dict[str, Any]:
         """PDF 텍스트를 처리하여 벡터 DB에 저장"""
+        # 고유한 문서 ID 생성
+        document_id = str(uuid.uuid4())
+        upload_timestamp = datetime.now().isoformat()
+
         # 1. 텍스트 청킹
         chunks = self.chunker.chunk_text(pdf_text)
 
@@ -195,18 +285,20 @@ class PDFVectorService:
         stored_count = 0
 
         for i, chunk in enumerate(chunks):
-            doc_id = f"{source_name}_chunk_{i}"
+            doc_id = f"{document_id}_chunk_{i}"
 
             # 벡터 생성
             vector = self.embedder.embed_text(chunk)
 
-            # 메타데이터 생성
+            # 메타데이터 생성 (document_id 추가)
             metadata = {
+                "document_id": document_id,        # 🆕 문서 식별자
                 "source": source_name,
                 "chunk_index": i,
                 "chunk_size": len(chunk),
                 "total_chunks": len(chunks),
-                "db_type": self.db_type
+                "db_type": self.db_type,
+                "upload_timestamp": upload_timestamp  # 🆕 업로드 시간
             }
 
             # 벡터 DB에 저장
@@ -215,23 +307,44 @@ class PDFVectorService:
 
         return {
             "success": True,
+            "document_id": document_id,           # 🆕 사용자에게 반환
             "total_chunks": len(chunks),
             "stored_chunks": stored_count,
             "db_type": self.db_type,
-            "source": source_name
+            "source": source_name,
+            "upload_timestamp": upload_timestamp
         }
 
-    def search_documents(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        """쿼리로 문서 검색"""
+    def search_documents(self, query: str, top_k: int = 5, document_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """쿼리로 문서 검색 (특정 문서 ID로 필터링 가능)"""
         query_vector = self.embedder.embed_text(query)
-        return self.vector_db.search_similar(query_vector, top_k)
+        return self.vector_db.search_similar(query_vector, top_k, document_id)
+
+    def search_in_document(self, query: str, document_id: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        """특정 문서 내에서만 검색"""
+        return self.search_documents(query, top_k, document_id)
+
+    def get_document_list(self) -> List[Dict[str, Any]]:
+        """업로드된 문서 목록 조회"""
+        return self.vector_db.list_document_sources()
+
+    def get_document_info(self, document_id: str) -> Optional[Dict[str, Any]]:
+        """특정 문서 정보 조회"""
+        sources = self.get_document_list()
+        for source in sources:
+            if source["document_id"] == document_id:
+                return source
+        return None
 
     def get_stats(self) -> Dict[str, Any]:
         """벡터 DB 통계"""
+        document_sources = self.get_document_list()
         return {
             "total_documents": self.vector_db.count_documents(),
+            "total_uploaded_files": len(document_sources),
             "db_type": self.db_type,
-            "supported_dbs": VectorDBFactory.get_supported_types()
+            "supported_dbs": VectorDBFactory.get_supported_types(),
+            "uploaded_files": document_sources
         }
 
     def switch_database(self, new_db_type: str) -> bool:
