@@ -15,7 +15,7 @@ from unittest.mock import Mock, patch, MagicMock
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.services.dynamic_pdf_service import (
+from lagnchain_fastapi_app.app.services.pdf_service import (
     DynamicPDFService,
     ContentType,
     Priority,
