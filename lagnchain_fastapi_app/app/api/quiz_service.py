@@ -33,6 +33,8 @@ async def generate_efficient_quiz(
     - ⚡ **속도 10배 향상**: 배치 처리로 생성 시간 단축
     - 🔄 **LangGraph 워크플로우**: 효율적인 파이프라인 처리
     - 🎯 **스마트 중복 제거**: 임베딩 기반 정확한 중복 탐지
+    - 🌐 **언어 설정 지원**: 한국어/영어 자동 감지 및 생성
+    - 📊 **정확한 문제 비율**: OX(20%) : 객관식(60%) : 주관식(20%)
 
     **사용 예시:**
     ```json
@@ -40,11 +42,16 @@ async def generate_efficient_quiz(
         "document_id": "your-doc-id",
         "num_questions": 15,
         "difficulty": "medium",
-        "question_types": ["multiple_choice"]
+        "question_types": ["multiple_choice"],
+        "language": "ko"
     }
     ```
+
+    **문제 타입 비율:**
+    - 기본 모드: OX 20%, 객관식 60%, 주관식 20%
+    - 특정 타입 지정시: 해당 타입으로만 생성
     """
-    logger.info(f"⚡ 효율적인 퀴즈 생성 요청: {request.num_questions}문제")
+    logger.info(f"⚡ 효율적인 퀴즈 생성 요청: {request.num_questions}문제, 언어: {request.language}")
 
     try:
         # 입력 검증
@@ -61,7 +68,8 @@ async def generate_efficient_quiz(
             logger.info(
                 f"🎉 효율적인 퀴즈 완료: {response.total_questions}문제, "
                 f"{response.generation_time:.2f}초, "
-                f"API 호출: {response.metadata.get('api_calls', 1)}회"
+                f"API 호출: {response.metadata.get('api_calls', 1)}회, "
+                f"언어: {request.language}"
             )
             return response
         else:
@@ -118,7 +126,9 @@ async def get_efficiency_comparison() -> Dict[str, Any]:
             "🎯 스마트 중복 제거 (임베딩 기반)",
             "📊 실시간 품질 평가",
             "🔍 병렬 컨텍스트 검색",
-            "⚖️ 정확한 2:6:2 타입 분배"
+            "⚖️ 정확한 2:6:2 타입 분배",
+            "🌐 언어별 최적화 (한국어/영어)",
+            "🎨 문제 품질 자동 검증"
         ]
     }
 

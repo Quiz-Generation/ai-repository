@@ -74,7 +74,6 @@ class QuizRequest:
     difficulty: Difficulty = Difficulty.MEDIUM
     question_types: Optional[List[QuestionType]] = None
     language: str = "ko"
-    custom_prompt: Optional[str] = None  # 커스텀 프롬프트
 
     def __post_init__(self):
         """요청 검증"""

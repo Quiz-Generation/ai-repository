@@ -131,7 +131,8 @@ class BatchQuestionGenerator:
         self,
         contexts: List[RAGContext],
         type_distribution: Dict[QuestionType, int],
-        difficulty: Difficulty
+        difficulty: Difficulty,
+        language: str = "ko"
     ) -> BatchGenerationResult:
         """배치로 모든 문제를 한 번에 생성 - 단일 API 호출!"""
 
@@ -139,14 +140,15 @@ class BatchQuestionGenerator:
 
         logger.info(f"Starting batch generation: {len(contexts)} contexts, {sum(type_distribution.values())} questions")
         logger.debug(f"Type distribution: {type_distribution}")
+        logger.debug(f"Language: {language}")
 
-        # 통합 프롬프트 생성
-        batch_prompt = self._create_unified_prompt(contexts, type_distribution, difficulty)
+        # 통합 프롬프트 생성 (언어 설정 포함)
+        batch_prompt = self._create_unified_prompt(contexts, type_distribution, difficulty, language)
         logger.debug(f"Generated prompt with {len(batch_prompt)} characters")
 
         # 시스템 메시지와 사용자 메시지 준비
         messages = [
-            SystemMessage(content=self._get_batch_system_prompt()),
+            SystemMessage(content=self._get_batch_system_prompt(language)),
             HumanMessage(content=batch_prompt)
         ]
 
@@ -219,7 +221,8 @@ class BatchQuestionGenerator:
         self,
         contexts: List[RAGContext],
         type_distribution: Dict[QuestionType, int],
-        difficulty: Difficulty
+        difficulty: Difficulty,
+        language: str = "ko"
     ) -> str:
         """통합 프롬프트 생성 - 모든 문제를 한 번에 요청"""
 
@@ -241,8 +244,70 @@ class BatchQuestionGenerator:
             Difficulty.HARD: "심화 분석 수준"
         }
 
+        # 언어별 프롬프트 설정
+        if language == "ko":
+            language_instruction = """
+⚠️ 중요: 반드시 한국어로 모든 문제와 설명을 작성하세요.
+- 문제 내용: 한국어
+- 선택지: 한국어
+- 정답: 한국어
+- 해설: 한국어
+- 주제: 한국어
+"""
+            output_format_example = f"""{{
+    "questions": [
+        {{
+            "question": "베이즈 정리의 목적은 무엇입니까?",
+            "question_type": "true_false",
+            "correct_answer": "True",
+            "explanation": "베이즈 정리는 관측된 데이터를 바탕으로 매개변수에 대한 믿음을 업데이트하는 데 사용됩니다.",
+            "difficulty": "{difficulty.value}",
+            "topic": "베이즈 통계학"
+        }},
+        {{
+            "question": "머신러닝에서 훈련 오차와 테스트 오차의 관계는?",
+            "question_type": "multiple_choice",
+            "options": ["훈련 오차가 항상 낮다", "테스트 오차가 항상 낮다", "둘 다 같을 수 있다", "관계없다"],
+            "correct_answer": "둘 다 같을 수 있다",
+            "explanation": "과적합이나 과소적합에 따라 훈련 오차와 테스트 오차의 관계가 달라질 수 있습니다.",
+            "difficulty": "{difficulty.value}",
+            "topic": "머신러닝 기초"
+        }},
+        {{
+            "question": "조건부 독립성이란 무엇인지 설명하세요.",
+            "question_type": "short_answer",
+            "correct_answer": "세 번째 변수가 주어졌을 때 두 변수가 독립인 상태",
+            "explanation": "조건부 독립성은 특정 조건 하에서 두 변수 간의 의존성이 사라지는 현상을 의미합니다.",
+            "difficulty": "{difficulty.value}",
+            "topic": "확률론"
+        }}
+    ]
+}}"""
+        else:
+            language_instruction = """
+⚠️ Important: Generate all questions and explanations in English.
+- Question content: English
+- Options: English
+- Answers: English
+- Explanations: English
+- Topics: English
+"""
+            output_format_example = f"""{{
+    "questions": [
+        {{
+            "question": "What is the purpose of Bayes' rule?",
+            "question_type": "true_false",
+            "correct_answer": "True",
+            "explanation": "Bayes' rule is used to update beliefs about parameters based on observed data.",
+            "difficulty": "{difficulty.value}",
+            "topic": "Bayesian Statistics"
+        }}
+    ]
+}}"""
+
         prompt = f"""
 다음 컨텍스트를 바탕으로 총 {total_questions}개의 고품질 퀴즈를 생성하세요.
+{language_instruction}
 
 === 컨텍스트 ===
 {context_text}
@@ -250,10 +315,10 @@ class BatchQuestionGenerator:
 === 생성 요구사항 ===
 - 총 문제 수: {total_questions}개
 - 난이도: {difficulty.value} ({difficulty_desc[difficulty]})
-- 문제 유형별 개수:
-  * OX 문제: {tf_count}개
-  * 객관식 문제: {mc_count}개
-  * 주관식 문제: {sa_count}개
+- 문제 유형별 개수 (정확히 맞춰주세요):
+  * OX 문제(true_false): {tf_count}개
+  * 객관식 문제(multiple_choice): {mc_count}개
+  * 주관식 문제(short_answer): {sa_count}개
 
 === 품질 기준 ===
 1. 컨텍스트와 직접 관련된 내용만
@@ -264,43 +329,18 @@ class BatchQuestionGenerator:
 === 출력 형식 ===
 반드시 다음 JSON 형식으로 응답하세요:
 
-{{
-    "questions": [
-        {{
-            "question": "OX 문제 내용",
-            "question_type": "true_false",
-            "correct_answer": "True",
-            "explanation": "정답 해설",
-            "difficulty": "{difficulty.value}",
-            "topic": "관련 주제"
-        }},
-        {{
-            "question": "객관식 문제 내용?",
-            "question_type": "multiple_choice",
-            "options": ["정답", "오답1", "오답2", "오답3"],
-            "correct_answer": "정답",
-            "explanation": "정답 해설",
-            "difficulty": "{difficulty.value}",
-            "topic": "관련 주제"
-        }},
-        {{
-            "question": "주관식 문제 내용?",
-            "question_type": "short_answer",
-            "correct_answer": "정답 내용",
-            "explanation": "정답 해설",
-            "difficulty": "{difficulty.value}",
-            "topic": "관련 주제"
-        }}
-    ]
-}}
+{output_format_example}
 
-정확히 {total_questions}개의 문제를 생성하고, 요청된 타입별 개수를 맞춰주세요.
+⚠️ 중요사항:
+- 정확히 {total_questions}개의 문제를 생성하세요
+- 요청된 타입별 개수를 정확히 맞춰주세요: OX({tf_count}개), 객관식({mc_count}개), 주관식({sa_count}개)
+- {"한국어" if language == "ko" else "English"}로만 작성하세요
 """
         return prompt
 
-    def _get_batch_system_prompt(self) -> str:
+    def _get_batch_system_prompt(self, language: str = "ko") -> str:
         """배치 처리용 시스템 프롬프트"""
-        return """당신은 전문 교육 평가 시스템입니다.
+        return f"""당신은 전문 교육 평가 시스템입니다.
 주어진 컨텍스트를 바탕으로 고품질의 학습 평가 문제를 배치로 생성하는 것이 목표입니다.
 
 핵심 원칙:
@@ -310,7 +350,8 @@ class BatchQuestionGenerator:
 4. 실용성: 실제 학습에 도움되는 내용
 5. 형식 준수: 요청된 JSON 형식 정확히 따름
 
-반드시 요청된 개수와 타입을 정확히 맞춰서 생성하세요."""
+반드시 요청된 개수와 타입을 정확히 맞춰서 생성하세요.
+언어 설정: {"한국어" if language == "ko" else "English"}로만 작성하세요."""
 
     def _parse_batch_response(self, response_text: str) -> List[Dict[str, Any]]:
         """배치 응답 파싱"""
@@ -625,7 +666,8 @@ class QuizService:
             result = await self.batch_generator.generate_batch_questions(
                 state["contexts"],
                 type_distribution,
-                state["request"].difficulty
+                state["request"].difficulty,
+                state["request"].language
             )
 
             state["parsed_questions"] = result.questions
@@ -707,20 +749,42 @@ class QuizService:
         return state
 
     def _calculate_type_distribution(self, request: QuizRequest) -> Dict[QuestionType, int]:
-        """타입 분배 계산"""
+        """타입 분배 계산 - 2:6:2 비율 적용"""
         if request.question_types and len(request.question_types) == 1:
+            # 특정 타입만 요청된 경우
             return {request.question_types[0]: request.num_questions}
 
         total = request.num_questions
-        tf_count = max(1, round(total * 0.2))
-        mc_count = max(1, round(total * 0.6))
+
+        # 2:6:2 비율 적용 (OX:객관식:주관식)
+        tf_ratio = 0.2  # 20%
+        mc_ratio = 0.6  # 60%
+        sa_ratio = 0.2  # 20%
+
+        # 각 타입별 개수 계산
+        tf_count = max(1, round(total * tf_ratio))
+        mc_count = max(1, round(total * mc_ratio))
         sa_count = total - tf_count - mc_count
 
-        return {
+        # 음수 방지 및 최소값 보장
+        if sa_count < 0:
+            sa_count = 0
+            mc_count = total - tf_count
+
+        # 총 개수 확인 및 보정
+        actual_total = tf_count + mc_count + sa_count
+        if actual_total != total:
+            # 객관식에 차이를 조정 (가장 많은 비중이므로)
+            mc_count += (total - actual_total)
+
+        result = {
             QuestionType.TRUE_FALSE: tf_count,
             QuestionType.MULTIPLE_CHOICE: mc_count,
             QuestionType.SHORT_ANSWER: sa_count
         }
+
+        logger.info(f"Type distribution calculated: {result} (total: {sum(result.values())})")
+        return result
 
     def _convert_to_question_object(self, q_data: Dict[str, Any], contexts: List[RAGContext]) -> Question:
         """Question 객체로 변환"""
