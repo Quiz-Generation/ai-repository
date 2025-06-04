@@ -5,12 +5,9 @@
 """
 import os
 import time
-from enum import Enum
-from typing import Dict, Optional, Union, Any
-from dataclasses import dataclass, field
+from typing import Dict, Any
 
-from lagnchain_fastapi_app.app.schemas.dynamic_pdf import ExtractionResult
-from lagnchain_fastapi_app.tests.dynamic_extractor import ContentType, Priority
+from ..schemas.dynamic_pdf import ExtractionResult, ContentType, Priority
 from .pdf_extractor import PDFExtractorFactory
 
 class DynamicPDFService:

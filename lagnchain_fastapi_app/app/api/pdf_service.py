@@ -12,7 +12,6 @@ PDF 업로드 → 벡터 DB 저장 API 라우터
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Path
 from fastapi.responses import JSONResponse
-from typing import List, Dict, Any, Optional
 import logging
 import tempfile
 import os
@@ -26,6 +25,10 @@ except ImportError:
 
 # 벡터 서비스 import (상대 경로로 변경)
 from ..services.vector_service import PDFVectorService
+
+# 🔥 동적 PDF 추출 시스템 import 추가
+from ..services.dynamic_pdf import DynamicPDFService
+from ..schemas.dynamic_pdf import Priority
 
 # Swagger 문서 설명 import
 from ..docs.api_descriptions import (
@@ -46,23 +49,8 @@ router = APIRouter(prefix="/pdf", tags=["PDF Vector"])
 # 전역 벡터 서비스 인스턴스 (WEAVIATE 기본 사용)
 vector_service = PDFVectorService(db_type="weaviate")
 
-
-class SimplePDFReader:
-    """간단한 PDF 텍스트 추출기"""
-
-    def extract_text(self, pdf_path: str) -> str:
-        if not HAS_PYMUPDF:
-            raise Exception("PyMuPDF not available")
-
-        try:
-            doc = fitz.open(pdf_path)
-            text = ""
-            for page in doc:
-                text += page.get_text()
-            doc.close()
-            return text
-        except Exception as e:
-            raise Exception(f"PDF 추출 실패: {str(e)}")
+# 🔥 동적 PDF 추출 서비스 인스턴스 생성
+dynamic_pdf_service = DynamicPDFService()
 
 
 @router.get("/health", description=desc_health_check)
@@ -74,13 +62,22 @@ async def health_check() -> JSONResponse:
             status_code=200,
             content={
                 "status": "healthy",
-                "service": "PDF Vector Service",
+                "service": "PDF Vector Service (동적 추출기 지원)",
                 "vector_db": stats["db_type"],
                 "total_documents": stats["total_documents"],
                 "total_uploaded_files": stats["total_uploaded_files"],
                 "supported_dbs": stats["supported_dbs"],
+                # 🔥 동적 추출기 정보 추가
+                "extraction_system": {
+                    "type": "dynamic",
+                    "available_extractors": ["pdfminer", "pdfplumber", "pymupdf"],
+                    "default_priority": "balanced",
+                    "auto_selection": True,
+                    "priorities": ["speed", "quality", "balanced"]
+                },
                 "endpoints": [
-                    "POST /pdf/upload",
+                    "POST /pdf/upload?priority=balanced",
+                    "POST /pdf/analyze (추출기 추천)",
                     "GET /pdf/documents",
                     "GET /pdf/documents/{document_id}",
                     "GET /pdf/search",
@@ -101,10 +98,22 @@ async def health_check() -> JSONResponse:
 
 
 @router.post("/upload", description=desc_upload_pdf)
-async def upload_pdf(file: UploadFile = File(...)) -> JSONResponse:
-    """📤 PDF 파일 업로드 및 벡터 저장 → document_id 반환"""
+async def upload_pdf(
+    file: UploadFile = File(...),
+    priority: str = Query("balanced", description="추출 우선순위: speed, quality, balanced")
+) -> JSONResponse:
+    """📤 PDF 파일 업로드 및 벡터 저장 → document_id 반환 (동적 추출기 사용)"""
     if not file.filename or not file.filename.endswith('.pdf'):
         raise HTTPException(status_code=400, detail="PDF 파일만 지원됩니다")
+
+    # 우선순위 검증
+    try:
+        extraction_priority = Priority(priority.lower())
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"잘못된 우선순위: {priority}. 사용 가능: speed, quality, balanced"
+        )
 
     filename = file.filename
 
@@ -116,9 +125,13 @@ async def upload_pdf(file: UploadFile = File(...)) -> JSONResponse:
             temp_path = temp_file.name
 
         try:
-            # PDF 텍스트 추출
-            pdf_reader = SimplePDFReader()
-            pdf_text = pdf_reader.extract_text(temp_path)
+            # 🔥 동적 PDF 텍스트 추출 (자동 최적화)
+            extraction_result = dynamic_pdf_service.extract_text(temp_path, extraction_priority)
+
+            if not extraction_result.success:
+                raise HTTPException(status_code=400, detail=f"PDF 추출 실패: {extraction_result.error}")
+
+            pdf_text = extraction_result.text
 
             if len(pdf_text.strip()) < 100:
                 raise HTTPException(status_code=400, detail="PDF에서 충분한 텍스트를 추출할 수 없습니다")
@@ -132,7 +145,7 @@ async def upload_pdf(file: UploadFile = File(...)) -> JSONResponse:
             return JSONResponse(
                 status_code=200,
                 content={
-                    "message": "PDF 업로드 및 벡터 저장 성공",
+                    "message": "PDF 업로드 및 벡터 저장 성공 (동적 추출기 사용)",
                     "document_id": result["document_id"],  # 🔑 RAG용 문서 ID
                     "filename": filename,
                     "file_size": len(content),
@@ -141,7 +154,16 @@ async def upload_pdf(file: UploadFile = File(...)) -> JSONResponse:
                     "stored_chunks": result["stored_chunks"],
                     "db_type": result["db_type"],
                     "upload_timestamp": result["upload_timestamp"],
-                    "note": "document_id를 저장하여 나중에 RAG 퀴즈 생성 시 사용하세요"
+                    # 🔥 동적 추출 정보 추가
+                    "extraction_info": {
+                        "extractor_used": extraction_result.extractor_used,
+                        "content_type": extraction_result.content_type,
+                        "priority": extraction_result.priority,
+                        "extraction_time": extraction_result.extraction_time,
+                        "speed_mbps": extraction_result.speed_mbps,
+                        "auto_selected": extraction_result.metadata.get("auto_selected", True)
+                    },
+                    "note": "document_id를 저장하여 나중에 RAG 퀴즈 생성 시 사용하세요 (최적 추출기 자동 선택됨)"
                 }
             )
 
@@ -359,3 +381,43 @@ async def get_stats() -> JSONResponse:
     except Exception as e:
         logger.error(f"통계 조회 중 오류: {str(e)}")
         raise HTTPException(status_code=500, detail=f"통계 조회 오류: {str(e)}")
+
+
+@router.post("/analyze", description="PDF 파일 분석 및 추출기 추천")
+async def analyze_pdf(file: UploadFile = File(...)) -> JSONResponse:
+    """🔍 PDF 파일 분석 및 최적 추출기 추천 (업로드 전 미리보기)"""
+    if not file.filename or not file.filename.endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="PDF 파일만 지원됩니다")
+
+    filename = file.filename
+
+    try:
+        # 임시 파일 생성
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_path = temp_file.name
+
+        try:
+            # 파일 분석 및 추천
+            recommendations = dynamic_pdf_service.get_extractor_recommendations(temp_path)
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "message": "PDF 파일 분석 완료",
+                    "filename": filename,
+                    "file_size": len(content),
+                    "analysis": recommendations,
+                    "usage_tip": "이 정보를 참고하여 /pdf/upload API에서 priority 파라미터를 설정하세요"
+                }
+            )
+
+        finally:
+            # 임시 파일 삭제
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+
+    except Exception as e:
+        logger.error(f"PDF 분석 중 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"PDF 분석 오류: {str(e)}")
