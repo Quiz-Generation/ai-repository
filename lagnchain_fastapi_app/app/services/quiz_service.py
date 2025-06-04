@@ -25,13 +25,13 @@ class RAGRetriever:
         self.vector_service = vector_service
         self.llm_service = llm_service
 
-    def retrieve_contexts_for_quiz(
+    async def retrieve_contexts_for_quiz(
         self,
         document_id: str,
         num_questions: int,
         topics: Optional[List[str]] = None
     ) -> List[RAGContext]:
-        """퀴즈 생성을 위한 최적 컨텍스트 검색"""
+        """퀴즈 생성을 위한 최적 컨텍스트 검색 (비동기)"""
 
         logger.info(f"RAG 컨텍스트 검색 시작: {document_id} ({num_questions}문제)")
 
@@ -55,7 +55,7 @@ class RAGRetriever:
         else:
             # 🧠 LLM 기반 동적 키워드 생성
             logger.info("토픽이 없음 → LLM으로 문서 맞춤 검색 키워드 생성 중...")
-            dynamic_queries = self._generate_dynamic_search_queries(document_id, num_questions)
+            dynamic_queries = await self._generate_dynamic_search_queries(document_id, num_questions)
 
             logger.info(f"생성된 동적 검색 키워드: {dynamic_queries}")
 
@@ -77,8 +77,8 @@ class RAGRetriever:
         logger.info(f"RAG 컨텍스트 검색 완료: {len(contexts)}개")
         return contexts[:num_questions * 2]  # 여유분 확보
 
-    def _generate_dynamic_search_queries(self, document_id: str, num_questions: int) -> List[str]:
-        """📚 LLM을 활용하여 문서에 맞는 동적 검색 키워드 생성"""
+    async def _generate_dynamic_search_queries(self, document_id: str, num_questions: int) -> List[str]:
+        """📚 LLM을 활용하여 문서에 맞는 동적 검색 키워드 생성 (비동기)"""
 
         if not self.llm_service:
             # LLM이 없으면 기본 범용 키워드 사용 (fallback)
@@ -119,7 +119,7 @@ JSON 형식으로 응답해주세요:
 }}
 """
 
-            response = self.llm_service.client.chat.completions.create(
+            response = await self.llm_service.client.chat.completions.create(
                 model=self.llm_service.model_name,
                 messages=[
                     {"role": "system", "content": "문서 분석 전문가로서 퀴즈 생성에 최적화된 검색 키워드를 추출하는 역할입니다."},
@@ -207,8 +207,8 @@ class TopicExtractor:
         self.llm_service = llm_service
         self.vector_service = vector_service
 
-    def extract_document_topics(self, document_id: str) -> List[TopicAnalysis]:
-        """📚 문서에서 주요 토픽 추출 및 분석 (개선된 버전)"""
+    async def extract_document_topics(self, document_id: str) -> List[TopicAnalysis]:
+        """📚 문서에서 주요 토픽 추출 및 분석 (개선된 비동기 버전)"""
 
         logger.info(f"문서 토픽 추출 시작: {document_id}")
 
@@ -255,7 +255,7 @@ JSON 형식으로 응답해주세요:
 """
 
         try:
-            response = self.llm_service.client.chat.completions.create(
+            response = await self.llm_service.client.chat.completions.create(
                 model=self.llm_service.model_name,
                 messages=[
                     {"role": "system", "content": "문서 분석 및 토픽 추출 전문가입니다. 주어진 문서에서 퀴즈 생성에 최적화된 주제들을 정확히 식별합니다."},
@@ -306,7 +306,7 @@ JSON 형식으로 응답해주세요:
         except Exception as e:
             logger.error(f"개선된 토픽 추출 실패: {e}")
             # 실패 시 기존 방식으로 fallback
-            return self._fallback_topic_extraction(combined_text)
+            return await self._fallback_topic_extraction(combined_text)
 
     def _analyze_topic_enhanced(self, document_id: str, topic: str, topic_data: Dict) -> TopicAnalysis:
         """개선된 개별 토픽 분석"""
@@ -347,12 +347,12 @@ JSON 형식으로 응답해주세요:
             question_potential=final_quiz_potential
         )
 
-    def _fallback_topic_extraction(self, text: str) -> List[TopicAnalysis]:
-        """LLM 실패 시 기본 토픽 추출 방식"""
+    async def _fallback_topic_extraction(self, text: str) -> List[TopicAnalysis]:
+        """LLM 실패 시 기본 토픽 추출 방식 (비동기)"""
         logger.info("기본 토픽 추출 방식으로 fallback")
 
         # 기존 간단한 방식
-        topics = self.llm_service.extract_topics(text)
+        topics = await self.llm_service.extract_topics(text)
 
         topic_analyses = []
         for topic in topics:
@@ -374,7 +374,7 @@ class QuizValidator:
     def __init__(self, llm_service: BaseLLMService):
         self.llm_service = llm_service
 
-    def validate_quiz_quality(self, questions: List[Question]) -> Dict[str, Any]:
+    async def validate_quiz_quality(self, questions: List[Question]) -> Dict[str, Any]:
         """퀴즈 전체 품질 검증"""
 
         validation_result = {
@@ -389,7 +389,7 @@ class QuizValidator:
 
         for i, question in enumerate(questions):
             question_dict = asdict(question)
-            if self.llm_service.validate_question_quality(question_dict):
+            if await self.llm_service.validate_question_quality(question_dict):
                 valid_count += 1
             else:
                 validation_result["issues"].append(f"문제 {i+1}: 품질 기준 미달")
@@ -439,7 +439,7 @@ class QuizService:
 
         logger.info(f"퀴즈 서비스 초기화 완료: LLM={self.llm_service.model_name}, VectorDB={self.vector_service.db_type}")
 
-    def generate_quiz(self, request: QuizRequest) -> QuizResponse:
+    async def generate_quiz(self, request: QuizRequest) -> QuizResponse:
         """메인 퀴즈 생성 메서드 - 토픽은 항상 자동 추출"""
 
         start_time = time.time()
@@ -457,14 +457,14 @@ class QuizService:
 
             # 2단계: 토픽 자동 추출 (완전 자동화)
             logger.info("STEP1: 문서 토픽 자동 추출 중...")
-            topic_analyses = self.topic_extractor.extract_document_topics(request.document_id)
+            topic_analyses = await self.topic_extractor.extract_document_topics(request.document_id)
             extracted_topics = [ta.topic for ta in topic_analyses[:7]]  # 상위 7개 토픽
 
             logger.info(f"자동 추출된 토픽: {extracted_topics}")
 
             # 3단계: RAG 컨텍스트 검색
             logger.info("STEP2: RAG 컨텍스트 검색 중...")
-            contexts = self.rag_retriever.retrieve_contexts_for_quiz(
+            contexts = await self.rag_retriever.retrieve_contexts_for_quiz(
                 document_id=request.document_id,
                 num_questions=request.num_questions,
                 topics=extracted_topics
@@ -482,7 +482,7 @@ class QuizService:
 
             # 6단계: LLM으로 퀴즈 생성
             logger.info("STEP3: LLM 퀴즈 생성 중...")
-            llm_result = self.llm_service.generate_quiz(
+            llm_result = await self.llm_service.generate_quiz(
                 context=combined_context,
                 num_questions=request.num_questions,
                 difficulty=request.difficulty.value,
@@ -503,7 +503,7 @@ class QuizService:
 
             # 8단계: 품질 검증
             logger.info("STEP5: 문제 품질 검증 중...")
-            validation_result = self.quiz_validator.validate_quiz_quality(questions)
+            validation_result = await self.quiz_validator.validate_quiz_quality(questions)
 
             # 9단계: 응답 생성
             generation_time = time.time() - start_time
@@ -550,19 +550,19 @@ class QuizService:
                 error=str(e)
             )
 
-    def extract_topics(self, document_id: str) -> List[str]:
-        """문서 토픽 추출 (외부 API용)"""
+    async def extract_topics(self, document_id: str) -> List[str]:
+        """문서 토픽 추출 (외부 API용, 비동기)"""
         try:
-            topic_analyses = self.topic_extractor.extract_document_topics(document_id)
+            topic_analyses = await self.topic_extractor.extract_document_topics(document_id)
             return [ta.topic for ta in topic_analyses]
         except Exception as e:
             logger.error(f"토픽 추출 실패: {e}")
             return []
 
-    def validate_question_quality(self, question: Question) -> bool:
-        """개별 문제 품질 검증 (외부 API용)"""
+    async def validate_question_quality(self, question: Question) -> bool:
+        """개별 문제 품질 검증 (외부 API용, 비동기)"""
         question_dict = asdict(question)
-        return self.llm_service.validate_question_quality(question_dict)
+        return await self.llm_service.validate_question_quality(question_dict)
 
     def retrieve_topic_contexts(self, document_id: str, topic: str) -> List[Dict]:
         """특정 토픽의 컨텍스트 검색 (외부 API용)"""

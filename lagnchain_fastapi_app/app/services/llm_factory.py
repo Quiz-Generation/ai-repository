@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class BaseLLMService(ABC):
-    """LLM 서비스 추상 클래스"""
+    """LLM 서비스 추상 클래스 (비동기)"""
 
     def __init__(self, config: LLMConfig):
         self.config = config
@@ -25,7 +25,7 @@ class BaseLLMService(ABC):
         self.model_name = config.model_name
 
     @abstractmethod
-    def generate_quiz(
+    async def generate_quiz(
         self,
         context: str,
         num_questions: int,
@@ -33,43 +33,43 @@ class BaseLLMService(ABC):
         question_types: List[str],
         topics: Optional[List[str]] = None
     ) -> Dict[str, Any]:
-        """퀴즈 생성 (추상 메서드)"""
+        """퀴즈 생성 (비동기 추상 메서드)"""
         pass
 
     @abstractmethod
-    def extract_topics(self, context: str) -> List[str]:
-        """문서에서 주요 토픽 추출 (추상 메서드)"""
+    async def extract_topics(self, context: str) -> List[str]:
+        """문서에서 주요 토픽 추출 (비동기 추상 메서드)"""
         pass
 
     @abstractmethod
-    def validate_question_quality(self, question_data: Dict[str, Any]) -> bool:
-        """문제 품질 검증 (추상 메서드)"""
+    async def validate_question_quality(self, question_data: Dict[str, Any]) -> bool:
+        """문제 품질 검증 (비동기 추상 메서드)"""
         pass
 
 
 class OpenAILLMService(BaseLLMService):
-    """OpenAI GPT 기반 LLM 서비스"""
+    """OpenAI GPT 기반 LLM 서비스 (비동기)"""
 
     def __init__(self, config: LLMConfig):
         super().__init__(config)
         self._setup_client()
 
     def _setup_client(self):
-        """OpenAI 클라이언트 설정"""
+        """OpenAI 비동기 클라이언트 설정"""
         try:
-            import openai
+            from openai import AsyncOpenAI
             settings = get_settings()
-            self.client = openai.OpenAI(
+            self.client = AsyncOpenAI(
                 api_key=self.config.api_key or settings.OPENAI_API_KEY
             )
-            logger.info(f"OpenAI 클라이언트 초기화 완료: {self.model_name}")
+            logger.info(f"OpenAI 비동기 클라이언트 초기화 완료: {self.model_name}")
         except ImportError:
             raise ImportError("OpenAI 패키지가 설치되지 않았습니다: pip install openai")
         except Exception as e:
-            logger.error(f"OpenAI 클라이언트 초기화 실패: {e}")
+            logger.error(f"OpenAI 비동기 클라이언트 초기화 실패: {e}")
             raise
 
-    def generate_quiz(
+    async def generate_quiz(
         self,
         context: str,
         num_questions: int,
@@ -77,7 +77,7 @@ class OpenAILLMService(BaseLLMService):
         question_types: List[str],
         topics: Optional[List[str]] = None
     ) -> Dict[str, Any]:
-        """OpenAI를 사용한 퀴즈 생성"""
+        """OpenAI를 사용한 비동기 퀴즈 생성"""
 
         # 프롬프트 구성
         prompt = self._build_quiz_generation_prompt(
@@ -85,9 +85,9 @@ class OpenAILLMService(BaseLLMService):
         )
 
         try:
-            logger.info(f"OpenAI 퀴즈 생성 시작: {num_questions}문제, 난이도: {difficulty}")
+            logger.info(f"OpenAI 비동기 퀴즈 생성 시작: {num_questions}문제, 난이도: {difficulty}")
 
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
                     {"role": "system", "content": "당신은 PDF 문서 기반 퀴즈 생성 전문가입니다. 주어진 컨텍스트를 바탕으로 고품질의 문제를 생성하세요."},
@@ -103,7 +103,7 @@ class OpenAILLMService(BaseLLMService):
                 raise ValueError("OpenAI 응답이 비어있습니다")
             quiz_data = self._parse_quiz_response(result_text)
 
-            logger.info(f"OpenAI 퀴즈 생성 완료: {len(quiz_data.get('questions', []))}문제")
+            logger.info(f"OpenAI 비동기 퀴즈 생성 완료: {len(quiz_data.get('questions', []))}문제")
             return {
                 "questions": quiz_data.get("questions", []),
                 "success": True,
@@ -112,7 +112,7 @@ class OpenAILLMService(BaseLLMService):
             }
 
         except Exception as e:
-            logger.error(f"OpenAI 퀴즈 생성 실패: {e}")
+            logger.error(f"OpenAI 비동기 퀴즈 생성 실패: {e}")
             return {
                 "questions": [],
                 "success": False,
@@ -120,8 +120,8 @@ class OpenAILLMService(BaseLLMService):
                 "model_used": self.model_name
             }
 
-    def extract_topics(self, context: str) -> List[str]:
-        """OpenAI를 사용한 주요 토픽 추출"""
+    async def extract_topics(self, context: str) -> List[str]:
+        """OpenAI를 사용한 비동기 주요 토픽 추출"""
 
         prompt = f"""
 다음 텍스트에서 주요 토픽들을 추출하세요. 퀴즈 문제로 만들기 좋은 핵심 주제들을 찾아주세요.
@@ -137,7 +137,7 @@ JSON 형식으로 응답하세요:
 """
 
         try:
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
                     {"role": "system", "content": "주어진 텍스트에서 퀴즈 문제 생성에 적합한 핵심 토픽을 추출하는 전문가입니다."},
@@ -154,15 +154,15 @@ JSON 형식으로 응답하세요:
             result = json.loads(response_content)
             topics = result.get("topics", []) + result.get("main_subjects", [])
 
-            logger.info(f"추출된 토픽: {topics}")
+            logger.info(f"비동기 토픽 추출 완료: {topics}")
             return topics[:10]  # 최대 10개
 
         except Exception as e:
-            logger.error(f"토픽 추출 실패: {e}")
+            logger.error(f"비동기 토픽 추출 실패: {e}")
             return ["일반"]
 
-    def validate_question_quality(self, question_data: Dict[str, Any]) -> bool:
-        """문제 품질 검증"""
+    async def validate_question_quality(self, question_data: Dict[str, Any]) -> bool:
+        """비동기 문제 품질 검증"""
 
         # 기본 검증
         if not question_data.get("question") or len(question_data["question"]) < 10:
@@ -278,13 +278,13 @@ class AnthropicLLMService(BaseLLMService):
         super().__init__(config)
         logger.info("Anthropic LLM 서비스 (준비 중)")
 
-    def generate_quiz(self, context: str, num_questions: int, difficulty: str, question_types: List[str], topics: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def generate_quiz(self, context: str, num_questions: int, difficulty: str, question_types: List[str], topics: Optional[List[str]] = None) -> Dict[str, Any]:
         return {"questions": [], "success": False, "error": "Anthropic 미구현"}
 
-    def extract_topics(self, context: str) -> List[str]:
+    async def extract_topics(self, context: str) -> List[str]:
         return ["일반"]
 
-    def validate_question_quality(self, question_data: Dict[str, Any]) -> bool:
+    async def validate_question_quality(self, question_data: Dict[str, Any]) -> bool:
         return True
 
 
@@ -295,13 +295,13 @@ class KoreanLocalLLMService(BaseLLMService):
         super().__init__(config)
         logger.info("한국어 로컬 LLM 서비스 (준비 중)")
 
-    def generate_quiz(self, context: str, num_questions: int, difficulty: str, question_types: List[str], topics: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def generate_quiz(self, context: str, num_questions: int, difficulty: str, question_types: List[str], topics: Optional[List[str]] = None) -> Dict[str, Any]:
         return {"questions": [], "success": False, "error": "한국어 로컬 모델 미구현"}
 
-    def extract_topics(self, context: str) -> List[str]:
+    async def extract_topics(self, context: str) -> List[str]:
         return ["일반"]
 
-    def validate_question_quality(self, question_data: Dict[str, Any]) -> bool:
+    async def validate_question_quality(self, question_data: Dict[str, Any]) -> bool:
         return True
 
 

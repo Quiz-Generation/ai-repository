@@ -99,7 +99,7 @@ async def generate_quiz(request: QuizRequestAPI) -> JSONResponse:
         )
 
         # 퀴즈 생성
-        response = quiz_service.generate_quiz(quiz_request)
+        response = await quiz_service.generate_quiz(quiz_request)
 
         if not response.success:
             raise HTTPException(status_code=400, detail=f"퀴즈 생성 실패: {response.error}")
@@ -175,7 +175,7 @@ async def extract_document_topics(
 
     try:
         # 토픽 추출
-        extracted_topics = quiz_service.extract_topics(document_id)
+        extracted_topics = await quiz_service.extract_topics(document_id)
 
         if not extracted_topics:
             raise HTTPException(status_code=404, detail="문서에서 토픽을 추출할 수 없습니다")
