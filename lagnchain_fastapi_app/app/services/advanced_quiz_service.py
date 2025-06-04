@@ -1,13 +1,12 @@
 """
 🎓 프로덕션 급 PDF RAG 퀴즈 생성 시스템
-3가지 피드백 완전 반영 버전
+🔥 중복 완전 제거 + 2:6:2 비율 적용 버전
 
 🔥 핵심 개선사항:
-1. 불필요한 import 제거
-2. 난이도 밸런스 (70% medium, 20% easy, 10% hard)
-3. 객관식 우선 생성 (70% 객관식, 30% 주관식)
-4. 실제 options 배열 포함하는 객관식 문제
-5. 완전히 안정적인 시스템
+1. 중복 문제 완전 제거 시스템
+2. OX:객관식:주관식 = 2:6:2 비율 (기본)
+3. 사용자 선택 가능 (전부 OX, 전부 객관식, 전부 주관식)
+4. 강화된 의미적 중복 검증
 """
 import logging
 import time
@@ -107,10 +106,12 @@ class MultiStageRAGRetriever:
 
 
 class QuestionTypeSpecialist:
-    """🎯 문제 유형별 전문 생성기"""
+    """🎯 문제 유형별 전문 생성기 (중복 제거 강화)"""
 
     def __init__(self, llm_service: BaseLLMService):
         self.llm_service = llm_service
+        # 🔥 생성된 문제들 추적 (중복 방지)
+        self.generated_questions_cache = []
 
     async def generate_guaranteed_questions(
         self,
@@ -121,9 +122,9 @@ class QuestionTypeSpecialist:
         topic: str,
         options_count: int = 4
     ) -> List[Dict[str, Any]]:
-        """✅ 정확한 개수 보장하는 고품질 문제 생성"""
+        """✅ 중복 제거가 강화된 고품질 문제 생성"""
 
-        logger.info(f"{question_type.value} 문제 {count}개 생성 시작")
+        logger.info(f"{question_type.value} 문제 {count}개 생성 시작 (중복 제거 적용)")
 
         for attempt in range(3):  # 최대 3회 시도
             try:
@@ -131,11 +132,17 @@ class QuestionTypeSpecialist:
                     contexts, question_type, count, difficulty, topic, options_count
                 )
 
-                if len(questions) >= count:
-                    logger.info(f"{question_type.value} 문제 생성 성공: {len(questions)}개")
-                    return questions[:count]
+                # 🔥 중복 제거 적용
+                unique_questions = self._remove_duplicates_from_generated(questions)
+
+                if len(unique_questions) >= count:
+                    logger.info(f"{question_type.value} 문제 생성 성공: {len(unique_questions)}개 (중복 제거됨)")
+                    final_questions = unique_questions[:count]
+                    # 캐시에 추가
+                    self.generated_questions_cache.extend([q.get("question", "") for q in final_questions])
+                    return final_questions
                 else:
-                    logger.warning(f"시도 {attempt + 1}: {len(questions)}/{count}개만 생성됨")
+                    logger.warning(f"시도 {attempt + 1}: {len(unique_questions)}/{count}개만 생성됨 (중복 제거 후)")
 
             except Exception as e:
                 logger.error(f"시도 {attempt + 1} 실패: {e}")
@@ -151,6 +158,89 @@ class QuestionTypeSpecialist:
         logger.error(f"{question_type.value} 문제 생성 완전 실패")
         return []
 
+    def _remove_duplicates_from_generated(self, questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """🔥 강화된 중복 제거 시스템"""
+        unique_questions = []
+        seen_questions = []
+
+        for q in questions:
+            question_text = q.get("question", "").strip()
+
+            # 현재 문제와 이미 추가된 문제들 간의 유사도 검사
+            is_duplicate = False
+
+            for seen_q in seen_questions:
+                similarity = self._calculate_text_similarity_advanced(question_text, seen_q)
+                if similarity > 0.6:  # 0.6 이상이면 중복으로 판단
+                    is_duplicate = True
+                    logger.info(f"🚫 중복 제거: 유사도 {similarity:.3f}")
+                    logger.info(f"   기존: {seen_q[:50]}...")
+                    logger.info(f"   신규: {question_text[:50]}...")
+                    break
+
+            # 기존 캐시와도 비교
+            if not is_duplicate:
+                for cached_q in self.generated_questions_cache:
+                    similarity = self._calculate_text_similarity_advanced(question_text, cached_q)
+                    if similarity > 0.6:
+                        is_duplicate = True
+                        logger.info(f"🚫 캐시와 중복: 유사도 {similarity:.3f}")
+                        break
+
+            if not is_duplicate:
+                unique_questions.append(q)
+                seen_questions.append(question_text)
+                logger.debug(f"✅ 고유 문제 추가: {question_text[:50]}...")
+
+        logger.info(f"🔍 중복 제거 완료: {len(questions)}개 → {len(unique_questions)}개")
+        return unique_questions
+
+    def _calculate_text_similarity_advanced(self, text1: str, text2: str) -> float:
+        """🔥 고급 텍스트 유사도 계산 (한국어 최적화)"""
+        if not text1 or not text2:
+            return 0.0
+
+        # 정규화
+        import re
+
+        # 특수문자 제거 및 소문자 변환
+        clean1 = re.sub(r'[^\w\s가-힣]', '', text1.lower().strip())
+        clean2 = re.sub(r'[^\w\s가-힣]', '', text2.lower().strip())
+
+        # 완전히 동일한 경우
+        if clean1 == clean2:
+            return 1.0
+
+        # 단어 단위 비교
+        words1 = set(clean1.split())
+        words2 = set(clean2.split())
+
+        if not words1 or not words2:
+            return 0.0
+
+        # Jaccard 유사도
+        intersection = words1.intersection(words2)
+        union = words1.union(words2)
+        jaccard = len(intersection) / len(union) if union else 0.0
+
+        # 길이 유사도
+        len_ratio = min(len(text1), len(text2)) / max(len(text1), len(text2))
+
+        # 핵심 키워드 비교 (AWS, EC2, S3 등)
+        keywords1 = set(re.findall(r'[A-Z]{2,}|AWS|EC2|S3|RDS|Lambda', text1))
+        keywords2 = set(re.findall(r'[A-Z]{2,}|AWS|EC2|S3|RDS|Lambda', text2))
+
+        keyword_similarity = 0.0
+        if keywords1 or keywords2:
+            keyword_intersection = keywords1.intersection(keywords2)
+            keyword_union = keywords1.union(keywords2)
+            keyword_similarity = len(keyword_intersection) / len(keyword_union) if keyword_union else 0.0
+
+        # 최종 유사도 (가중 평균)
+        final_similarity = (jaccard * 0.5 + len_ratio * 0.2 + keyword_similarity * 0.3)
+
+        return final_similarity
+
     async def _generate_type_specific_questions(
         self,
         contexts: List[RAGContext],
@@ -160,7 +250,7 @@ class QuestionTypeSpecialist:
         topic: str,
         options_count: int
     ) -> List[Dict[str, Any]]:
-        """문제 유형별 특화 생성"""
+        """문제 유형별 특화 생성 (OX 문제 추가)"""
 
         context_text = "\n\n".join([f"[컨텍스트 {i+1}]\n{ctx.text}" for i, ctx in enumerate(contexts)])
 
@@ -168,16 +258,18 @@ class QuestionTypeSpecialist:
             prompt = self._get_mc_prompt(context_text, count, difficulty, topic, options_count)
         elif question_type == QuestionType.SHORT_ANSWER:
             prompt = self._get_sa_prompt(context_text, count, difficulty, topic)
+        elif question_type == QuestionType.TRUE_FALSE:
+            prompt = self._get_tf_prompt(context_text, count, difficulty, topic)
         else:
             prompt = self._get_mc_prompt(context_text, count, difficulty, topic, options_count)
 
         response = await self.llm_service.client.chat.completions.create(
             model=self.llm_service.model_name,
             messages=[
-                {"role": "system", "content": f"전문 {question_type.value} 문제 출제자입니다. 정확히 {count}개의 고품질 문제를 생성하세요."},
+                {"role": "system", "content": f"전문 {question_type.value} 문제 출제자입니다. 중복되지 않는 고유한 문제를 정확히 {count}개 생성하세요."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.5,
+            temperature=0.7,  # 🔥 다양성을 위해 온도 조금 높임
             max_tokens=3000
         )
 
@@ -251,6 +343,38 @@ class QuestionTypeSpecialist:
 }}
 
 🚨 중요: JSON 형식 준수, 정확히 {count}개 생성!
+"""
+
+    def _get_tf_prompt(self, context: str, count: int, difficulty: Difficulty, topic: str) -> str:
+        """🔥 새로 추가: OX 문제 전용 프롬프트"""
+        return f"""
+다음 내용을 바탕으로 **정확히 {count}개**의 고품질 OX(참/거짓) 문제를 생성하세요.
+
+컨텍스트:
+{context[:2500]}
+
+📋 요구사항:
+- 난이도: {difficulty.value}
+- 주제: {topic}
+- 명확하게 참 또는 거짓으로 구분 가능한 문제
+- 애매하거나 논란의 여지가 있는 내용 피하기
+- 🔥 정답은 반드시 "True" 또는 "False"
+
+✅ 예시 형식:
+{{
+    "questions": [
+        {{
+            "question": "AWS EC2는 서버리스 컴퓨팅 서비스이다.",
+            "question_type": "true_false",
+            "correct_answer": "False",
+            "explanation": "AWS EC2는 가상 서버 인스턴스를 제공하는 서비스로, 서버리스가 아닙니다. 서버리스는 AWS Lambda가 대표적입니다.",
+            "difficulty": "{difficulty.value}",
+            "topic": "{topic}"
+        }}
+    ]
+}}
+
+🚨 중요: 정답은 "True" 또는 "False"만, JSON 형식 준수, 정확히 {count}개 생성!
 """
 
     def _parse_questions_response(self, response_text: str, question_type: QuestionType) -> List[Dict[str, Any]]:
@@ -413,43 +537,81 @@ class AdvancedQuizValidator:
         return max(0, min(10, base_score))
 
     async def _check_semantic_duplicates(self, questions: List[Question]) -> Dict[str, Any]:
-        """의미적 중복 검증"""
+        """🔥 강화된 의미적 중복 검증 (완전 제거 시스템)"""
 
-        if not self.similarity_model or len(questions) < 2:
-            return {"duplicate_pairs": [], "similarity_matrix": []}
+        if len(questions) < 2:
+            return {"duplicate_pairs": [], "similarity_matrix": [], "max_similarity": 0}
 
         try:
             question_texts = [q.question for q in questions]
-            embeddings = self.similarity_model.encode(question_texts)
-            similarity_matrix = cosine_similarity(embeddings)
 
-            # 중복 쌍 찾기 (0.8 이상)
+            # 🔥 임베딩 기반 유사도 계산
+            if self.similarity_model:
+                embeddings = self.similarity_model.encode(question_texts)
+                similarity_matrix = cosine_similarity(embeddings)
+            else:
+                # 임베딩 모델이 없으면 텍스트 기반 유사도
+                similarity_matrix = self._calculate_text_similarity_matrix(question_texts)
+
+            # 🔥 중복 쌍 찾기 (임계값을 0.6으로 낮춤 - 더 엄격)
             duplicate_pairs = []
+            similar_pairs = []  # 유사한 문제들도 별도 추적
+
             for i in range(len(questions)):
                 for j in range(i+1, len(questions)):
                     similarity = similarity_matrix[i][j]
-                    if similarity >= 0.8:
+
+                    if similarity >= 0.6:  # 중복 기준
                         duplicate_pairs.append({
                             "question1_index": i,
                             "question2_index": j,
                             "similarity": float(similarity),
                             "question1": questions[i].question[:100],
-                            "question2": questions[j].question[:100]
+                            "question2": questions[j].question[:100],
+                            "type": "duplicate"
                         })
+                    elif similarity >= 0.4:  # 유사 기준
+                        similar_pairs.append({
+                            "question1_index": i,
+                            "question2_index": j,
+                            "similarity": float(similarity),
+                            "question1": questions[i].question[:100],
+                            "question2": questions[j].question[:100],
+                            "type": "similar"
+                        })
+
+            max_similarity = float(np.max(similarity_matrix - np.eye(len(questions)))) if len(questions) > 1 else 0
+
+            logger.info(f"🔍 중복 검증 완료: {len(duplicate_pairs)}개 중복, {len(similar_pairs)}개 유사")
 
             return {
                 "duplicate_pairs": duplicate_pairs,
+                "similar_pairs": similar_pairs,
                 "similarity_matrix": similarity_matrix.tolist(),
-                "max_similarity": float(np.max(similarity_matrix - np.eye(len(questions))))
+                "max_similarity": max_similarity,
+                "quality_warning": len(duplicate_pairs) > 0 or len(similar_pairs) > 3
             }
 
         except Exception as e:
             logger.error(f"중복 검증 실패: {e}")
-            return {"duplicate_pairs": [], "similarity_matrix": []}
+            return {"duplicate_pairs": [], "similarity_matrix": [], "max_similarity": 0}
+
+    def _calculate_text_similarity_matrix(self, texts: List[str]) -> np.ndarray:
+        """텍스트 기반 유사도 매트릭스 계산 (임베딩 모델 없을 때)"""
+        n = len(texts)
+        matrix = np.eye(n)
+
+        for i in range(n):
+            for j in range(i+1, n):
+                similarity = self._calculate_text_similarity_advanced(texts[i], texts[j])
+                matrix[i][j] = similarity
+                matrix[j][i] = similarity
+
+        return matrix
 
 
 class AdvancedQuizService:
-    """🎓 3가지 피드백 완전 반영된 프로덕션 급 퀴즈 서비스"""
+    """🎓 중복 완전 제거 + 2:6:2 비율 적용된 프로덕션 급 퀴즈 서비스"""
 
     def __init__(
         self,
@@ -464,7 +626,7 @@ class AdvancedQuizService:
         self.question_specialist = QuestionTypeSpecialist(self.llm_service)
         self.validator = AdvancedQuizValidator(self.llm_service)
 
-        logger.info("🚀 3가지 피드백 반영 퀴즈 서비스 초기화 완료")
+        logger.info("🚀 중복 제거 + 2:6:2 비율 퀴즈 서비스 초기화 완료")
 
     async def generate_guaranteed_quiz(self, request: QuizRequest) -> QuizResponse:
         """✅ 3가지 피드백을 모두 반영한 고품질 퀴즈 생성"""
@@ -580,26 +742,32 @@ class AdvancedQuizService:
                 generation_time=generation_time,
                 success=True,
                 metadata={
-                    "generation_method": "3_feedback_improved",
+                    "generation_method": "duplicate_free_2_6_2_ratio",
                     "contexts_used": len(contexts),
                     "type_distribution": {k.value: v for k, v in type_distribution.items()},
                     "validation_result": validation_result,
                     "llm_model": self.llm_service.model_name,
                     "quality_score": validation_result.get("overall_score", 0),
                     "duplicate_count": len(validation_result.get("duplicate_analysis", {}).get("duplicate_pairs", [])),
+                    "similar_count": len(validation_result.get("duplicate_analysis", {}).get("similar_pairs", [])),
+                    "max_similarity": validation_result.get("duplicate_analysis", {}).get("max_similarity", 0),
                     "advanced_features": [
-                        "🔥 객관식 우선 생성 (70%)",
-                        "🔥 난이도 밸런스 (70%/20%/10%)",
-                        "🔥 불필요한 import 제거",
+                        "🔥 완전한 중복 제거 시스템",
+                        "🔥 2:6:2 비율 (OX:객관식:주관식)",
+                        "🔥 사용자 선택 가능 (전부 OX/객관식/주관식)",
+                        "🔥 강화된 의미적 중복 검증 (0.6 임계값)",
                         "✅ 실제 options 포함 객관식",
+                        "✅ 정확한 개수 보장",
                         "멀티 스테이지 RAG",
-                        "의미적 중복 검증",
-                        "정확한 개수 보장"
-                    ]
+                        "난이도 밸런스"
+                    ],
+                    "ratio_applied": "2:6:2 (OX:객관식:주관식)" if not request.question_types else "사용자 지정",
+                    "duplicate_prevention": "강화된 중복 제거 적용",
+                    "similarity_threshold": 0.6
                 }
             )
 
-            logger.info(f"🎉 3가지 피드백 반영 퀴즈 완료: {len(questions)}문제 (품질: {validation_result.get('overall_score', 0)}/10)")
+            logger.info(f"🎉 중복 제거 + 2:6:2 비율 퀴즈 완료: {len(questions)}문제 (품질: {validation_result.get('overall_score', 0)}/10)")
             return response
 
         except Exception as e:
@@ -618,40 +786,54 @@ class AdvancedQuizService:
             )
 
     def _calculate_type_distribution(self, request: QuizRequest) -> Dict[QuestionType, int]:
-        """🔥 객관식 우선 문제 유형 분배 (70% 객관식)"""
+        """🔥 2:6:2 비율 문제 유형 분배 (OX:객관식:주관식)"""
 
         if request.question_types:
             types = request.question_types
-        else:
-            # 🔥 객관식 우선 기본 설정
-            types = [QuestionType.MULTIPLE_CHOICE, QuestionType.SHORT_ANSWER]
 
-        # 🔥 객관식을 70% 할당
-        distribution = {}
-        mc_count = int(request.num_questions * 0.7)
-        remaining = request.num_questions - mc_count
+            # 🔥 사용자가 1개 타입만 지정하면 100% 그 타입
+            if len(types) == 1:
+                return {types[0]: request.num_questions}
 
-        if QuestionType.MULTIPLE_CHOICE in types:
-            distribution[QuestionType.MULTIPLE_CHOICE] = mc_count
+            # 🔥 여러 타입 지정 시 비율 적용
+            distribution = {}
 
-            # 나머지 타입들에 균등 분배
-            other_types = [t for t in types if t != QuestionType.MULTIPLE_CHOICE]
-            if other_types:
-                base_count = remaining // len(other_types)
-                remainder = remaining % len(other_types)
+            # OX, 객관식, 주관식이 모두 포함된 경우 2:6:2 비율
+            if (QuestionType.TRUE_FALSE in types and
+                QuestionType.MULTIPLE_CHOICE in types and
+                QuestionType.SHORT_ANSWER in types):
 
-                for i, qtype in enumerate(other_types):
+                total = request.num_questions
+                tf_count = max(1, int(total * 0.2))      # 20% OX
+                mc_count = max(1, int(total * 0.6))      # 60% 객관식
+                sa_count = total - tf_count - mc_count   # 나머지 주관식
+
+                distribution[QuestionType.TRUE_FALSE] = tf_count
+                distribution[QuestionType.MULTIPLE_CHOICE] = mc_count
+                distribution[QuestionType.SHORT_ANSWER] = sa_count
+
+            else:
+                # 일부 타입만 있는 경우 균등 분배
+                base_count = request.num_questions // len(types)
+                remainder = request.num_questions % len(types)
+
+                for i, qtype in enumerate(types):
                     count = base_count + (1 if i < remainder else 0)
                     distribution[qtype] = count
         else:
-            # 객관식이 없으면 균등 분배
-            base_count = request.num_questions // len(types)
-            remainder = request.num_questions % len(types)
+            # 🔥 기본 설정: 2:6:2 비율 (OX:객관식:주관식)
+            total = request.num_questions
+            tf_count = max(1, int(total * 0.2))      # 20% OX
+            mc_count = max(1, int(total * 0.6))      # 60% 객관식
+            sa_count = total - tf_count - mc_count   # 나머지 주관식
 
-            for i, qtype in enumerate(types):
-                count = base_count + (1 if i < remainder else 0)
-                distribution[qtype] = count
+            distribution = {
+                QuestionType.TRUE_FALSE: tf_count,
+                QuestionType.MULTIPLE_CHOICE: mc_count,
+                QuestionType.SHORT_ANSWER: sa_count
+            }
 
+        logger.info(f"🎯 문제 유형 분배 (2:6:2 기본): {distribution}")
         return distribution
 
     def _convert_to_question_objects_with_balance(
@@ -776,7 +958,7 @@ def get_advanced_quiz_service() -> AdvancedQuizService:
 
     if _advanced_quiz_service is None:
         _advanced_quiz_service = AdvancedQuizService()
-        logger.info("🚀 3가지 피드백 반영 퀴즈 서비스 초기화 완료")
+        logger.info("🚀 중복 제거 + 2:6:2 비율 퀴즈 서비스 초기화 완료")
 
     return _advanced_quiz_service
 
