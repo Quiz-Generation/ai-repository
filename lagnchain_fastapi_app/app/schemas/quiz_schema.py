@@ -164,7 +164,7 @@ try:
         language: str = Field("ko", description="언어 (ko/en)")
 
         class Config:
-            schema_extra = {
+            json_schema_extra = {
                 "example": {
                     "document_id": "f7dbd017-426e-4919-8a88-feda68949615",
                     "num_questions": 5,

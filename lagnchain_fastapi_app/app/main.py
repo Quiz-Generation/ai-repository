@@ -11,7 +11,6 @@ from lagnchain_fastapi_app.app.core.config import get_settings
 # API 라우터 임포트 (상대 경로로 변경)
 from lagnchain_fastapi_app.app.api.pdf_service import router as pdf_router
 from lagnchain_fastapi_app.app.api.quiz_service import router as quiz_router
-from lagnchain_fastapi_app.app.api.production_quiz_router import router as production_quiz_router
 
 # 로깅 설정 (개선된 버전)
 import logging
@@ -91,14 +90,6 @@ AI 기반 퀴즈를 자동 생성하는 포괄적인 플랫폼입니다.
             "description": "PDF 벡터 검색 및 문서 관리 API",
         },
         {
-            "name": "Quiz Generation",
-            "description": "PDF 기반 RAG 퀴즈 생성 API",
-        },
-        {
-            "name": "Production High-Quality Quiz",
-            "description": "🏆 프로덕션 급 고품질 퀴즈 생성 API - 복잡하더라도 실제 품질 보장",
-        },
-        {
             "name": "Health Check",
             "description": "서비스 상태 확인",
         }
@@ -117,7 +108,6 @@ app.add_middleware(
 # API 라우터 등록
 app.include_router(pdf_router)
 app.include_router(quiz_router)
-app.include_router(production_quiz_router)
 
 # 루트 엔드포인트
 @app.get("/", tags=["Health Check"])
