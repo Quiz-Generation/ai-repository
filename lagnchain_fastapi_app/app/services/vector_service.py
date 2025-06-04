@@ -4,6 +4,8 @@
 """
 import hashlib
 import numpy as np
+import json
+import os
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional
 from pathlib import Path
@@ -39,13 +41,29 @@ class VectorDatabase(ABC):
         """업로드된 문서 소스 목록 조회"""
         pass
 
+    @abstractmethod
+    def save_to_disk(self) -> bool:
+        """디스크에 저장"""
+        pass
+
+    @abstractmethod
+    def load_from_disk(self) -> bool:
+        """디스크에서 로드"""
+        pass
+
 
 class WeaviateDB(VectorDatabase):
-    """Weaviate 벡터 데이터베이스 (시뮬레이션)"""
+    """Weaviate 벡터 데이터베이스 (파일 지속성 포함)"""
 
-    def __init__(self):
+    def __init__(self, data_dir: str = "./vector_data"):
         self.documents = {}
         self.name = "weaviate"
+        self.data_dir = Path(data_dir)
+        self.data_dir.mkdir(exist_ok=True)
+        self.data_file = self.data_dir / "weaviate_documents.json"
+
+        # 시작시 기존 데이터 로드
+        self.load_from_disk()
 
     def store_document(self, doc_id: str, text: str, vector: List[float], metadata: Dict[str, Any]) -> bool:
         try:
@@ -54,8 +72,32 @@ class WeaviateDB(VectorDatabase):
                 "vector": vector,
                 "metadata": metadata
             }
+            # 매번 저장하면 성능이 떨어지므로, 일정 간격이나 종료시에만 저장
             return True
         except Exception:
+            return False
+
+    def save_to_disk(self) -> bool:
+        """데이터를 디스크에 저장"""
+        try:
+            with open(self.data_file, 'w', encoding='utf-8') as f:
+                json.dump(self.documents, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            print(f"벡터 DB 저장 실패: {e}")
+            return False
+
+    def load_from_disk(self) -> bool:
+        """디스크에서 데이터 로드"""
+        try:
+            if self.data_file.exists():
+                with open(self.data_file, 'r', encoding='utf-8') as f:
+                    self.documents = json.load(f)
+                print(f"벡터 DB 로드 완료: {len(self.documents)}개 문서")
+            return True
+        except Exception as e:
+            print(f"벡터 DB 로드 실패: {e}")
+            self.documents = {}
             return False
 
     def search_similar(self, query_vector: List[float], top_k: int = 5, document_id: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -119,11 +161,17 @@ class WeaviateDB(VectorDatabase):
 
 
 class ChromaDB(VectorDatabase):
-    """Chroma 벡터 데이터베이스 (개발용)"""
+    """Chroma 벡터 데이터베이스 (파일 지속성 포함)"""
 
-    def __init__(self):
+    def __init__(self, data_dir: str = "./vector_data"):
         self.documents = {}
         self.name = "chroma"
+        self.data_dir = Path(data_dir)
+        self.data_dir.mkdir(exist_ok=True)
+        self.data_file = self.data_dir / "chroma_documents.json"
+
+        # 시작시 기존 데이터 로드
+        self.load_from_disk()
 
     def store_document(self, doc_id: str, text: str, vector: List[float], metadata: Dict[str, Any]) -> bool:
         try:
@@ -134,6 +182,29 @@ class ChromaDB(VectorDatabase):
             }
             return True
         except Exception:
+            return False
+
+    def save_to_disk(self) -> bool:
+        """데이터를 디스크에 저장"""
+        try:
+            with open(self.data_file, 'w', encoding='utf-8') as f:
+                json.dump(self.documents, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            print(f"벡터 DB 저장 실패: {e}")
+            return False
+
+    def load_from_disk(self) -> bool:
+        """디스크에서 데이터 로드"""
+        try:
+            if self.data_file.exists():
+                with open(self.data_file, 'r', encoding='utf-8') as f:
+                    self.documents = json.load(f)
+                print(f"벡터 DB 로드 완료: {len(self.documents)}개 문서")
+            return True
+        except Exception as e:
+            print(f"벡터 DB 로드 실패: {e}")
+            self.documents = {}
             return False
 
     def search_similar(self, query_vector: List[float], top_k: int = 5, document_id: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -258,61 +329,77 @@ class TextChunker:
 
 
 class PDFVectorService:
-    """PDF → 벡터 저장 메인 서비스"""
+    """PDF → 벡터 저장 메인 서비스 (싱글톤 패턴)"""
+
+    _instance = None
+    _initialized = False
+
+    def __new__(cls, db_type: str = "weaviate"):
+        if cls._instance is None:
+            cls._instance = super(PDFVectorService, cls).__new__(cls)
+        return cls._instance
 
     def __init__(self, db_type: str = "weaviate"):
+        # 이미 초기화되었다면 다시 초기화하지 않음
+        if PDFVectorService._initialized:
+            return
+
         self.vector_db = VectorDBFactory.create_vector_db(db_type)
         self.embedder = TextEmbedder()
         self.chunker = TextChunker()
         self.db_type = db_type
+        PDFVectorService._initialized = True
+        print(f"벡터 서비스 초기화: {db_type} DB, 기존 {self.vector_db.count_documents()}개 문서 로드됨")
 
     def process_pdf_text(self, pdf_text: str, source_name: str) -> Dict[str, Any]:
         """PDF 텍스트를 처리하여 벡터 DB에 저장"""
-        # 고유한 문서 ID 생성
-        document_id = str(uuid.uuid4())
-        upload_timestamp = datetime.now().isoformat()
 
-        # 1. 텍스트 청킹
+        # 고유 문서 ID 생성
+        document_id = str(uuid.uuid4())
+
+        # 텍스트 청킹
         chunks = self.chunker.chunk_text(pdf_text)
 
-        if not chunks:
-            return {
-                "success": False,
-                "error": "유효한 청크가 생성되지 않았습니다"
-            }
-
-        # 2. 청크별 벡터 저장
         stored_count = 0
+        failed_count = 0
 
+        # 각 청크를 벡터화하여 저장
         for i, chunk in enumerate(chunks):
-            doc_id = f"{document_id}_chunk_{i}"
+            if len(chunk.strip()) < 10:  # 너무 짧은 청크는 건너뛰기
+                continue
 
-            # 벡터 생성
+            # 청크 ID 생성
+            chunk_id = f"{document_id}_chunk_{i}"
+
+            # 벡터 임베딩
             vector = self.embedder.embed_text(chunk)
 
-            # 메타데이터 생성 (document_id 추가)
+            # 메타데이터 생성
             metadata = {
-                "document_id": document_id,        # 🆕 문서 식별자
+                "document_id": document_id,
                 "source": source_name,
                 "chunk_index": i,
-                "chunk_size": len(chunk),
-                "total_chunks": len(chunks),
-                "db_type": self.db_type,
-                "upload_timestamp": upload_timestamp  # 🆕 업로드 시간
+                "chunk_id": chunk_id,
+                "upload_timestamp": datetime.now().isoformat(),
+                "text_length": len(chunk)
             }
 
             # 벡터 DB에 저장
-            if self.vector_db.store_document(doc_id, chunk, vector, metadata):
+            if self.vector_db.store_document(chunk_id, chunk, vector, metadata):
                 stored_count += 1
+            else:
+                failed_count += 1
+
+        # 🔥 중요: 저장 후 디스크에 영구 저장
+        self.vector_db.save_to_disk()
 
         return {
-            "success": True,
-            "document_id": document_id,           # 🆕 사용자에게 반환
+            "document_id": document_id,
+            "source_filename": source_name,
             "total_chunks": len(chunks),
             "stored_chunks": stored_count,
-            "db_type": self.db_type,
-            "source": source_name,
-            "upload_timestamp": upload_timestamp
+            "failed_chunks": failed_count,
+            "text_length": len(pdf_text)
         }
 
     def search_documents(self, query: str, top_k: int = 5, document_id: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -350,8 +437,30 @@ class PDFVectorService:
     def switch_database(self, new_db_type: str) -> bool:
         """벡터 DB 변경 (팩토리 패턴 활용)"""
         try:
+            # 기존 데이터 저장
+            self.vector_db.save_to_disk()
+
+            # 새 DB로 전환
             self.vector_db = VectorDBFactory.create_vector_db(new_db_type)
             self.db_type = new_db_type
             return True
         except ValueError:
             return False
+
+    def force_save(self) -> bool:
+        """강제로 디스크에 저장"""
+        return self.vector_db.save_to_disk()
+
+
+# 전역 싱글톤 인스턴스
+_global_vector_service = None
+
+def get_global_vector_service() -> PDFVectorService:
+    """전역 벡터 서비스 반환 (싱글톤)"""
+    global _global_vector_service
+
+    if _global_vector_service is None:
+        _global_vector_service = PDFVectorService()
+        print("✅ 전역 벡터 서비스 생성 완료")
+
+    return _global_vector_service

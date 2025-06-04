@@ -16,6 +16,7 @@ import logging
 import tempfile
 import os
 import time
+from datetime import datetime
 
 # PDF 추출용
 try:
@@ -25,14 +26,14 @@ except ImportError:
     HAS_PYMUPDF = False
 
 # 벡터 서비스 import (상대 경로로 변경)
-from ..services.vector_service import PDFVectorService
+from ..services.vector_service import PDFVectorService, get_global_vector_service
 
 # 🔥 동적 PDF 추출 시스템 import 추가
 from ..services.dynamic_pdf import DynamicPDFService
 from ..schemas.dynamic_pdf import Priority
 
 # Swagger 문서 설명 import
-from ..docs.api_descriptions import (
+from ..docs.pdf_service import (
     desc_upload_pdf,
     desc_get_documents,
     desc_get_document_info,
@@ -47,8 +48,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/pdf", tags=["PDF Vector"])
 
-# 전역 벡터 서비스 인스턴스 (WEAVIATE 기본 사용)
-vector_service = PDFVectorService(db_type="weaviate")
+# 전역 벡터 서비스 인스턴스 (WEAVIATE 기본 사용) - 싱글톤 사용
+vector_service = get_global_vector_service()
 
 # 🔥 동적 PDF 추출 서비스 인스턴스 생성
 dynamic_pdf_service = DynamicPDFService()
@@ -186,9 +187,10 @@ async def upload_pdf(
             result = vector_service.process_pdf_text(pdf_text, filename)
             vector_time = time.time() - vector_start
 
-            if not result["success"]:
-                logger.error(f"벡터 저장 실패: {result.get('error', '알 수 없는 오류')}")
-                raise HTTPException(status_code=500, detail=result.get("error", "벡터 저장 실패"))
+            # 벡터 저장 결과 검증 (새로운 형식)
+            if not result.get("document_id"):
+                logger.error(f"벡터 저장 실패: document_id가 없음")
+                raise HTTPException(status_code=500, detail="벡터 저장 실패: 문서 ID 생성 오류")
 
             total_time = time.time() - upload_start_time
             logger.info(f"업로드 완료: 총 {total_time:.2f}초 (추출: {extraction_result.extraction_time:.2f}초, 벡터화: {vector_time:.2f}초)")
@@ -203,8 +205,8 @@ async def upload_pdf(
                     "text_length": len(pdf_text),
                     "total_chunks": result["total_chunks"],
                     "stored_chunks": result["stored_chunks"],
-                    "db_type": result["db_type"],
-                    "upload_timestamp": result["upload_timestamp"],
+                    "db_type": vector_service.db_type,
+                    "upload_timestamp": datetime.now().isoformat(),
                     # 🧠 스마트 최적화 정보
                     "optimization_info": {
                         "priority_mode": "auto" if auto_selected else "manual",
