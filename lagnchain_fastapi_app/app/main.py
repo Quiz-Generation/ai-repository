@@ -8,28 +8,46 @@ from datetime import datetime
 # API 라우터 임포트 (상대 경로로 변경)
 from lagnchain_fastapi_app.app.api.pdf_service import router as pdf_router
 
-# 로깅 설정
-logging.basicConfig(level=logging.INFO)
+# 로깅 설정 (개선된 버전)
+import logging
+from datetime import datetime
+
+# 동적 PDF 서비스용 상세 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),  # 콘솔 출력
+    ]
+)
+
+# 특정 모듈의 로그 레벨 조정
 logger = logging.getLogger(__name__)
+pdf_logger = logging.getLogger("app.services.dynamic_pdf")
+pdf_logger.setLevel(logging.INFO)  # 동적 PDF 서비스 상세 로깅
+
+# API 추출 관련 로깅
+api_logger = logging.getLogger("app.api.pdf_service")
+api_logger.setLevel(logging.INFO)
 
 # FastAPI 앱 인스턴스 생성 (Swagger 문서 설정 개선)
 app = FastAPI(
     title="🔥 PDF 벡터 검색 API",
     description="""
-    **PDF 파일을 업로드하여 벡터 데이터베이스에 저장하고 RAG 기반 검색을 제공하는 API**
+    PDF 파일을 업로드하여 벡터 데이터베이스에 저장하고 RAG 기반 검색을 제공하는 API
 
-    ## 🚀 주요 기능
+    🚀 주요 기능
     - 📤 PDF 파일 업로드 및 자동 텍스트 추출
     - 🔍 벡터 기반 유사도 검색 (Weaviate, ChromaDB 지원)
     - 📋 문서별 관리 및 메타데이터 저장
     - 🎯 특정 문서에서 컨텍스트 추출 (RAG 준비)
     - 🔄 실시간 데이터베이스 전환
 
-    ## 📊 지원 벡터 DB
+    📊 지원 벡터 DB
     - **Weaviate** (권장): 고성능, 확장성 우수
     - **ChromaDB**: 가벼움, 메모리 효율적
 
-    ## 🛠️ 시작하기
+    🛠️ 시작하기
     1. `/pdf/health` - 서비스 상태 확인
     2. `POST /pdf/upload` - PDF 업로드
     3. `GET /pdf/search` - 벡터 검색
