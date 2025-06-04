@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 import logging
 import tempfile
 import os
+import time
 
 # PDF 추출용
 try:
@@ -69,15 +70,21 @@ async def health_check() -> JSONResponse:
                 "supported_dbs": stats["supported_dbs"],
                 # 🔥 동적 추출기 정보 추가
                 "extraction_system": {
-                    "type": "dynamic",
+                    "type": "smart_auto_optimization",
                     "available_extractors": ["pdfminer", "pdfplumber", "pymupdf"],
-                    "default_priority": "balanced",
-                    "auto_selection": True,
-                    "priorities": ["speed", "quality", "balanced"]
+                    "default_mode": "auto",
+                    "auto_optimization": True,
+                    "manual_priorities": ["speed", "quality", "balanced"],
+                    "smart_features": [
+                        "파일 크기 기반 자동 우선순위 결정",
+                        "내용 유형 기반 추출기 선택",
+                        "파일명 기반 fallback 분석",
+                        "다중 페이지 텍스트 추출"
+                    ]
                 },
                 "endpoints": [
-                    "POST /pdf/upload?priority=balanced",
-                    "POST /pdf/analyze (추출기 추천)",
+                    "POST /pdf/upload (스마트 자동 최적화)",
+                    "POST /pdf/analyze (추출기 추천 분석)",
                     "GET /pdf/documents",
                     "GET /pdf/documents/{document_id}",
                     "GET /pdf/search",
@@ -100,22 +107,17 @@ async def health_check() -> JSONResponse:
 @router.post("/upload", description=desc_upload_pdf)
 async def upload_pdf(
     file: UploadFile = File(...),
-    priority: str = Query("balanced", description="추출 우선순위: speed, quality, balanced")
+    priority: str = Query("auto", description="추출 우선순위: auto(자동최적화), speed, quality, balanced")
 ) -> JSONResponse:
-    """📤 PDF 파일 업로드 및 벡터 저장 → document_id 반환 (동적 추출기 사용)"""
+    """📤 PDF 파일 업로드 및 벡터 저장 → document_id 반환 (스마트 자동 최적화)"""
+
+    upload_start_time = time.time()
+
     if not file.filename or not file.filename.endswith('.pdf'):
         raise HTTPException(status_code=400, detail="PDF 파일만 지원됩니다")
 
-    # 우선순위 검증
-    try:
-        extraction_priority = Priority(priority.lower())
-    except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail=f"잘못된 우선순위: {priority}. 사용 가능: speed, quality, balanced"
-        )
-
     filename = file.filename
+    logger.info(f"PDF 업로드 시작: {filename} (우선순위: {priority})")
 
     try:
         # 임시 파일 생성
@@ -124,28 +126,77 @@ async def upload_pdf(
             temp_file.write(content)
             temp_path = temp_file.name
 
+        file_size_mb = len(content) / (1024 * 1024)
+        logger.info(f"파일 크기: {file_size_mb:.1f}MB")
+
+        # 🧠 스마트 우선순위 결정
+        if priority == "auto":
+            logger.info("자동 최적화 모드: 파일 분석 중...")
+            recommendations = dynamic_pdf_service.get_extractor_recommendations(temp_path)
+
+            # 파일 크기와 내용 기반으로 최적 우선순위 자동 결정
+            content_type = recommendations["file_info"]["content_type"]
+            size_mb = recommendations["file_info"]["size_mb"]
+
+            if size_mb > 10:
+                optimal_priority = "speed"
+                reason = f"대용량 파일({size_mb:.1f}MB) → 속도 우선"
+            elif content_type in ["korean", "mixed"]:
+                optimal_priority = "quality"
+                reason = f"한글 문서 → 품질 우선"
+            elif size_mb > 5:
+                optimal_priority = "speed"
+                reason = f"중대용량 파일({size_mb:.1f}MB) → 속도 우선"
+            else:
+                optimal_priority = "balanced"
+                reason = f"소용량 파일({size_mb:.1f}MB) → 균형 모드"
+
+            logger.info(f"자동 결정: {optimal_priority} ({reason})")
+            extraction_priority = Priority(optimal_priority)
+            auto_selected = True
+        else:
+            # 사용자 지정 우선순위 검증
+            try:
+                extraction_priority = Priority(priority.lower())
+                auto_selected = False
+                reason = f"사용자 지정: {priority}"
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"잘못된 우선순위: {priority}. 사용 가능: auto, speed, quality, balanced"
+                )
+
         try:
-            # 🔥 동적 PDF 텍스트 추출 (자동 최적화)
+            # 동적 PDF 텍스트 추출 (최적화된 우선순위 사용)
             extraction_result = dynamic_pdf_service.extract_text(temp_path, extraction_priority)
 
             if not extraction_result.success:
+                logger.error(f"PDF 추출 실패: {extraction_result.error}")
                 raise HTTPException(status_code=400, detail=f"PDF 추출 실패: {extraction_result.error}")
 
             pdf_text = extraction_result.text
 
             if len(pdf_text.strip()) < 100:
+                logger.warning(f"추출된 텍스트가 부족함: {len(pdf_text)}자")
                 raise HTTPException(status_code=400, detail="PDF에서 충분한 텍스트를 추출할 수 없습니다")
 
             # 벡터 저장
+            logger.info(f"벡터 저장 시작...")
+            vector_start = time.time()
             result = vector_service.process_pdf_text(pdf_text, filename)
+            vector_time = time.time() - vector_start
 
             if not result["success"]:
+                logger.error(f"벡터 저장 실패: {result.get('error', '알 수 없는 오류')}")
                 raise HTTPException(status_code=500, detail=result.get("error", "벡터 저장 실패"))
+
+            total_time = time.time() - upload_start_time
+            logger.info(f"업로드 완료: 총 {total_time:.2f}초 (추출: {extraction_result.extraction_time:.2f}초, 벡터화: {vector_time:.2f}초)")
 
             return JSONResponse(
                 status_code=200,
                 content={
-                    "message": "PDF 업로드 및 벡터 저장 성공 (동적 추출기 사용)",
+                    "message": "PDF 업로드 및 벡터 저장 성공 (스마트 자동 최적화)",
                     "document_id": result["document_id"],  # 🔑 RAG용 문서 ID
                     "filename": filename,
                     "file_size": len(content),
@@ -154,16 +205,33 @@ async def upload_pdf(
                     "stored_chunks": result["stored_chunks"],
                     "db_type": result["db_type"],
                     "upload_timestamp": result["upload_timestamp"],
-                    # 🔥 동적 추출 정보 추가
+                    # 🧠 스마트 최적화 정보
+                    "optimization_info": {
+                        "priority_mode": "auto" if auto_selected else "manual",
+                        "selected_priority": extraction_priority.value,
+                        "selection_reason": reason,
+                        "extractor_used": extraction_result.extractor_used,
+                        "content_type": extraction_result.content_type,
+                        "auto_optimized": auto_selected
+                    },
+                    # 동적 추출 정보
                     "extraction_info": {
                         "extractor_used": extraction_result.extractor_used,
                         "content_type": extraction_result.content_type,
                         "priority": extraction_result.priority,
                         "extraction_time": extraction_result.extraction_time,
                         "speed_mbps": extraction_result.speed_mbps,
-                        "auto_selected": extraction_result.metadata.get("auto_selected", True)
+                        "auto_selected": extraction_result.metadata.get("auto_selected", True),
+                        "selection_reason": extraction_result.metadata.get("selection_reason", "")
                     },
-                    "note": "document_id를 저장하여 나중에 RAG 퀴즈 생성 시 사용하세요 (최적 추출기 자동 선택됨)"
+                    # 성능 메트릭
+                    "performance": {
+                        "total_time": round(total_time, 3),
+                        "extraction_time": extraction_result.extraction_time,
+                        "vectorization_time": round(vector_time, 3),
+                        "extraction_speed_mbps": extraction_result.speed_mbps
+                    },
+                    "note": "🧠 스마트 자동 최적화로 처리되었습니다. document_id를 저장하여 RAG 퀴즈 생성에 사용하세요."
                 }
             )
 
@@ -175,7 +243,8 @@ async def upload_pdf(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"PDF 업로드 처리 중 오류: {str(e)}")
+        error_time = time.time() - upload_start_time
+        logger.error(f"PDF 업로드 처리 중 오류: {str(e)} ({error_time:.2f}초)")
         raise HTTPException(status_code=500, detail=f"서버 오류: {str(e)}")
 
 
@@ -386,10 +455,14 @@ async def get_stats() -> JSONResponse:
 @router.post("/analyze", description="PDF 파일 분석 및 추출기 추천")
 async def analyze_pdf(file: UploadFile = File(...)) -> JSONResponse:
     """🔍 PDF 파일 분석 및 최적 추출기 추천 (업로드 전 미리보기)"""
+
+    analyze_start = time.time()
+
     if not file.filename or not file.filename.endswith('.pdf'):
         raise HTTPException(status_code=400, detail="PDF 파일만 지원됩니다")
 
     filename = file.filename
+    logger.info(f"PDF 분석 요청: {filename}")
 
     try:
         # 임시 파일 생성
@@ -398,9 +471,15 @@ async def analyze_pdf(file: UploadFile = File(...)) -> JSONResponse:
             temp_file.write(content)
             temp_path = temp_file.name
 
+        file_size_mb = len(content) / (1024 * 1024)
+        logger.info(f"파일 크기: {file_size_mb:.1f}MB")
+
         try:
             # 파일 분석 및 추천
             recommendations = dynamic_pdf_service.get_extractor_recommendations(temp_path)
+
+            analyze_time = time.time() - analyze_start
+            logger.info(f"분석 완료: {analyze_time:.2f}초")
 
             return JSONResponse(
                 status_code=200,
@@ -408,6 +487,7 @@ async def analyze_pdf(file: UploadFile = File(...)) -> JSONResponse:
                     "message": "PDF 파일 분석 완료",
                     "filename": filename,
                     "file_size": len(content),
+                    "analysis_time": round(analyze_time, 3),
                     "analysis": recommendations,
                     "usage_tip": "이 정보를 참고하여 /pdf/upload API에서 priority 파라미터를 설정하세요"
                 }
@@ -419,5 +499,6 @@ async def analyze_pdf(file: UploadFile = File(...)) -> JSONResponse:
                 os.unlink(temp_path)
 
     except Exception as e:
-        logger.error(f"PDF 분석 중 오류: {str(e)}")
+        error_time = time.time() - analyze_start
+        logger.error(f"PDF 분석 중 오류: {str(e)} ({error_time:.2f}초)")
         raise HTTPException(status_code=500, detail=f"PDF 분석 오류: {str(e)}")
