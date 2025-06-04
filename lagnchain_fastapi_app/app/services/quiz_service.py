@@ -21,8 +21,9 @@ logger = logging.getLogger(__name__)
 class RAGRetriever:
     """RAG 컨텍스트 검색 클래스"""
 
-    def __init__(self, vector_service: PDFVectorService):
+    def __init__(self, vector_service: PDFVectorService, llm_service: Optional[BaseLLMService] = None):
         self.vector_service = vector_service
+        self.llm_service = llm_service
 
     def retrieve_contexts_for_quiz(
         self,
@@ -41,7 +42,7 @@ class RAGRetriever:
 
         contexts = []
 
-        # 주제별 검색 또는 전체 검색
+        # 주제별 검색 또는 동적 검색
         if topics:
             # 특정 주제들에 대한 검색
             for topic in topics:
@@ -52,12 +53,13 @@ class RAGRetriever:
                 )
                 contexts.extend(self._convert_to_rag_contexts(search_results, topic))
         else:
-            # 전체 문서에서 다양한 키워드로 검색
-            general_queries = [
-                "알고리즘", "방법", "정의", "개념", "원리", "예시", "문제", "해결", "계산", "구현"
-            ]
+            # 🧠 LLM 기반 동적 키워드 생성
+            logger.info("토픽이 없음 → LLM으로 문서 맞춤 검색 키워드 생성 중...")
+            dynamic_queries = self._generate_dynamic_search_queries(document_id, num_questions)
 
-            for query in general_queries[:num_questions//2 + 1]:
+            logger.info(f"생성된 동적 검색 키워드: {dynamic_queries}")
+
+            for query in dynamic_queries:
                 search_results = self.vector_service.search_in_document(
                     query=query,
                     document_id=document_id,
@@ -74,6 +76,86 @@ class RAGRetriever:
 
         logger.info(f"RAG 컨텍스트 검색 완료: {len(contexts)}개")
         return contexts[:num_questions * 2]  # 여유분 확보
+
+    def _generate_dynamic_search_queries(self, document_id: str, num_questions: int) -> List[str]:
+        """📚 LLM을 활용하여 문서에 맞는 동적 검색 키워드 생성"""
+
+        if not self.llm_service:
+            # LLM이 없으면 기본 범용 키워드 사용 (fallback)
+            logger.warning("LLM 서비스가 없어 기본 키워드 사용")
+            return ["핵심 내용", "주요 개념", "중요한 정보", "기본 원리", "주된 내용"]
+
+        try:
+            # 문서의 샘플 텍스트 수집 (문서 전체 개요 파악용)
+            sample_contexts = self.vector_service.search_in_document(
+                query="주요 내용 핵심 정보",
+                document_id=document_id,
+                top_k=3
+            )
+
+            if not sample_contexts:
+                logger.warning("문서에서 샘플 컨텍스트를 찾을 수 없음")
+                return ["주요 내용", "핵심 개념"]
+
+            # 샘플 텍스트 결합
+            sample_text = "\n".join([ctx["text"][:500] for ctx in sample_contexts])
+
+            # LLM으로 문서 맞춤 검색 키워드 생성
+            prompt = f"""
+다음은 어떤 문서의 일부 내용입니다. 이 문서에서 퀴즈 생성을 위한 최적의 검색 키워드를 {num_questions//2 + 3}개 생성해주세요.
+
+문서 내용:
+{sample_text[:2000]}
+
+요구사항:
+1. 이 문서의 주제와 분야에 맞는 구체적인 키워드
+2. 퀴즈로 만들기 좋은 핵심 개념들
+3. 너무 일반적이지 않고, 이 문서에 특화된 용어들
+4. 단순히 단어가 아닌 짧은 구문도 가능
+
+JSON 형식으로 응답해주세요:
+{{
+    "search_keywords": ["키워드1", "키워드2", "키워드3", ...]
+}}
+"""
+
+            response = self.llm_service.client.chat.completions.create(
+                model=self.llm_service.model_name,
+                messages=[
+                    {"role": "system", "content": "문서 분석 전문가로서 퀴즈 생성에 최적화된 검색 키워드를 추출하는 역할입니다."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=500
+            )
+
+            result_text = response.choices[0].message.content
+            if result_text is None:
+                raise ValueError("LLM 응답이 비어있습니다")
+
+            # JSON 파싱
+            import json
+            start_idx = result_text.find('{')
+            end_idx = result_text.rfind('}') + 1
+
+            if start_idx == -1 or end_idx == 0:
+                raise ValueError("JSON 형식을 찾을 수 없습니다")
+
+            json_text = result_text[start_idx:end_idx]
+            result = json.loads(json_text)
+
+            keywords = result.get("search_keywords", [])
+
+            if not keywords:
+                raise ValueError("검색 키워드가 생성되지 않았습니다")
+
+            logger.info(f"LLM이 생성한 동적 키워드: {keywords}")
+            return keywords[:num_questions//2 + 3]  # 적절한 개수로 제한
+
+        except Exception as e:
+            logger.error(f"동적 검색 키워드 생성 실패: {e}")
+            # 실패 시 기본 범용 키워드 반환
+            return ["핵심 내용", "주요 개념", "중요한 정보", "기본 원리", "주된 주제"]
 
     def _convert_to_rag_contexts(
         self,
@@ -126,46 +208,121 @@ class TopicExtractor:
         self.vector_service = vector_service
 
     def extract_document_topics(self, document_id: str) -> List[TopicAnalysis]:
-        """문서에서 주요 토픽 추출 및 분석"""
+        """📚 문서에서 주요 토픽 추출 및 분석 (개선된 버전)"""
 
         logger.info(f"문서 토픽 추출 시작: {document_id}")
 
-        # 문서의 대표 텍스트 수집
+        # 문서의 더 많은 샘플 텍스트 수집 (전체적인 이해를 위해)
         sample_contexts = self.vector_service.search_in_document(
-            query="주요 내용 핵심",
+            query="주요 내용 핵심 개념 중요한 정보",
             document_id=document_id,
-            top_k=5
+            top_k=8  # 더 많은 샘플 수집
         )
 
+        if not sample_contexts:
+            logger.warning(f"문서 {document_id}에서 샘플 컨텍스트를 찾을 수 없음")
+            return []
+
+        # 더 큰 텍스트 샘플 결합 (문서 전체 파악)
         combined_text = "\n".join([ctx["text"] for ctx in sample_contexts])
 
-        # LLM으로 토픽 추출
-        topics = self.llm_service.extract_topics(combined_text)
+        # 🧠 개선된 LLM 토픽 추출 프롬프트
+        enhanced_prompt = f"""
+다음은 특정 문서의 주요 내용들입니다. 이 문서의 핵심 주제들을 분석하여 퀴즈 생성에 적합한 토픽들을 추출해주세요.
 
-        # 각 토픽별 분석
-        topic_analyses = []
-        for topic in topics:
-            analysis = self._analyze_topic(document_id, topic)
-            topic_analyses.append(analysis)
+문서 내용:
+{combined_text[:4000]}
 
-        logger.info(f"토픽 추출 완료: {len(topic_analyses)}개")
-        return topic_analyses
+분석 요구사항:
+1. 이 문서의 주요 분야/도메인 식별
+2. 퀴즈로 만들기 좋은 구체적인 주제들 추출
+3. 각 토픽의 중요도와 난이도 평가
+4. 문서에 실제로 나타나는 개념들만 포함
 
-    def _analyze_topic(self, document_id: str, topic: str) -> TopicAnalysis:
-        """개별 토픽 분석"""
+JSON 형식으로 응답해주세요:
+{{
+    "document_domain": "문서의 주요 분야 (예: 컴퓨터과학, 의학, 역사, 문학 등)",
+    "main_topics": [
+        {{
+            "topic": "구체적인 주제명",
+            "importance": 1-10,
+            "quiz_potential": 1-10,
+            "keywords": ["관련", "키워드", "목록"],
+            "description": "이 토픽에 대한 간단한 설명"
+        }}
+    ]
+}}
+"""
 
-        # 토픽 관련 컨텍스트 검색
+        try:
+            response = self.llm_service.client.chat.completions.create(
+                model=self.llm_service.model_name,
+                messages=[
+                    {"role": "system", "content": "문서 분석 및 토픽 추출 전문가입니다. 주어진 문서에서 퀴즈 생성에 최적화된 주제들을 정확히 식별합니다."},
+                    {"role": "user", "content": enhanced_prompt}
+                ],
+                temperature=0.2,  # 더 일관된 결과를 위해 낮은 온도
+                max_tokens=1000
+            )
+
+            result_text = response.choices[0].message.content
+            if result_text is None:
+                raise ValueError("LLM 토픽 추출 응답이 비어있습니다")
+
+            # JSON 파싱
+            import json
+            start_idx = result_text.find('{')
+            end_idx = result_text.rfind('}') + 1
+
+            if start_idx == -1 or end_idx == 0:
+                raise ValueError("JSON 형식을 찾을 수 없습니다")
+
+            json_text = result_text[start_idx:end_idx]
+            result = json.loads(json_text)
+
+            # 결과 파싱 및 TopicAnalysis 객체 생성
+            topic_analyses = []
+            main_topics = result.get("main_topics", [])
+            document_domain = result.get("document_domain", "일반")
+
+            logger.info(f"문서 도메인 식별: {document_domain}")
+
+            for topic_data in main_topics:
+                # 각 토픽별 실제 문서 검색으로 검증
+                topic_name = topic_data.get("topic", "")
+                if not topic_name:
+                    continue
+
+                analysis = self._analyze_topic_enhanced(document_id, topic_name, topic_data)
+                if analysis.confidence > 0.1:  # 최소 신뢰도 필터
+                    topic_analyses.append(analysis)
+
+            # 중요도와 퀴즈 가능성 기준으로 정렬
+            topic_analyses.sort(key=lambda x: (x.question_potential, x.confidence), reverse=True)
+
+            logger.info(f"토픽 추출 완료: {len(topic_analyses)}개 (도메인: {document_domain})")
+            return topic_analyses[:12]  # 최대 12개 토픽
+
+        except Exception as e:
+            logger.error(f"개선된 토픽 추출 실패: {e}")
+            # 실패 시 기존 방식으로 fallback
+            return self._fallback_topic_extraction(combined_text)
+
+    def _analyze_topic_enhanced(self, document_id: str, topic: str, topic_data: Dict) -> TopicAnalysis:
+        """개선된 개별 토픽 분석"""
+
+        # 토픽 관련 컨텍스트 검색 (더 정확한 검색)
         search_results = self.vector_service.search_in_document(
             query=topic,
             document_id=document_id,
-            top_k=3
+            top_k=4
         )
 
         if not search_results:
             return TopicAnalysis(
                 topic=topic,
                 confidence=0.1,
-                keywords=[],
+                keywords=topic_data.get("keywords", []),
                 context_chunks=[],
                 question_potential=1
             )
@@ -173,39 +330,42 @@ class TopicExtractor:
         # 평균 유사도로 신뢰도 계산
         avg_similarity = sum(r["similarity"] for r in search_results) / len(search_results)
 
-        # 키워드 추출 (간단한 방식)
-        all_text = " ".join([r["text"] for r in search_results])
-        keywords = self._extract_keywords(all_text)
+        # LLM에서 제공한 메타데이터 활용
+        importance = topic_data.get("importance", 5)
+        quiz_potential_base = topic_data.get("quiz_potential", 5)
 
-        # 문제 생성 가능성 점수
-        question_potential = min(10, int(avg_similarity * 10) + len(search_results))
+        # 실제 검색 결과와 LLM 평가 조합
+        final_quiz_potential = min(10, int(
+            (quiz_potential_base * 0.7) + (avg_similarity * 10 * 0.3)
+        ))
 
         return TopicAnalysis(
             topic=topic,
             confidence=avg_similarity,
-            keywords=keywords,
-            context_chunks=[r["text"] for r in search_results],
-            question_potential=question_potential
+            keywords=topic_data.get("keywords", []),
+            context_chunks=[r["text"][:300] for r in search_results],
+            question_potential=final_quiz_potential
         )
 
-    def _extract_keywords(self, text: str) -> List[str]:
-        """간단한 키워드 추출 (추후 NLP 라이브러리로 개선 가능)"""
-        # 한국어 불용어 제거 및 중요 단어 추출
-        stopwords = {'이', '그', '저', '의', '를', '은', '는', '이다', '있다', '하다', '되다', '수', '것'}
+    def _fallback_topic_extraction(self, text: str) -> List[TopicAnalysis]:
+        """LLM 실패 시 기본 토픽 추출 방식"""
+        logger.info("기본 토픽 추출 방식으로 fallback")
 
-        words = text.split()
-        keywords = []
+        # 기존 간단한 방식
+        topics = self.llm_service.extract_topics(text)
 
-        for word in words:
-            if (len(word) >= 2 and
-                word not in stopwords and
-                word.replace(' ', '').isalnum()):
-                keywords.append(word)
+        topic_analyses = []
+        for topic in topics:
+            analysis = TopicAnalysis(
+                topic=topic,
+                confidence=0.5,
+                keywords=[],
+                context_chunks=[],
+                question_potential=5
+            )
+            topic_analyses.append(analysis)
 
-        # 빈도수 기반 상위 키워드 반환
-        from collections import Counter
-        word_counts = Counter(keywords)
-        return [word for word, count in word_counts.most_common(10)]
+        return topic_analyses
 
 
 class QuizValidator:
@@ -273,7 +433,7 @@ class QuizService:
         self.llm_service = llm_service or get_default_llm_service()
 
         # 하위 컴포넌트들
-        self.rag_retriever = RAGRetriever(self.vector_service)
+        self.rag_retriever = RAGRetriever(self.vector_service, self.llm_service)
         self.topic_extractor = TopicExtractor(self.llm_service, self.vector_service)
         self.quiz_validator = QuizValidator(self.llm_service)
 
