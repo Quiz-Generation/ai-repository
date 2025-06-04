@@ -26,7 +26,7 @@ except ImportError:
     HAS_PYMUPDF = False
 
 # 벡터 서비스 import (상대 경로로 변경)
-from ..services.vector_service import PDFVectorService, get_global_vector_service
+from ..services.vector_service import get_global_vector_service
 
 # 🔥 동적 PDF 추출 시스템 import 추가
 from ..services.dynamic_pdf import DynamicPDFService
