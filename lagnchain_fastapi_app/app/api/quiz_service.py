@@ -16,7 +16,7 @@ import time
 from typing import List, Dict, Any, Optional
 
 # 퀴즈 서비스 및 스키마 import
-from ..services.quiz_service import get_default_quiz_service
+from ..services.advanced_quiz_service import get_advanced_quiz_service
 from ..services.llm_factory import LLMFactory, LLMProvider, LLMConfig
 from ..schemas.quiz_schema import (
     QuizRequest,  Difficulty, QuestionType,
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/quiz", tags=["Quiz Generation"])
 
 # 전역 퀴즈 서비스 인스턴스
-quiz_service = get_default_quiz_service()
+quiz_service = get_advanced_quiz_service()
 
 
 @router.get("/health", description=desc_health_check)
@@ -87,7 +87,7 @@ async def health_check() -> JSONResponse:
 @router.post("/generate", description=desc_generate_quiz)
 async def generate_quiz(request: QuizRequestAPI) -> JSONResponse:
     generation_start = time.time()
-    logger.info(f"퀴즈 생성 API 요청: {request.document_id} ({request.num_questions}문제)")
+    logger.info(f"🚀 프로급 퀴즈 생성 API 요청: {request.document_id} ({request.num_questions}문제)")
     try:
         # API 요청을 내부 모델로 변환
         quiz_request = QuizRequest(
@@ -98,11 +98,11 @@ async def generate_quiz(request: QuizRequestAPI) -> JSONResponse:
             language=request.language
         )
 
-        # 퀴즈 생성
-        response = await quiz_service.generate_quiz(quiz_request)
+        # 🎯 프로급 퀴즈 생성 (정확한 개수 보장)
+        response = await quiz_service.generate_guaranteed_quiz(quiz_request)
 
         if not response.success:
-            raise HTTPException(status_code=400, detail=f"퀴즈 생성 실패: {response.error}")
+            raise HTTPException(status_code=400, detail=f"프로급 퀴즈 생성 실패: {response.error}")
 
         # API 응답 형식으로 변환
         api_questions = []
@@ -123,7 +123,7 @@ async def generate_quiz(request: QuizRequestAPI) -> JSONResponse:
         return JSONResponse(
             status_code=200,
             content={
-                "message": "퀴즈 생성 성공",
+                "message": "🚀 프로급 퀴즈 생성 성공",
                 "quiz_id": response.quiz_id,
                 "document_id": response.document_id,
                 "questions": [q.__dict__ for q in api_questions],
@@ -133,23 +133,35 @@ async def generate_quiz(request: QuizRequestAPI) -> JSONResponse:
                 "api_processing_time": round(total_time, 3),
                 "created_at": response.created_at,
 
-                # 📊 생성 통계 및 품질 정보
-                "generation_info": {
+                # 🎯 프로급 생성 정보
+                "advanced_generation_info": {
+                    "generation_method": response.metadata.get("generation_method", "advanced_multi_stage"),
                     "llm_model_used": response.metadata.get("llm_model"),
-                    "extracted_topics": response.metadata.get("extracted_topics", []),
                     "contexts_used": response.metadata.get("contexts_used", 0),
-                    "avg_context_similarity": round(response.metadata.get("avg_context_similarity", 0), 3),
-                    "question_types_generated": response.metadata.get("generation_stats", {}).get("question_types_used", [])
+                    "type_distribution": response.metadata.get("type_distribution", {}),
+                    "quality_score": response.metadata.get("quality_score", 0),
+                    "duplicate_count": response.metadata.get("duplicate_count", 0),
+                    "advanced_features": response.metadata.get("advanced_features", [])
                 },
 
-                # 🔍 품질 검증 결과
-                "quality_assessment": response.metadata.get("validation_result", {}),
+                # 🔍 고급 품질 검증 결과
+                "quality_validation": response.metadata.get("validation_result", {}),
 
-                # 💡 사용 팁
-                "usage_tips": {
-                    "quiz_id": "이 quiz_id로 퀴즈 결과를 추적할 수 있습니다",
-                    "question_navigation": "questions 배열의 각 문제는 topic과 source_context를 포함합니다",
-                    "quality_improvement": "더 나은 품질을 위해 specific topics를 지정하거나 difficulty를 조정해보세요"
+                # ✅ 보장 사항
+                "guarantees": {
+                    "exact_question_count": f"요청 {request.num_questions}문제 = 생성 {response.total_questions}문제",
+                    "question_type_distribution": "사용자 지정 유형별 정확한 분배",
+                    "semantic_duplicate_check": "의미적 중복 검증 완료",
+                    "multi_stage_rag": "문서 전반에서 다양성 있는 컨텍스트 추출",
+                    "professional_validation": "전문가 수준 품질 검증 적용"
+                },
+
+                # 💡 고급 사용 팁
+                "pro_usage_tips": {
+                    "quality_score": f"품질 점수: {response.metadata.get('quality_score', 0)}/10점",
+                    "duplicate_analysis": f"중복 문제: {response.metadata.get('duplicate_count', 0)}개 발견",
+                    "context_diversity": "멀티 스테이지 RAG로 문서 전반 활용",
+                    "type_specific_generation": "문제 유형별 전용 생성기 적용"
                 }
             }
         )
@@ -158,8 +170,8 @@ async def generate_quiz(request: QuizRequestAPI) -> JSONResponse:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         error_time = time.time() - generation_start
-        logger.error(f"퀴즈 생성 API 오류: {str(e)} ({error_time:.2f}초)")
-        raise HTTPException(status_code=500, detail=f"퀴즈 생성 오류: {str(e)}")
+        logger.error(f"프로급 퀴즈 생성 API 오류: {str(e)} ({error_time:.2f}초)")
+        raise HTTPException(status_code=500, detail=f"프로급 퀴즈 생성 오류: {str(e)}")
 
 
 @router.get("/topics/{document_id}", description=desc_extract_topics)
