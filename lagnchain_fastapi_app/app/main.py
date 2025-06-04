@@ -10,7 +10,7 @@ from lagnchain_fastapi_app.app.core.config import get_settings
 
 # API 라우터 임포트 (상대 경로로 변경)
 from lagnchain_fastapi_app.app.api.pdf_service import router as pdf_router
-from lagnchain_fastapi_app.app.api.quiz_router import router as quiz_router
+from lagnchain_fastapi_app.app.api.quiz_service import router as quiz_router
 
 # 로깅 설정 (개선된 버전)
 import logging

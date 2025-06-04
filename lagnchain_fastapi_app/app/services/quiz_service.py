@@ -295,19 +295,12 @@ class QuizService:
 
             logger.info(f"문서 확인 완료: {doc_info['source_filename']} ({doc_info['chunk_count']}개 청크)")
 
-            # 2단계: 토픽 자동 추출 (사용자 지정 토픽은 힌트로만 사용)
+            # 2단계: 토픽 자동 추출 (완전 자동화)
             logger.info("STEP1: 문서 토픽 자동 추출 중...")
             topic_analyses = self.topic_extractor.extract_document_topics(request.document_id)
-            extracted_topics = [ta.topic for ta in topic_analyses[:5]]  # 상위 5개
+            extracted_topics = [ta.topic for ta in topic_analyses[:7]]  # 상위 7개 토픽
 
-            # 사용자 지정 토픽이 있으면 힌트로 활용
-            if request.topics:
-                logger.info(f"사용자 힌트 토픽: {request.topics}")
-                # 사용자 토픽도 포함시키되, 자동 추출 토픽을 우선시
-                combined_topics = extracted_topics + [t for t in request.topics if t not in extracted_topics]
-                extracted_topics = combined_topics[:7]  # 최대 7개
-
-            logger.info(f"최종 선정 토픽: {extracted_topics}")
+            logger.info(f"자동 추출된 토픽: {extracted_topics}")
 
             # 3단계: RAG 컨텍스트 검색
             logger.info("STEP2: RAG 컨텍스트 검색 중...")
@@ -345,7 +338,7 @@ class QuizService:
             questions = self._convert_to_question_objects(
                 llm_result["questions"],
                 contexts,
-                request.difficulty
+                request.difficulty  # base_difficulty로 전달
             )
 
             # 8단계: 품질 검증
@@ -365,7 +358,7 @@ class QuizService:
                 success=True,
                 metadata={
                     "extracted_topics": extracted_topics,
-                    "user_hint_topics": request.topics or [],
+                    "user_hint_topics": [],
                     "contexts_used": len(contexts),
                     "avg_context_similarity": sum(c.similarity for c in contexts) / len(contexts),
                     "validation_result": validation_result,
@@ -462,15 +455,28 @@ class QuizService:
         self,
         llm_questions: List[Dict],
         contexts: List[RAGContext],
-        difficulty: Difficulty
+        base_difficulty: Difficulty
     ) -> List[Question]:
-        """LLM 응답을 Question 객체로 변환"""
+        """LLM 응답을 Question 객체로 변환 (문제별 난이도 다양화)"""
         questions = []
 
         for i, q_data in enumerate(llm_questions):
             try:
                 # 문제 유형 변환
                 question_type = QuestionType(q_data.get("question_type", "multiple_choice"))
+
+                # 📊 문제별 난이도 자동 할당 (다양화)
+                if len(llm_questions) >= 3:
+                    # 3문제 이상이면 난이도 분산
+                    if i % 3 == 0:
+                        difficulty = Difficulty.EASY
+                    elif i % 3 == 1:
+                        difficulty = base_difficulty  # 기본 난이도 유지
+                    else:
+                        difficulty = Difficulty.HARD
+                else:
+                    # 3문제 미만이면 기본 난이도 사용
+                    difficulty = base_difficulty
 
                 # 소스 컨텍스트 찾기
                 source_context = ""
@@ -483,13 +489,14 @@ class QuizService:
                     correct_answer=q_data.get("correct_answer", ""),
                     options=q_data.get("options"),
                     explanation=q_data.get("explanation", ""),
-                    difficulty=difficulty,
+                    difficulty=difficulty,  # 개별 문제 난이도
                     source_context=source_context,
                     topic=q_data.get("topic", "일반"),
                     metadata={
                         "llm_generated": True,
                         "context_similarity": contexts[i].similarity if i < len(contexts) else 0,
-                        "generation_order": i + 1
+                        "generation_order": i + 1,
+                        "assigned_difficulty": difficulty.value  # 할당된 난이도 추가
                     }
                 )
 

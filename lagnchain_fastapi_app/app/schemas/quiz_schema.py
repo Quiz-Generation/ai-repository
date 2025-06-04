@@ -73,8 +73,7 @@ class QuizRequest:
     num_questions: int = 5
     difficulty: Difficulty = Difficulty.MEDIUM
     question_types: Optional[List[QuestionType]] = None
-    topics: Optional[List[str]] = None
-    language: str = "ko"  # 언어 설정 (나중에 모델 스위칭용)
+    language: str = "ko"
     custom_prompt: Optional[str] = None  # 커스텀 프롬프트
 
     def __post_init__(self):
@@ -157,14 +156,10 @@ try:
         """퀴즈 생성 요청 API 모델"""
         document_id: str = Field(..., description="업로드된 PDF 문서 ID")
         num_questions: int = Field(5, ge=1, le=20, description="생성할 문제 수 (1-20개)")
-        difficulty: str = Field("medium", description="난이도 (easy/medium/hard)")
+        difficulty: str = Field("medium", description="기본 난이도 (easy/medium/hard) - 각 문제별로 자동 조정됨")
         question_types: Optional[List[str]] = Field(
             None,
             description="문제 유형 (생략 시 자동 선택): multiple_choice, short_answer, fill_blank, true_false"
-        )
-        topics: Optional[List[str]] = Field(
-            None,
-            description="🤖 토픽 힌트 (선택사항): PDF에서 자동 추출된 토픽이 우선 사용되며, 여기 지정한 토픽은 추가 힌트로 활용됩니다"
         )
         language: str = Field("ko", description="언어 (ko/en)")
 
@@ -175,7 +170,6 @@ try:
                     "num_questions": 5,
                     "difficulty": "medium",
                     "question_types": ["multiple_choice", "short_answer"],
-                    "topics": ["알고리즘", "자료구조"],  # 힌트로만 사용
                     "language": "ko"
                 }
             }
