@@ -8,8 +8,15 @@ import json
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional
 from enum import Enum
-from lagnchain_fastapi_app.app.core.config import get_settings
-from lagnchain_fastapi_app.app.schemas.quiz_schema import LLMConfig, LLMProvider
+
+# 🔥 상대 경로로 수정 (테스트 호환성)
+try:
+    from ..core.config import get_settings
+    from ..schemas.quiz_schema import LLMConfig, LLMProvider
+except ImportError:
+    # 절대 경로 fallback
+    from lagnchain_fastapi_app.app.core.config import get_settings
+    from lagnchain_fastapi_app.app.schemas.quiz_schema import LLMConfig, LLMProvider
 
 logger = logging.getLogger(__name__)
 

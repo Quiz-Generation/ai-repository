@@ -720,6 +720,52 @@ class AdvancedQuizService:
 
         return questions
 
+    async def extract_topics(self, document_id: str) -> List[str]:
+        """📚 문서에서 퀴즈 생성용 토픽 자동 추출"""
+        logger.info(f"문서 토픽 추출 시작: {document_id}")
+
+        try:
+            # 문서의 다양한 부분에서 샘플링
+            search_results = self.vector_service.search_in_document(
+                query="주요 내용 핵심 개념",
+                document_id=document_id,
+                top_k=20
+            )
+
+            if not search_results:
+                return []
+
+            # 텍스트에서 키워드 추출
+            topics = []
+            seen_topics = set()
+
+            for result in search_results:
+                text = result["text"]
+                sentences = text.split('.')[:3]  # 첫 3문장만
+
+                for sentence in sentences:
+                    words = sentence.strip().split()
+                    if len(words) > 3:
+                        topic = ' '.join(words[:5])  # 첫 5단어
+                        topic_key = topic.lower().strip()
+
+                        if topic_key not in seen_topics and len(topic) > 10:
+                            topics.append(topic)
+                            seen_topics.add(topic_key)
+
+                        if len(topics) >= 15:
+                            break
+
+                if len(topics) >= 15:
+                    break
+
+            logger.info(f"토픽 추출 완료: {len(topics)}개")
+            return topics
+
+        except Exception as e:
+            logger.error(f"토픽 추출 실패: {e}")
+            return []
+
 
 # 전역 고급 퀴즈 서비스
 _advanced_quiz_service: Optional[AdvancedQuizService] = None
