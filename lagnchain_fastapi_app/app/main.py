@@ -136,9 +136,15 @@ async def root():
         "workflows": {
             "basic_quiz_generation": [
                 "1. POST /pdf/upload - PDF 업로드하여 document_id 획득",
-                "2. GET /quiz/topics/{document_id} - 토픽 확인 (선택)",
-                "3. POST /quiz/generate - 퀴즈 생성",
-                "4. 생성된 퀴즈로 학습 진행"
+                "2. POST /quiz/generate - 기본 모드 퀴즈 생성",
+                "   → OX(20%) + 객관식(60%) + 주관식(20%) 자동 분배",
+                "3. 생성된 다양한 유형의 퀴즈로 학습 진행"
+            ],
+            "custom_quiz_generation": [
+                "1. POST /pdf/upload - PDF 업로드하여 document_id 획득",
+                "2. POST /quiz/generate - question_types 지정으로 특정 유형만 생성",
+                "   → 예: ['multiple_choice'] 지정시 객관식만 생성",
+                "3. 맞춤형 퀴즈로 학습 진행"
             ],
             "advanced_customization": [
                 "1. GET /quiz/models - 사용 가능한 LLM 모델 확인",
