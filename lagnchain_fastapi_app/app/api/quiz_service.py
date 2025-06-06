@@ -14,18 +14,27 @@ from ..services.quiz_service import get_quiz_service, QuizService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/api/quiz",
+    prefix="/quiz",
     tags=["Quiz - LangChain Batch Processing"]
 )
 
 
-@router.post("/quiz/generate", response_model=QuizResponse)
+@router.post("/generate", response_model=QuizResponse)
 async def generate_efficient_quiz(
     request: QuizRequest,
     quiz_service: QuizService = Depends(get_quiz_service)
 ) -> QuizResponse:
     """
     ⚡ 효율적인 퀴즈 생성 - 단일 API 호출!
+
+    **🎯 기본 모드 (question_types 미지정 시):**
+    - **OX 문제 (20%)**: 참/거짓 판단 문제
+    - **객관식 문제 (60%)**: 4개 선택지 객관식 문제
+    - **주관식 문제 (20%)**: 단답형/서술형 문제
+    - **자동 비율 분배**: 요청 문제 수에 따라 2:6:2 비율로 자동 분배
+
+    **🔧 커스텀 모드 (question_types 지정 시):**
+    - 특정 문제 유형만 선택 가능 (예: 전체 객관식, 전체 OX 등)
 
     **핵심 개선사항:**
     - 🚀 **단일 API 호출**: 15개 문제를 한 번에 생성 (기존 15회 → 1회)
@@ -34,7 +43,6 @@ async def generate_efficient_quiz(
     - 🔄 **LangGraph 워크플로우**: 효율적인 파이프라인 처리
     - 🎯 **스마트 중복 제거**: 임베딩 기반 정확한 중복 탐지
     - 🌐 **언어 설정 지원**: 한국어/영어 자동 감지 및 생성
-    - 📊 **정확한 문제 비율**: OX(20%) : 객관식(60%) : 주관식(20%)
 
     **사용 예시:**
     ```json
@@ -42,14 +50,20 @@ async def generate_efficient_quiz(
         "document_id": "your-doc-id",
         "num_questions": 15,
         "difficulty": "medium",
-        "question_types": ["multiple_choice"],
         "language": "ko"
     }
     ```
+    → **자동으로 OX 3개 + 객관식 9개 + 주관식 3개 생성**
 
-    **문제 타입 비율:**
-    - 기본 모드: OX 20%, 객관식 60%, 주관식 20%
-    - 특정 타입 지정시: 해당 타입으로만 생성
+    ```json
+    {
+        "document_id": "your-doc-id",
+        "num_questions": 10,
+        "question_types": ["multiple_choice"],
+        "difficulty": "medium"
+    }
+    ```
+    → **객관식 10개만 생성**
     """
     logger.info(f"⚡ 효율적인 퀴즈 생성 요청: {request.num_questions}문제, 언어: {request.language}")
 
@@ -126,7 +140,7 @@ async def get_efficiency_comparison() -> Dict[str, Any]:
             "🎯 스마트 중복 제거 (임베딩 기반)",
             "📊 실시간 품질 평가",
             "🔍 병렬 컨텍스트 검색",
-            "⚖️ 정확한 2:6:2 타입 분배",
+            "⚖️ 자동 2:6:2 타입 분배 (OX:객관식:주관식)",
             "🌐 언어별 최적화 (한국어/영어)",
             "🎨 문제 품질 자동 검증"
         ]

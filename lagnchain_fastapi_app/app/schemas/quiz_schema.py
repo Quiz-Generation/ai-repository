@@ -158,7 +158,9 @@ try:
         difficulty: str = Field("medium", description="기본 난이도 (easy/medium/hard) - 각 문제별로 자동 조정됨")
         question_types: Optional[List[str]] = Field(
             None,
-            description="문제 유형 (생략 시 자동 선택): multiple_choice, short_answer, fill_blank, true_false"
+            description="""문제 유형 설정 (생략 시 자동 2:6:2 비율 적용):
+            • 생략 시: OX(20%) + 객관식(60%) + 주관식(20%) 자동 분배
+            • 지정 시: multiple_choice(객관식), short_answer(주관식), true_false(OX), fill_blank(빈칸채우기) 중 선택"""
         )
         language: str = Field("ko", description="언어 (ko/en)")
 
@@ -166,11 +168,11 @@ try:
             json_schema_extra = {
                 "example": {
                     "document_id": "f7dbd017-426e-4919-8a88-feda68949615",
-                    "num_questions": 5,
+                    "num_questions": 10,
                     "difficulty": "medium",
-                    "question_types": ["multiple_choice", "short_answer"],
                     "language": "ko"
-                }
+                },
+                "description": "기본 모드에서는 question_types를 생략하면 자동으로 OX(20%) + 객관식(60%) + 주관식(20%) 비율로 생성됩니다."
             }
 
 
