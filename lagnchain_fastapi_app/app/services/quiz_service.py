@@ -241,247 +241,20 @@ class BatchQuestionGenerator:
         # 💡 난이도 분배 계산 (전체 난이도를 유지하면서 다양성 확보)
         difficulty_distribution = self._calculate_difficulty_distribution(total_questions, difficulty)
 
-        difficulty_desc = {
-            Difficulty.EASY: "기본 개념 이해 수준",
-            Difficulty.MEDIUM: "개념 응용 수준",
-            Difficulty.HARD: "심화 분석 수준"
-        }
+        # 공통 요소들
+        base_system_prompt = self._get_base_system_prompt(language)
+        difficulty_instruction = self._get_difficulty_instruction(difficulty_distribution, total_questions, language)
+        output_format_example = self._get_output_format_example(language)
+        question_type_guidelines = self._get_question_type_guidelines(language)
 
-        # 언어별 프롬프트 설정
-        if language == "ko":
-            language_instruction = """
-⚠️ 중요: 반드시 한국어로 모든 문제와 설명을 작성하세요.
-- 문제 내용: 한국어
-- 선택지: 한국어
-- 정답: 한국어
-- 해설: 한국어
-- 주제: 한국어
-"""
-            difficulty_instruction = f"""
-🎯 난이도 분배 (총 {total_questions}문제):
-- 쉬운 문제(easy): {difficulty_distribution['easy']}개 - 기본 개념 확인, 단순 적용
-- 보통 문제(medium): {difficulty_distribution['medium']}개 - 개념 응용, 분석적 사고
-- 어려운 문제(hard): {difficulty_distribution['hard']}개 - 심화 분석, 종합적 판단
-
-⚠️ 각 문제마다 반드시 해당하는 난이도를 "difficulty" 필드에 정확히 설정하세요!
-"""
-
-            question_type_guidelines = f"""
-📝 Question Type Guidelines:
-
-1. **True/False (true_false)**:
-   - Format: Declarative statements that can be judged true or false
-   - Example: "Convolutional Neural Networks (CNNs) are used to extract visual features from images."
-   - Answer: Only "True" or "False"
-
-2. **Multiple Choice (multiple_choice)**:
-   - Format: "Which of the following...", "What is...", "The correct example is..."
-   - Must provide exactly 4 options
-   - Correct answer must exactly match one of the options
-
-3. **Short Answer (short_answer)**:
-   - Format: "Explain...", "Define...", "Describe the difference between..."
-   - ❌ Never use: "Which of the following", "Choose from", "Select" etc.
-   - Answer: 1-2 sentence clear descriptive response
-   - Example: "Explain the meaning of 'Representation Learning' in deep learning."
-
-⚠️ Never write short answer questions in multiple choice format!
-
-🎯 Difficulty-based Problem Depth Guidelines:
-
-**Easy (Basic Concept Verification)**:
-- Simple definitions, basic concept understanding
-- Short questions, intuitive answers
-- Example: "CNNs are used for image classification."
-
-**Medium (Concept Application & Comparison)**:
-- Concept comparison, situational application
-- Medium-length questions, analytical thinking required
-- Example: "When comparing CNNs to regular neural networks for image classification, why are CNNs more effective?"
-
-**Hard (Complex Thinking & Problem Solving)**:
-- Real-world application, complex analysis, problem solving
-- Long questions, scenario-based, deep thinking required
-- Example: "You need to implement real-time image recognition in a mobile app. Considering the trade-off between accuracy and speed, analyze which neural network architecture and optimization methods you should choose and explain your reasoning."
-
-💡 Advanced Problem Examples:
-
-**Scenario-based Problems**:
-"Assume you are developing an image recognition system for autonomous vehicles. Real-time processing is required and over 99% accuracy is demanded..."
-
-**Comparative Analysis Problems**:
-"Company A uses CNNs while Company B uses Vision Transformers. Analyze the pros and cons of each approach and determine which method is more suitable for different situations..."
-
-**Problem-solving Questions**:
-"If you need to create a high-performance image classification model with limited training data, what strategies could you employ..."
-
-⚠️ Hard questions must require real-world application scenarios and complex thinking!
-"""
-
-            output_format_example = f"""{{
-    "questions": [
-        {{
-            "question": "딥러닝에서 전이학습(Transfer Learning)은 사전 훈련된 모델의 지식을 새로운 작업에 활용하는 기법이다.",
-            "question_type": "true_false",
-            "correct_answer": "True",
-            "explanation": "전이학습은 사전 훈련된 모델의 특성 추출 능력을 활용하여 새로운 작업에서 빠르고 효과적인 학습을 가능하게 합니다.",
-            "difficulty": "easy",
-            "topic": "전이학습"
-        }},
-        {{
-            "question": "이미지 분류 작업에서 데이터셋이 작을 때 과적합을 방지하면서 높은 성능을 얻기 위한 최적의 전략은 무엇인가?",
-            "question_type": "multiple_choice",
-            "options": ["처음부터 큰 모델 훈련", "전이학습 + 데이터 증강", "단순한 모델 사용", "학습률 증가"],
-            "correct_answer": "전이학습 + 데이터 증강",
-            "explanation": "작은 데이터셋에서는 전이학습으로 사전 지식을 활용하고 데이터 증강으로 데이터 부족을 보완하는 것이 가장 효과적입니다.",
-            "difficulty": "medium",
-            "topic": "딥러닝 전략"
-        }},
-        {{
-            "question": "당신이 의료 영상 진단 AI를 개발하는 팀에 속해 있다고 가정하세요. 환자의 X-ray 이미지에서 폐렴을 진단하는 모델을 만들어야 하는데, 의료진의 신뢰를 얻기 위해서는 높은 정확도뿐만 아니라 모델의 판단 근거를 명확히 제시해야 합니다. 또한 실시간 진단이 가능해야 하고 개인정보 보호를 위해 클라우드가 아닌 병원 내 서버에서 동작해야 합니다. 이러한 제약 조건들을 모두 고려할 때, 어떤 딥러닝 아키텍처와 기법들을 조합해서 사용해야 하는지 구체적으로 분석하고 각 선택의 근거를 설명하세요.",
-            "question_type": "short_answer",
-            "correct_answer": "CNN 기반 아키텍처에 Grad-CAM이나 Attention 메커니즘을 결합하여 해석가능성을 확보하고, MobileNet이나 EfficientNet 같은 경량화 모델을 사용하여 실시간 처리와 온프레미스 배포를 가능하게 하며, 전이학습과 데이터 증강으로 정확도를 향상시키는 전략을 사용해야 한다.",
-            "explanation": "의료 AI는 해석가능성(XAI), 실시간 처리, 온프레미스 배포, 높은 정확도를 모두 만족해야 하므로 각 요구사항에 맞는 기술들을 체계적으로 조합해야 합니다.",
-            "difficulty": "hard",
-            "topic": "의료 AI 시스템 설계"
-        }}
-    ]
-}}"""
-        else:
-            language_instruction = """
-⚠️ Important: Generate all questions and explanations in English.
-- Question content: English
-- Options: English
-- Answers: English
-- Explanations: English
-- Topics: English
-"""
-            difficulty_instruction = f"""
-🎯 Difficulty Distribution (Total {total_questions} questions):
-- Easy questions: {difficulty_distribution['easy']} - Basic concept verification, simple application
-- Medium questions: {difficulty_distribution['medium']} - Concept application, analytical thinking
-- Hard questions: {difficulty_distribution['hard']} - Advanced analysis, comprehensive judgment
-
-⚠️ Make sure to set the correct difficulty level for each question in the "difficulty" field!
-"""
-
-            question_type_guidelines = f"""
-📝 Question Type Guidelines:
-
-1. **True/False (true_false)**:
-   - Format: Declarative statements that can be judged true or false
-   - Example: "Convolutional Neural Networks (CNNs) are used to extract visual features from images."
-   - Answer: Only "True" or "False"
-
-2. **Multiple Choice (multiple_choice)**:
-   - Format: "Which of the following...", "What is...", "The correct example is..."
-   - Must provide exactly 4 options
-   - Correct answer must exactly match one of the options
-
-3. **Short Answer (short_answer)**:
-   - Format: "Explain...", "Define...", "Describe the difference between..."
-   - ❌ Never use: "Which of the following", "Choose from", "Select" etc.
-   - Answer: 1-2 sentence clear descriptive response
-   - Example: "Explain the meaning of 'Representation Learning' in deep learning."
-
-⚠️ Never write short answer questions in multiple choice format!
-
-🎯 Difficulty-based Problem Depth Guidelines:
-
-**Easy (Basic Concept Verification)**:
-- Simple definitions, basic concept understanding
-- Short questions, intuitive answers
-- Example: "CNNs are used for image classification."
-
-**Medium (Concept Application & Comparison)**:
-- Concept comparison, situational application
-- Medium-length questions, analytical thinking required
-- Example: "When comparing CNNs to regular neural networks for image classification, why are CNNs more effective?"
-
-**Hard (Complex Thinking & Problem Solving)**:
-- Real-world application, complex analysis, problem solving
-- Long questions, scenario-based, deep thinking required
-- Example: "You need to implement real-time image recognition in a mobile app. Considering the trade-off between accuracy and speed, analyze which neural network architecture and optimization methods you should choose and explain your reasoning."
-
-💡 Advanced Problem Examples:
-
-**Scenario-based Problems**:
-"Assume you are developing an image recognition system for autonomous vehicles. Real-time processing is required and over 99% accuracy is demanded..."
-
-**Comparative Analysis Problems**:
-"Company A uses CNNs while Company B uses Vision Transformers. Analyze the pros and cons of each approach and determine which method is more suitable for different situations..."
-
-**Problem-solving Questions**:
-"If you need to create a high-performance image classification model with limited training data, what strategies could you employ..."
-
-⚠️ Hard questions must require real-world application scenarios and complex thinking!
-"""
-
-            output_format_example = f"""{{
-    "questions": [
-        {{
-            "question": "Transfer learning in deep learning utilizes knowledge from pre-trained models for new tasks.",
-            "question_type": "true_false",
-            "correct_answer": "True",
-            "explanation": "Transfer learning leverages feature extraction capabilities of pre-trained models to enable fast and effective learning on new tasks.",
-            "difficulty": "easy",
-            "topic": "Transfer Learning"
-        }},
-        {{
-            "question": "When working with a small image dataset, what is the most effective strategy to prevent overfitting while achieving high performance?",
-            "question_type": "multiple_choice",
-            "options": ["Train large model from scratch", "Transfer learning + Data augmentation", "Use simple models only", "Increase learning rate"],
-            "correct_answer": "Transfer learning + Data augmentation",
-            "explanation": "For small datasets, combining transfer learning to leverage prior knowledge with data augmentation to address data scarcity is most effective.",
-            "difficulty": "medium",
-            "topic": "Deep Learning Strategy"
-        }},
-        {{
-            "question": "Assume you are part of a team developing a medical imaging AI for pneumonia diagnosis from chest X-rays. To gain trust from medical professionals, your model must not only achieve high accuracy but also provide clear explanations for its decisions. Additionally, it must enable real-time diagnosis and operate on hospital servers (not cloud) for privacy protection. Considering all these constraints, analyze what deep learning architecture and techniques you should combine, and provide specific reasoning for each choice.",
-            "question_type": "short_answer",
-            "correct_answer": "Use CNN-based architecture combined with Grad-CAM or Attention mechanisms for interpretability, employ lightweight models like MobileNet or EfficientNet for real-time processing and on-premises deployment, and apply transfer learning with data augmentation to improve accuracy while meeting all system requirements.",
-            "explanation": "Medical AI systems must satisfy interpretability (XAI), real-time processing, on-premises deployment, and high accuracy simultaneously, requiring systematic combination of appropriate technologies for each requirement.",
-            "difficulty": "hard",
-            "topic": "Medical AI System Design"
-        }}
-    ]
-}}"""
-
+        # 최종 프롬프트 조합
         prompt = f"""
-다음 컨텍스트를 바탕으로 총 {total_questions}개의 고품질 퀴즈를 생성하세요.
-{language_instruction}
+{base_system_prompt}
 
-=== 컨텍스트 ===
+📄 **컨텍스트:**
 {context_text}
 
-=== 생성 요구사항 ===
-- 총 문제 수: {total_questions}개
-- 전체 목표 난이도: {difficulty.value} ({difficulty_desc[difficulty]})
 {difficulty_instruction}
-- 문제 유형별 개수 (정확히 맞춰주세요):
-  * OX 문제(true_false): {tf_count}개
-  * 객관식 문제(multiple_choice): {mc_count}개
-  * 주관식 문제(short_answer): {sa_count}개
-
-{question_type_guidelines}
-
-=== 품질 기준 ===
-1. 컨텍스트와 직접 관련된 내용만
-2. 명확하고 애매하지 않은 문제
-3. 실용적이고 학습에 도움되는 내용
-4. 각 문제는 고유하고 중복되지 않음
-5. 난이도별로 적절한 복잡성 유지
-6. 문제 유형별 올바른 형태 엄격히 준수
-
-🎯 추가 품질 요구사항:
-7. **Easy**: 기본 개념 이해, 짧고 명확한 문제
-8. **Medium**: 개념 비교/응용, 상황별 판단력 평가
-9. **Hard**: 실제 상황 적용, 복합적 사고, 문제 해결 능력 평가
-10. **Hard 문제는 반드시**:
-    - 구체적인 시나리오 제시 (최소 2-3개 제약 조건)
-    - 복합적 분석 요구 (여러 요소 고려)
-    - 실무적 판단력 평가
-    - 긴 지문과 상세한 답변 요구
 
 === 출력 형식 ===
 반드시 다음 JSON 형식으로 응답하세요:
@@ -498,6 +271,125 @@ class BatchQuestionGenerator:
 {question_type_guidelines}
 """
         return prompt
+
+    def _get_base_system_prompt(self, language: str) -> str:
+        """기본 시스템 프롬프트"""
+        if language == "ko":
+            return """당신은 전문 교육 평가 시스템입니다.
+주어진 컨텍스트를 바탕으로 고품질의 학습 평가 문제를 배치로 생성하는 것이 목표입니다.
+
+핵심 원칙:
+1. 정확성: 컨텍스트 기반의 정확한 내용
+2. 명확성: 애매하지 않은 명확한 문제
+3. 다양성: 서로 다른 관점과 내용
+4. 실용성: 실제 학습에 도움되는 내용
+5. 형식 준수: 요청된 JSON 형식 정확히 따름
+
+⚠️ 중요: 반드시 한국어로 모든 문제와 설명을 작성하세요."""
+        else:
+            return """You are a professional educational assessment system.
+Your goal is to generate high-quality learning evaluation questions in batches based on the given context.
+
+Core principles:
+1. Accuracy: Precise content based on context
+2. Clarity: Clear and unambiguous questions
+3. Diversity: Different perspectives and content
+4. Practicality: Content helpful for actual learning
+5. Format compliance: Precisely follow the requested JSON format
+
+⚠️ Important: Generate all questions and explanations in English."""
+
+    def _get_difficulty_instruction(self, difficulty_distribution: Dict[str, int], total_questions: int, language: str) -> str:
+        """난이도 지침"""
+        if language == "ko":
+            return f"""🎯 난이도 분배 (총 {total_questions}문제):
+- 쉬운 문제(easy): {difficulty_distribution['easy']}개 - 기본 개념 확인, 단순 적용
+- 보통 문제(medium): {difficulty_distribution['medium']}개 - 개념 응용, 분석적 사고
+- 어려운 문제(hard): {difficulty_distribution['hard']}개 - 심화 분석, 종합적 판단
+
+⚠️ 각 문제마다 반드시 해당하는 난이도를 "difficulty" 필드에 정확히 설정하세요!"""
+        else:
+            return f"""🎯 Difficulty Distribution (Total {total_questions} questions):
+- Easy questions: {difficulty_distribution['easy']} - Basic concept verification, simple application
+- Medium questions: {difficulty_distribution['medium']} - Concept application, analytical thinking
+- Hard questions: {difficulty_distribution['hard']} - Advanced analysis, comprehensive judgment
+
+⚠️ Make sure to set the correct difficulty level for each question in the "difficulty" field!"""
+
+    def _get_output_format_example(self, language: str) -> str:
+        """출력 형식 예시"""
+        return """{
+    "questions": [
+        {
+            "question": "딥러닝에서 전이학습(Transfer Learning)은 사전 훈련된 모델의 지식을 새로운 작업에 활용하는 기법이다.",
+            "question_type": "true_false",
+            "correct_answer": "True",
+            "explanation": "전이학습은 사전 훈련된 모델의 특성 추출 능력을 활용하여 새로운 작업에서 빠르고 효과적인 학습을 가능하게 합니다.",
+            "difficulty": "easy",
+            "topic": "전이학습"
+        },
+        {
+            "question": "중소 제조업체에서 제품 품질 검사를 위한 이미지 분류 시스템을 구축해야 합니다. 촬영된 제품 이미지 5000장, 정상/불량 2개 클래스, 실시간 검사 필요, IT 예산 제한이 있는 상황에서 가장 실용적인 접근법은 무엇인가?",
+            "question_type": "multiple_choice",
+            "options": ["대형 CNN 모델을 처음부터 훈련", "전이학습 + 경량화 모델 + 데이터 증강", "전통적인 컴퓨터 비전 기법 사용", "외부 클라우드 AI 서비스 활용"],
+            "correct_answer": "전이학습 + 경량화 모델 + 데이터 증강",
+            "explanation": "제한된 데이터와 예산, 실시간 처리 요구사항을 고려할 때 전이학습으로 사전 지식을 활용하고, 경량화 모델로 비용을 절감하며, 데이터 증강으로 성능을 보완하는 것이 가장 실용적입니다.",
+            "difficulty": "medium",
+            "topic": "실무 이미지 분류 전략"
+        }
+    ]
+}"""
+
+    def _get_question_type_guidelines(self, language: str) -> str:
+        """문제 유형 가이드라인"""
+        if language == "ko":
+            return """📝 문제 유형 가이드라인:
+
+1. **True/False (true_false)**:
+   - 형태: 참/거짓으로 판단할 수 있는 서술문
+   - ⚠️ 중요: True와 False 답이 균등하게 분배되어야 함!
+   - 답안: "True" 또는 "False"만
+
+2. **Multiple Choice (multiple_choice)**:
+   - 형태: "다음 중...", "무엇인가?", "올바른 것은..."
+   - 반드시 4개 선택지 제공
+   - 정답은 선택지 중 하나와 정확히 일치해야 함
+
+3. **Short Answer (short_answer)**:
+   - 형태: "설명하세요", "정의하세요", "차이점을 서술하세요"
+   - ❌ 절대 사용 금지: "다음 중", "선택하세요" 등
+   - 답안: 1-2문장의 명확한 서술형 답변
+
+🎯 난이도별 문제 깊이:
+**Easy**: 기본 개념 이해, True/False 균등 분배
+**Medium**: 개념 응용, 실무 시나리오 (2단계 세분화)
+**Hard**: 복합적 사고, 다중 제약 조건, 실제 적용 시나리오
+
+⚠️ Hard 문제는 반드시 실제 적용 시나리오와 복합적 사고를 요구해야 합니다!"""
+        else:
+            return """📝 Question Type Guidelines:
+
+1. **True/False (true_false)**:
+   - Format: Statements that can be judged as true/false
+   - ⚠️ Important: True and False answers must be evenly distributed!
+   - Answer: Only "True" or "False"
+
+2. **Multiple Choice (multiple_choice)**:
+   - Format: "Which of the following...", "What is...", "The correct one is..."
+   - Must provide exactly 4 options
+   - Correct answer must exactly match one of the options
+
+3. **Short Answer (short_answer)**:
+   - Format: "Explain...", "Define...", "Describe the differences..."
+   - ❌ Absolutely forbidden: "Which of the following", "Choose..." etc.
+   - Answer: Clear descriptive answer in 1-2 sentences
+
+🎯 Difficulty-based depth:
+**Easy**: Basic concept understanding, True/False even distribution
+**Medium**: Concept application, practical scenarios (2-tier subdivision)
+**Hard**: Complex thinking, multiple constraints, real-world application scenarios
+
+⚠️ Hard questions must require real-world application scenarios and complex thinking!"""
 
     def _calculate_difficulty_distribution(self, total_questions: int, base_difficulty: Difficulty) -> Dict[str, int]:
         """난이도 분배 계산 - 전체 난이도를 유지하면서 다양성 확보"""
@@ -1067,3 +959,13 @@ if __name__ == "__main__":
     print("✓ LangChain batch processing")
     print("✓ LangGraph workflow optimization")
     print("✓ 90% cost savings, 10x speed improvement")
+
+    # 추가된 예시 출력
+    print("\nHard Problem Examples:")
+    print("Scenario-based Problems:")
+    print("\"Assume you are developing an image recognition system for autonomous vehicles. Real-time processing is required and over 99% accuracy is demanded...\"")
+    print("Comparative Analysis Problems:")
+    print("\"Company A uses CNNs while Company B uses Vision Transformers. Analyze the pros and cons of each approach and determine which method is more suitable for different situations...\"")
+    print("Problem-solving Questions:")
+    print("\"If you need to create a high-performance image classification model with limited training data, what strategies could you employ...\"")
+    print("\n⚠️ Hard questions must require real-world application scenarios and complex thinking!")

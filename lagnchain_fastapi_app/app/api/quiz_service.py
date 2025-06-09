@@ -5,7 +5,7 @@
 - 비용 효율적이고 빠른 서비스
 """
 import logging
-from fastapi import APIRouter, HTTPException,  Depends
+from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Dict, Any
 
 from ..schemas.quiz_schema import QuizRequest, QuizResponse, Difficulty
