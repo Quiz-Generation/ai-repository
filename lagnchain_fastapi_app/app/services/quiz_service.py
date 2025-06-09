@@ -267,53 +267,83 @@ class BatchQuestionGenerator:
 """
 
             question_type_guidelines = f"""
-📝 문제 유형별 형태 가이드라인:
+📝 Question Type Guidelines:
 
-1. **OX 문제 (true_false)**:
-   - 형태: "~이다.", "~는 맞다.", "~이다/아니다" 등 단정적 서술
-   - 예시: "합성곱 신경망(CNN)은 이미지의 시각적 특징을 추출하는 데 사용된다."
-   - 정답: "True" 또는 "False"만 사용
+1. **True/False (true_false)**:
+   - Format: Declarative statements that can be judged true or false
+   - Example: "Convolutional Neural Networks (CNNs) are used to extract visual features from images."
+   - Answer: Only "True" or "False"
 
-2. **객관식 문제 (multiple_choice)**:
-   - 형태: "다음 중 ~는?", "~에 해당하는 것은?", "~의 예시로 올바른 것은?"
-   - 반드시 4개의 선택지 제공
-   - 정답은 선택지 중 하나와 정확히 일치해야 함
+2. **Multiple Choice (multiple_choice)**:
+   - Format: "Which of the following...", "What is...", "The correct example is..."
+   - Must provide exactly 4 options
+   - Correct answer must exactly match one of the options
 
-3. **주관식 문제 (short_answer)**:
-   - 형태: "~에 대해 설명하세요", "~란 무엇인지 정의하세요", "~의 차이점을 설명하세요"
-   - ❌ 절대 사용 금지: "다음 중", "보기에서", "선택지" 등의 표현
-   - 정답: 1-2문장의 명확한 서술형 답변
-   - 예시: "딥러닝에서 'Representation Learning'의 의미를 설명하세요."
+3. **Short Answer (short_answer)**:
+   - Format: "Explain...", "Define...", "Describe the difference between..."
+   - ❌ Never use: "Which of the following", "Choose from", "Select" etc.
+   - Answer: 1-2 sentence clear descriptive response
+   - Example: "Explain the meaning of 'Representation Learning' in deep learning."
 
-⚠️ 특히 주관식 문제는 객관식 형태로 절대 작성하지 마세요!
+⚠️ Never write short answer questions in multiple choice format!
+
+🎯 Difficulty-based Problem Depth Guidelines:
+
+**Easy (Basic Concept Verification)**:
+- Simple definitions, basic concept understanding
+- Short questions, intuitive answers
+- Example: "CNNs are used for image classification."
+
+**Medium (Concept Application & Comparison)**:
+- Concept comparison, situational application
+- Medium-length questions, analytical thinking required
+- Example: "When comparing CNNs to regular neural networks for image classification, why are CNNs more effective?"
+
+**Hard (Complex Thinking & Problem Solving)**:
+- Real-world application, complex analysis, problem solving
+- Long questions, scenario-based, deep thinking required
+- Example: "You need to implement real-time image recognition in a mobile app. Considering the trade-off between accuracy and speed, analyze which neural network architecture and optimization methods you should choose and explain your reasoning."
+
+💡 Advanced Problem Examples:
+
+**Scenario-based Problems**:
+"Assume you are developing an image recognition system for autonomous vehicles. Real-time processing is required and over 99% accuracy is demanded..."
+
+**Comparative Analysis Problems**:
+"Company A uses CNNs while Company B uses Vision Transformers. Analyze the pros and cons of each approach and determine which method is more suitable for different situations..."
+
+**Problem-solving Questions**:
+"If you need to create a high-performance image classification model with limited training data, what strategies could you employ..."
+
+⚠️ Hard questions must require real-world application scenarios and complex thinking!
 """
 
             output_format_example = f"""{{
     "questions": [
         {{
-            "question": "베이즈 정리는 사전 확률과 우도를 이용해 사후 확률을 계산하는 기본 개념이다.",
+            "question": "딥러닝에서 전이학습(Transfer Learning)은 사전 훈련된 모델의 지식을 새로운 작업에 활용하는 기법이다.",
             "question_type": "true_false",
             "correct_answer": "True",
-            "explanation": "베이즈 정리는 사전 확률과 우도를 이용해 사후 확률을 계산하는 기본 개념입니다.",
+            "explanation": "전이학습은 사전 훈련된 모델의 특성 추출 능력을 활용하여 새로운 작업에서 빠르고 효과적인 학습을 가능하게 합니다.",
             "difficulty": "easy",
-            "topic": "베이즈 통계학"
+            "topic": "전이학습"
         }},
         {{
-            "question": "머신러닝에서 과적합을 해결하는 방법으로 옳은 것은?",
+            "question": "이미지 분류 작업에서 데이터셋이 작을 때 과적합을 방지하면서 높은 성능을 얻기 위한 최적의 전략은 무엇인가?",
             "question_type": "multiple_choice",
-            "options": ["데이터 증강", "정규화", "교차검증", "모든 것"],
-            "correct_answer": "모든 것",
-            "explanation": "과적합 해결을 위해서는 데이터 증강, 정규화, 교차검증 등 다양한 기법을 종합적으로 활용해야 합니다.",
+            "options": ["처음부터 큰 모델 훈련", "전이학습 + 데이터 증강", "단순한 모델 사용", "학습률 증가"],
+            "correct_answer": "전이학습 + 데이터 증강",
+            "explanation": "작은 데이터셋에서는 전이학습으로 사전 지식을 활용하고 데이터 증강으로 데이터 부족을 보완하는 것이 가장 효과적입니다.",
             "difficulty": "medium",
-            "topic": "머신러닝"
+            "topic": "딥러닝 전략"
         }},
         {{
-            "question": "딥러닝에서 'Representation Learning'의 의미를 설명하세요.",
+            "question": "당신이 의료 영상 진단 AI를 개발하는 팀에 속해 있다고 가정하세요. 환자의 X-ray 이미지에서 폐렴을 진단하는 모델을 만들어야 하는데, 의료진의 신뢰를 얻기 위해서는 높은 정확도뿐만 아니라 모델의 판단 근거를 명확히 제시해야 합니다. 또한 실시간 진단이 가능해야 하고 개인정보 보호를 위해 클라우드가 아닌 병원 내 서버에서 동작해야 합니다. 이러한 제약 조건들을 모두 고려할 때, 어떤 딥러닝 아키텍처와 기법들을 조합해서 사용해야 하는지 구체적으로 분석하고 각 선택의 근거를 설명하세요.",
             "question_type": "short_answer",
-            "correct_answer": "데이터로부터 자동으로 특성을 학습하는 과정",
-            "explanation": "Representation Learning은 데이터를 통해 중요한 특성을 자동으로 학습하는 과정을 의미합니다.",
+            "correct_answer": "CNN 기반 아키텍처에 Grad-CAM이나 Attention 메커니즘을 결합하여 해석가능성을 확보하고, MobileNet이나 EfficientNet 같은 경량화 모델을 사용하여 실시간 처리와 온프레미스 배포를 가능하게 하며, 전이학습과 데이터 증강으로 정확도를 향상시키는 전략을 사용해야 한다.",
+            "explanation": "의료 AI는 해석가능성(XAI), 실시간 처리, 온프레미스 배포, 높은 정확도를 모두 만족해야 하므로 각 요구사항에 맞는 기술들을 체계적으로 조합해야 합니다.",
             "difficulty": "hard",
-            "topic": "딥러닝"
+            "topic": "의료 AI 시스템 설계"
         }}
     ]
 }}"""
@@ -355,17 +385,64 @@ class BatchQuestionGenerator:
    - Example: "Explain the meaning of 'Representation Learning' in deep learning."
 
 ⚠️ Never write short answer questions in multiple choice format!
+
+🎯 Difficulty-based Problem Depth Guidelines:
+
+**Easy (Basic Concept Verification)**:
+- Simple definitions, basic concept understanding
+- Short questions, intuitive answers
+- Example: "CNNs are used for image classification."
+
+**Medium (Concept Application & Comparison)**:
+- Concept comparison, situational application
+- Medium-length questions, analytical thinking required
+- Example: "When comparing CNNs to regular neural networks for image classification, why are CNNs more effective?"
+
+**Hard (Complex Thinking & Problem Solving)**:
+- Real-world application, complex analysis, problem solving
+- Long questions, scenario-based, deep thinking required
+- Example: "You need to implement real-time image recognition in a mobile app. Considering the trade-off between accuracy and speed, analyze which neural network architecture and optimization methods you should choose and explain your reasoning."
+
+💡 Advanced Problem Examples:
+
+**Scenario-based Problems**:
+"Assume you are developing an image recognition system for autonomous vehicles. Real-time processing is required and over 99% accuracy is demanded..."
+
+**Comparative Analysis Problems**:
+"Company A uses CNNs while Company B uses Vision Transformers. Analyze the pros and cons of each approach and determine which method is more suitable for different situations..."
+
+**Problem-solving Questions**:
+"If you need to create a high-performance image classification model with limited training data, what strategies could you employ..."
+
+⚠️ Hard questions must require real-world application scenarios and complex thinking!
 """
 
             output_format_example = f"""{{
     "questions": [
         {{
-            "question": "Bayes' theorem is the basic concept of calculating posterior probability using prior probability and likelihood.",
+            "question": "Transfer learning in deep learning utilizes knowledge from pre-trained models for new tasks.",
             "question_type": "true_false",
             "correct_answer": "True",
-            "explanation": "Bayes' theorem is the basic concept of calculating posterior probability using prior probability and likelihood.",
+            "explanation": "Transfer learning leverages feature extraction capabilities of pre-trained models to enable fast and effective learning on new tasks.",
             "difficulty": "easy",
-            "topic": "Bayesian Statistics"
+            "topic": "Transfer Learning"
+        }},
+        {{
+            "question": "When working with a small image dataset, what is the most effective strategy to prevent overfitting while achieving high performance?",
+            "question_type": "multiple_choice",
+            "options": ["Train large model from scratch", "Transfer learning + Data augmentation", "Use simple models only", "Increase learning rate"],
+            "correct_answer": "Transfer learning + Data augmentation",
+            "explanation": "For small datasets, combining transfer learning to leverage prior knowledge with data augmentation to address data scarcity is most effective.",
+            "difficulty": "medium",
+            "topic": "Deep Learning Strategy"
+        }},
+        {{
+            "question": "Assume you are part of a team developing a medical imaging AI for pneumonia diagnosis from chest X-rays. To gain trust from medical professionals, your model must not only achieve high accuracy but also provide clear explanations for its decisions. Additionally, it must enable real-time diagnosis and operate on hospital servers (not cloud) for privacy protection. Considering all these constraints, analyze what deep learning architecture and techniques you should combine, and provide specific reasoning for each choice.",
+            "question_type": "short_answer",
+            "correct_answer": "Use CNN-based architecture combined with Grad-CAM or Attention mechanisms for interpretability, employ lightweight models like MobileNet or EfficientNet for real-time processing and on-premises deployment, and apply transfer learning with data augmentation to improve accuracy while meeting all system requirements.",
+            "explanation": "Medical AI systems must satisfy interpretability (XAI), real-time processing, on-premises deployment, and high accuracy simultaneously, requiring systematic combination of appropriate technologies for each requirement.",
+            "difficulty": "hard",
+            "topic": "Medical AI System Design"
         }}
     ]
 }}"""
@@ -395,6 +472,16 @@ class BatchQuestionGenerator:
 4. 각 문제는 고유하고 중복되지 않음
 5. 난이도별로 적절한 복잡성 유지
 6. 문제 유형별 올바른 형태 엄격히 준수
+
+🎯 추가 품질 요구사항:
+7. **Easy**: 기본 개념 이해, 짧고 명확한 문제
+8. **Medium**: 개념 비교/응용, 상황별 판단력 평가
+9. **Hard**: 실제 상황 적용, 복합적 사고, 문제 해결 능력 평가
+10. **Hard 문제는 반드시**:
+    - 구체적인 시나리오 제시 (최소 2-3개 제약 조건)
+    - 복합적 분석 요구 (여러 요소 고려)
+    - 실무적 판단력 평가
+    - 긴 지문과 상세한 답변 요구
 
 === 출력 형식 ===
 반드시 다음 JSON 형식으로 응답하세요:
