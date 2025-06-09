@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException,status
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -12,11 +12,7 @@ from lagnchain_fastapi_app.app.core.config import get_settings
 from lagnchain_fastapi_app.app.api.pdf_service import router as pdf_router
 from lagnchain_fastapi_app.app.api.quiz_service import router as quiz_router
 
-# 로깅 설정 (개선된 버전)
-import logging
-from datetime import datetime
-
-# 동적 PDF 서비스용 상세 로깅 설정
+# 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -25,12 +21,10 @@ logging.basicConfig(
     ]
 )
 
-# 특정 모듈의 로그 레벨 조정
+# 로거 설정
 logger = logging.getLogger(__name__)
 pdf_logger = logging.getLogger("app.services.dynamic_pdf")
-pdf_logger.setLevel(logging.INFO)  # 동적 PDF 서비스 상세 로깅
-
-# API 추출 관련 로깅
+pdf_logger.setLevel(logging.INFO)
 api_logger = logging.getLogger("app.api.pdf_service")
 api_logger.setLevel(logging.INFO)
 

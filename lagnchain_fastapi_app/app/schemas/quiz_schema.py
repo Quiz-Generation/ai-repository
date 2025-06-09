@@ -155,7 +155,10 @@ try:
         """퀴즈 생성 요청 API 모델"""
         document_id: str = Field(..., description="업로드된 PDF 문서 ID")
         num_questions: int = Field(5, ge=1, le=20, description="생성할 문제 수 (1-20개)")
-        difficulty: str = Field("medium", description="기본 난이도 (easy/medium/hard) - 각 문제별로 자동 조정됨")
+        difficulty: str = Field("medium", description="""전체 난이도 수준 (easy/medium/hard) - 개별 문제는 자동으로 다양한 난이도로 분배됩니다:
+        • easy: 쉬운 문제 60%, 보통 문제 30%, 어려운 문제 10%
+        • medium: 쉬운 문제 30%, 보통 문제 40%, 어려운 문제 30%
+        • hard: 쉬운 문제 20%, 보통 문제 30%, 어려운 문제 50%""")
         question_types: Optional[List[str]] = Field(
             None,
             description="""문제 유형 설정 (생략 시 자동 2:6:2 비율 적용):
@@ -172,7 +175,10 @@ try:
                     "difficulty": "medium",
                     "language": "ko"
                 },
-                "description": "기본 모드에서는 question_types를 생략하면 자동으로 OX(20%) + 객관식(60%) + 주관식(20%) 비율로 생성됩니다."
+                "description": """균형 잡힌 퀴즈 생성:
+                • 문제 유형: question_types를 생략하면 OX(20%) + 객관식(60%) + 주관식(20%) 자동 분배
+                • 난이도 분배: 전체 난이도를 유지하면서 개별 문제는 easy/medium/hard로 다양하게 구성
+                • 예시: medium 선택 시 → 쉬운 문제 30% + 보통 문제 40% + 어려운 문제 30%"""
             }
 
 
