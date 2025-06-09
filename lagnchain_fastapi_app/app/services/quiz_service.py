@@ -513,7 +513,7 @@ class QuizService:
         return workflow.compile()
 
     async def generate_quiz(self, request: QuizRequest) -> QuizResponse:
-        """효율적인 퀴즈 생성 - 단일 API 호출!"""
+        """효율적인 퀴즈 생성 - 단일 API 호출"""
         start_time = time.time()
         quiz_id = str(uuid.uuid4())
 
@@ -832,7 +832,7 @@ class QuizService:
 __quiz_service: Optional[QuizService] = None
 
 def get_quiz_service() -> QuizService:
-    """효율적인 퀴즈 서비스 반환"""
+    """퀴즈 서비스 반환"""
     global __quiz_service
 
     if __quiz_service is None:
