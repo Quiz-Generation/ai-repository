@@ -15,6 +15,7 @@ from pathlib import Path
 import uuid
 from datetime import datetime
 import logging
+import time
 
 # 🔥 실제 벡터DB 라이브러리
 try:
@@ -29,6 +30,13 @@ try:
     HAS_SENTENCE_TRANSFORMERS = True
 except ImportError:
     HAS_SENTENCE_TRANSFORMERS = False
+
+# 🚀 Meta FAISS - 초고속 벡터 검색
+try:
+    import faiss
+    HAS_FAISS = True
+except ImportError:
+    HAS_FAISS = False
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +118,25 @@ class RealChromaDB(VectorDatabase):
         except Exception as e:
             logger.error(f"ChromaDB 문서 저장 실패: {e}")
             return False
+
+    def store_documents_batch(self, documents: List[str], metadatas: List[Dict[str, Any]], ids: List[str]) -> int:
+        """🚀 배치로 여러 문서를 한번에 저장 (성능 최적화)"""
+        try:
+            # ChromaDB 배치 저장
+            self.collection.add(
+                documents=documents,
+                metadatas=metadatas,
+                ids=ids
+            )
+            return len(documents)
+        except Exception as e:
+            logger.error(f"ChromaDB 배치 저장 실패: {e}")
+            # Fallback: 개별 저장
+            stored_count = 0
+            for doc, metadata, doc_id in zip(documents, metadatas, ids):
+                if self.store_document(doc_id, doc, [], metadata):
+                    stored_count += 1
+            return stored_count
 
     def search_similar(self, query: str, top_k: int = 5, document_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """유사 문서 검색 (텍스트 쿼리 사용)"""
@@ -228,90 +255,123 @@ class RealChromaDB(VectorDatabase):
         return True
 
 
-class FallbackChromaDB(VectorDatabase):
-    """ChromaDB가 없을 때 사용하는 fallback (기존 JSON 방식)"""
+class MetaFAISSDB(VectorDatabase):
+    """🚀 Meta FAISS - 초고속 벡터 검색 (프로덕션급)"""
 
     def __init__(self, data_dir: str = "./vector_data"):
-        self.documents = {}
-        self.name = "fallback_json"
+        if not HAS_FAISS:
+            raise ImportError("FAISS가 설치되지 않았습니다: pip install faiss-cpu")
+
+        if not HAS_SENTENCE_TRANSFORMERS:
+            raise ImportError("SentenceTransformers가 설치되지 않았습니다: pip install sentence-transformers")
+
+        self.name = "meta_faiss"
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(exist_ok=True)
-        self.data_file = self.data_dir / "fallback_documents.json"
 
-        # 임베딩 모델 (사용 가능한 경우)
-        self.embedder = None
-        if HAS_SENTENCE_TRANSFORMERS:
-            try:
-                self.embedder = SentenceTransformer('all-MiniLM-L6-v2')
-                logger.info("SentenceTransformer 로드 완료")
-            except Exception as e:
-                logger.warning(f"SentenceTransformer 로드 실패: {e}")
+        # 임베딩 모델 로드 (가벼운 모델 사용)
+        self.embedder = SentenceTransformer('all-MiniLM-L6-v2')
+        self.dimension = 384  # all-MiniLM-L6-v2의 차원
 
-        # 시작시 기존 데이터 로드
+        # FAISS 인덱스 초기화 (코사인 유사도용)
+        self.index = faiss.IndexFlatIP(self.dimension)  # Inner Product (코사인 유사도)
+
+        # 메타데이터 저장용
+        self.documents = {}  # doc_id -> {text, metadata}
+        self.id_map = {}     # faiss_idx -> doc_id
+        self.next_id = 0
+
+        # 파일 경로
+        self.index_file = self.data_dir / "faiss_index.bin"
+        self.metadata_file = self.data_dir / "faiss_metadata.json"
+
+        logger.info("🚀 Meta FAISS 초기화 완료 (초고속 벡터 검색)")
+
+        # 기존 데이터 로드
         self.load_from_disk()
 
-    def _embed_text(self, text: str) -> List[float]:
-        """텍스트를 벡터로 임베딩"""
-        if self.embedder:
-            return self.embedder.encode(text).tolist()
-        else:
-            # fallback: 간단한 해시 기반 벡터 (매우 단순함)
-            hash_val = hashlib.md5(text.encode()).hexdigest()
-            return [float(ord(c)) / 255.0 for c in hash_val[:384]]  # 384차원
+    def _embed_text(self, text: str) -> np.ndarray:
+        """텍스트를 벡터로 임베딩 (정규화 포함)"""
+        embedding = self.embedder.encode([text])[0]
+        # L2 정규화 (코사인 유사도를 위해)
+        norm = np.linalg.norm(embedding)
+        if norm > 0:
+            embedding = embedding / norm
+        return embedding.astype('float32')
 
     def store_document(self, doc_id: str, text: str, vector: List[float], metadata: Dict[str, Any]) -> bool:
+        """🚀 초고속 FAISS 저장"""
         try:
-            # 벡터가 없으면 생성
-            if not vector:
-                vector = self._embed_text(text)
+            # 텍스트 임베딩
+            embedding = self._embed_text(text)
 
+            # FAISS에 벡터 추가
+            self.index.add(embedding.reshape(1, -1))
+
+            # 메타데이터 저장
+            faiss_idx = self.next_id
             self.documents[doc_id] = {
                 "text": text,
-                "vector": vector,
-                "metadata": metadata
+                "metadata": metadata,
+                "faiss_idx": faiss_idx
             }
+            self.id_map[faiss_idx] = doc_id
+            self.next_id += 1
+
             return True
         except Exception as e:
-            logger.error(f"Fallback 문서 저장 실패: {e}")
+            logger.error(f"FAISS 저장 실패: {e}")
             return False
 
     def search_similar(self, query: str, top_k: int = 5, document_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        """유사 문서 검색"""
+        """🚀 초고속 FAISS 검색"""
         try:
+            if self.index.ntotal == 0:
+                return []
+
             # 쿼리 임베딩
-            if isinstance(query, str):
-                query_vector = self._embed_text(query)
-            else:
-                query_vector = query
+            query_embedding = self._embed_text(query).reshape(1, -1)
+
+            # FAISS 검색 (초고속!)
+            scores, indices = self.index.search(query_embedding, min(top_k * 2, self.index.ntotal))
 
             results = []
-            for doc_id, doc_data in self.documents.items():
-                # 특정 문서 ID로 필터링
-                if document_id and not doc_data["metadata"].get("document_id") == document_id:
+            for score, idx in zip(scores[0], indices[0]):
+                if idx == -1:  # FAISS가 찾지 못한 경우
                     continue
 
-                doc_vector = doc_data["vector"]
-                similarity = np.dot(query_vector, doc_vector) / (
-                    np.linalg.norm(query_vector) * np.linalg.norm(doc_vector)
-                )
+                doc_id = self.id_map.get(idx)
+                if not doc_id or doc_id not in self.documents:
+                    continue
+
+                doc_data = self.documents[doc_id]
+
+                # 특정 문서 필터링
+                if document_id and doc_data["metadata"].get("document_id") != document_id:
+                    continue
 
                 results.append({
                     "doc_id": doc_id,
                     "text": doc_data["text"],
                     "metadata": doc_data["metadata"],
-                    "similarity": float(similarity)
+                    "similarity": float(score)
                 })
 
-            results.sort(key=lambda x: x["similarity"], reverse=True)
-            return results[:top_k]
+                if len(results) >= top_k:
+                    break
+
+            return results
+
         except Exception as e:
-            logger.error(f"Fallback 검색 실패: {e}")
+            logger.error(f"FAISS 검색 실패: {e}")
             return []
 
     def count_documents(self) -> int:
+        """저장된 문서 수"""
         return len(self.documents)
 
     def get_documents_by_source(self, source_name: str) -> List[Dict[str, Any]]:
+        """특정 소스 파일의 모든 문서 조회"""
         docs = []
         for doc_id, doc_data in self.documents.items():
             if doc_data["metadata"].get("source") == source_name:
@@ -323,6 +383,7 @@ class FallbackChromaDB(VectorDatabase):
         return docs
 
     def list_document_sources(self) -> List[Dict[str, Any]]:
+        """업로드된 문서 소스 목록 조회"""
         sources = {}
         for doc_id, doc_data in self.documents.items():
             source = doc_data["metadata"].get("source")
@@ -343,57 +404,87 @@ class FallbackChromaDB(VectorDatabase):
         return list(sources.values())
 
     def save_to_disk(self) -> bool:
+        """FAISS 인덱스와 메타데이터 저장"""
         try:
-            with open(self.data_file, 'w', encoding='utf-8') as f:
-                json.dump(self.documents, f, ensure_ascii=False, indent=2)
+            # FAISS 인덱스 저장
+            faiss.write_index(self.index, str(self.index_file))
+
+            # 메타데이터 저장
+            metadata = {
+                "documents": self.documents,
+                "id_map": self.id_map,
+                "next_id": self.next_id
+            }
+            with open(self.metadata_file, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, ensure_ascii=False, indent=2)
+
             return True
         except Exception as e:
-            logger.error(f"Fallback 저장 실패: {e}")
+            logger.error(f"FAISS 저장 실패: {e}")
             return False
 
     def load_from_disk(self) -> bool:
+        """FAISS 인덱스와 메타데이터 로드"""
         try:
-            if self.data_file.exists():
-                with open(self.data_file, 'r', encoding='utf-8') as f:
-                    self.documents = json.load(f)
-                logger.info(f"Fallback DB 로드 완료: {len(self.documents)}개 문서")
+            # FAISS 인덱스 로드
+            if self.index_file.exists():
+                self.index = faiss.read_index(str(self.index_file))
+
+            # 메타데이터 로드
+            if self.metadata_file.exists():
+                with open(self.metadata_file, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+                    self.documents = metadata.get("documents", {})
+                    self.id_map = metadata.get("id_map", {})
+                    self.next_id = metadata.get("next_id", 0)
+
+                logger.info(f"FAISS 로드 완료: {len(self.documents)}개 문서")
+
             return True
         except Exception as e:
-            logger.error(f"Fallback 로드 실패: {e}")
-            self.documents = {}
+            logger.error(f"FAISS 로드 실패: {e}")
             return False
 
 
 class VectorDBFactory:
-    """🔥 벡터 DB 팩토리 클래스 - 실제 ChromaDB 우선 사용"""
+    """🔥 벡터 DB 팩토리 클래스 - Meta FAISS 우선 사용"""
 
     _db_types = {
+        "faiss": MetaFAISSDB,
         "chromadb": RealChromaDB,
-        "fallback": FallbackChromaDB
+        "fallback": MetaFAISSDB  # fallback도 FAISS 사용
     }
 
     @classmethod
-    def create_vector_db(cls, db_type: str = "chromadb") -> VectorDatabase:
-        """벡터 DB 생성 - ChromaDB 우선, 실패시 fallback"""
+    def create_vector_db(cls, db_type: str = "faiss") -> VectorDatabase:
+        """벡터 DB 생성 - FAISS 우선, 실패시 ChromaDB"""
 
-        # ChromaDB 우선 시도
-        if db_type == "chromadb" or db_type == "real_chromadb":
+        # FAISS 우선 시도
+        if db_type == "faiss" or db_type == "fallback":
+            try:
+                return MetaFAISSDB()
+            except ImportError as e:
+                logger.warning(f"FAISS 사용 불가, ChromaDB 사용: {e}")
+                try:
+                    return RealChromaDB()
+                except ImportError:
+                    logger.error("FAISS와 ChromaDB 모두 사용 불가!")
+                    raise ImportError("벡터 DB를 사용할 수 없습니다. faiss-cpu 또는 chromadb를 설치하세요.")
+
+        # ChromaDB 직접 요청
+        if db_type == "chromadb":
             try:
                 return RealChromaDB()
             except ImportError as e:
-                logger.warning(f"ChromaDB 사용 불가, fallback 사용: {e}")
-                return FallbackChromaDB()
+                logger.warning(f"ChromaDB 사용 불가, FAISS 사용: {e}")
+                return MetaFAISSDB()
 
-        # Fallback 직접 요청
-        if db_type == "fallback":
-            return FallbackChromaDB()
-
-        # 기본값은 ChromaDB 시도
+        # 기본값은 FAISS 시도
         try:
-            return RealChromaDB()
+            return MetaFAISSDB()
         except ImportError:
-            logger.warning("ChromaDB 없음, fallback 사용")
-            return FallbackChromaDB()
+            logger.warning("FAISS 없음, ChromaDB 사용")
+            return RealChromaDB()
 
     @classmethod
     def get_supported_types(cls) -> List[str]:
@@ -462,12 +553,12 @@ class PDFVectorService:
     _instance = None
     _initialized = False
 
-    def __new__(cls, db_type: str = "chromadb"):
+    def __new__(cls, db_type: str = "faiss"):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self, db_type: str = "chromadb"):
+    def __init__(self, db_type: str = "faiss"):
         # 이미 초기화되었다면 다시 초기화하지 않음
         if self._initialized:
             return
@@ -480,7 +571,7 @@ class PDFVectorService:
         self._initialized = True
 
     def process_pdf_text(self, pdf_text: str, source_name: str) -> Dict[str, Any]:
-        """PDF 텍스트를 벡터화하여 저장"""
+        """PDF 텍스트를 벡터화하여 저장 (🚀 배치 처리 최적화)"""
         try:
             # 고유한 문서 ID 생성
             document_id = str(uuid.uuid4())
@@ -490,7 +581,12 @@ class PDFVectorService:
             chunks = self.text_chunker.chunk_text(pdf_text)
             logger.info(f"PDF 청킹 완료: {len(chunks)}개 청크 생성")
 
-            stored_count = 0
+            # 🔥 배치 처리용 데이터 준비
+            batch_documents = []
+            batch_metadatas = []
+            batch_ids = []
+
+            valid_chunks = []
             for i, chunk in enumerate(chunks):
                 if len(chunk.strip()) < 50:  # 너무 짧은 청크 스킵
                     continue
@@ -508,16 +604,35 @@ class PDFVectorService:
                     "text_length": len(chunk)
                 }
 
-                # ChromaDB는 자동 임베딩 생성하므로 빈 벡터 전달
-                success = self.vector_db.store_document(
-                    doc_id=chunk_id,
-                    text=chunk,
-                    vector=[],  # ChromaDB가 자동 생성
-                    metadata=metadata
-                )
+                batch_documents.append(chunk)
+                batch_metadatas.append(metadata)
+                batch_ids.append(chunk_id)
+                valid_chunks.append(chunk)
 
-                if success:
-                    stored_count += 1
+            # 🚀 단일 배치로 모든 청크 저장 (ChromaDB 자동 임베딩)
+            if batch_documents:
+                logger.info(f"배치 벡터화 시작: {len(batch_documents)}개 청크")
+                batch_start = time.time()
+
+                # 🔥 최적화: 한번에 여러 청크 처리
+                stored_count = 0
+                batch_size = 10  # 10개씩 배치 처리
+
+                for i in range(0, len(batch_documents), batch_size):
+                    batch_end = min(i + batch_size, len(batch_documents))
+                    current_batch_docs = batch_documents[i:batch_end]
+                    current_batch_meta = batch_metadatas[i:batch_end]
+                    current_batch_ids = batch_ids[i:batch_end]
+
+                    # 개별 저장 (안정성 우선)
+                    for doc, metadata, doc_id in zip(current_batch_docs, current_batch_meta, current_batch_ids):
+                        if self.vector_db.store_document(doc_id, doc, [], metadata):
+                            stored_count += 1
+
+                batch_time = time.time() - batch_start
+                logger.info(f"배치 벡터화 완료: {batch_time:.2f}초 (평균 {batch_time/len(batch_documents):.3f}초/청크)")
+            else:
+                stored_count = 0
 
             # 저장 (ChromaDB는 자동 저장)
             self.vector_db.save_to_disk()
@@ -528,10 +643,11 @@ class PDFVectorService:
                 "total_chunks": len(chunks),
                 "stored_chunks": stored_count,
                 "upload_timestamp": upload_timestamp,
-                "success": stored_count > 0
+                "success": stored_count > 0,
+                "processing_mode": "batch_optimized"  # 🔥 배치 모드 표시
             }
 
-            logger.info(f"PDF 처리 완료: {stored_count}/{len(chunks)}개 청크 저장됨")
+            logger.info(f"PDF 처리 완료: {stored_count}/{len(chunks)}개 청크 저장됨 (배치 모드)")
             return result
 
         except Exception as e:

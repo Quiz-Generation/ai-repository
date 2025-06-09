@@ -20,3 +20,8 @@ chromadb>=0.4.0
 # 추가 유틸리티
 python-multipart>=0.0.6  # 파일 업로드용
 python-dotenv>=1.0.0  # 환경 변수 관리
+
+# 🔥 고성능 벡터 검색
+faiss-cpu==1.7.4  # Meta FAISS - 초고속 벡터 검색
+chromadb==0.4.15
+sentence-transformers==2.2.2

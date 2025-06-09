@@ -29,8 +29,8 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = Field(default=10 * 1024 * 1024, description="최대 파일 크기 (10MB)")
     ALLOWED_EXTENSIONS: list = Field(default=[".pdf"], description="허용된 파일 확장자")
 
-    # 벡터 DB 설정 (ChromaDB만 사용)
-    VECTOR_DB_TYPE: str = os.getenv("VECTOR_DB_TYPE", "chromadb")  # chromadb, fallback
+    # 벡터 DB 설정 (Meta FAISS 기본값 - 초고속!)
+    VECTOR_DB_TYPE: str = os.getenv("VECTOR_DB_TYPE", "faiss")  # faiss(초고속), chromadb(기능많음)
     VECTOR_DATA_DIR: str = Field(default="./vector_data", description="벡터 데이터 저장 디렉토리")
 
     # 퀴즈 생성 설정
