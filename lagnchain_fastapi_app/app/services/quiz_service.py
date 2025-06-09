@@ -238,6 +238,9 @@ class BatchQuestionGenerator:
         mc_count = type_distribution.get(QuestionType.MULTIPLE_CHOICE, 0)
         sa_count = type_distribution.get(QuestionType.SHORT_ANSWER, 0)
 
+        # 💡 난이도 분배 계산 (전체 난이도를 유지하면서 다양성 확보)
+        difficulty_distribution = self._calculate_difficulty_distribution(total_questions, difficulty)
+
         difficulty_desc = {
             Difficulty.EASY: "기본 개념 이해 수준",
             Difficulty.MEDIUM: "개념 응용 수준",
@@ -254,32 +257,63 @@ class BatchQuestionGenerator:
 - 해설: 한국어
 - 주제: 한국어
 """
+            difficulty_instruction = f"""
+🎯 난이도 분배 (총 {total_questions}문제):
+- 쉬운 문제(easy): {difficulty_distribution['easy']}개 - 기본 개념 확인, 단순 적용
+- 보통 문제(medium): {difficulty_distribution['medium']}개 - 개념 응용, 분석적 사고
+- 어려운 문제(hard): {difficulty_distribution['hard']}개 - 심화 분석, 종합적 판단
+
+⚠️ 각 문제마다 반드시 해당하는 난이도를 "difficulty" 필드에 정확히 설정하세요!
+"""
+
+            question_type_guidelines = f"""
+📝 문제 유형별 형태 가이드라인:
+
+1. **OX 문제 (true_false)**:
+   - 형태: "~이다.", "~는 맞다.", "~이다/아니다" 등 단정적 서술
+   - 예시: "합성곱 신경망(CNN)은 이미지의 시각적 특징을 추출하는 데 사용된다."
+   - 정답: "True" 또는 "False"만 사용
+
+2. **객관식 문제 (multiple_choice)**:
+   - 형태: "다음 중 ~는?", "~에 해당하는 것은?", "~의 예시로 올바른 것은?"
+   - 반드시 4개의 선택지 제공
+   - 정답은 선택지 중 하나와 정확히 일치해야 함
+
+3. **주관식 문제 (short_answer)**:
+   - 형태: "~에 대해 설명하세요", "~란 무엇인지 정의하세요", "~의 차이점을 설명하세요"
+   - ❌ 절대 사용 금지: "다음 중", "보기에서", "선택지" 등의 표현
+   - 정답: 1-2문장의 명확한 서술형 답변
+   - 예시: "딥러닝에서 'Representation Learning'의 의미를 설명하세요."
+
+⚠️ 특히 주관식 문제는 객관식 형태로 절대 작성하지 마세요!
+"""
+
             output_format_example = f"""{{
     "questions": [
         {{
-            "question": "베이즈 정리의 목적은 무엇입니까?",
+            "question": "베이즈 정리는 사전 확률과 우도를 이용해 사후 확률을 계산하는 기본 개념이다.",
             "question_type": "true_false",
             "correct_answer": "True",
-            "explanation": "베이즈 정리는 관측된 데이터를 바탕으로 매개변수에 대한 믿음을 업데이트하는 데 사용됩니다.",
-            "difficulty": "{difficulty.value}",
+            "explanation": "베이즈 정리는 사전 확률과 우도를 이용해 사후 확률을 계산하는 기본 개념입니다.",
+            "difficulty": "easy",
             "topic": "베이즈 통계학"
         }},
         {{
-            "question": "머신러닝에서 훈련 오차와 테스트 오차의 관계는?",
+            "question": "머신러닝에서 과적합을 해결하는 방법으로 옳은 것은?",
             "question_type": "multiple_choice",
-            "options": ["훈련 오차가 항상 낮다", "테스트 오차가 항상 낮다", "둘 다 같을 수 있다", "관계없다"],
-            "correct_answer": "둘 다 같을 수 있다",
-            "explanation": "과적합이나 과소적합에 따라 훈련 오차와 테스트 오차의 관계가 달라질 수 있습니다.",
-            "difficulty": "{difficulty.value}",
-            "topic": "머신러닝 기초"
+            "options": ["데이터 증강", "정규화", "교차검증", "모든 것"],
+            "correct_answer": "모든 것",
+            "explanation": "과적합 해결을 위해서는 데이터 증강, 정규화, 교차검증 등 다양한 기법을 종합적으로 활용해야 합니다.",
+            "difficulty": "medium",
+            "topic": "머신러닝"
         }},
         {{
-            "question": "조건부 독립성이란 무엇인지 설명하세요.",
+            "question": "딥러닝에서 'Representation Learning'의 의미를 설명하세요.",
             "question_type": "short_answer",
-            "correct_answer": "세 번째 변수가 주어졌을 때 두 변수가 독립인 상태",
-            "explanation": "조건부 독립성은 특정 조건 하에서 두 변수 간의 의존성이 사라지는 현상을 의미합니다.",
-            "difficulty": "{difficulty.value}",
-            "topic": "확률론"
+            "correct_answer": "데이터로부터 자동으로 특성을 학습하는 과정",
+            "explanation": "Representation Learning은 데이터를 통해 중요한 특성을 자동으로 학습하는 과정을 의미합니다.",
+            "difficulty": "hard",
+            "topic": "딥러닝"
         }}
     ]
 }}"""
@@ -292,14 +326,45 @@ class BatchQuestionGenerator:
 - Explanations: English
 - Topics: English
 """
+            difficulty_instruction = f"""
+🎯 Difficulty Distribution (Total {total_questions} questions):
+- Easy questions: {difficulty_distribution['easy']} - Basic concept verification, simple application
+- Medium questions: {difficulty_distribution['medium']} - Concept application, analytical thinking
+- Hard questions: {difficulty_distribution['hard']} - Advanced analysis, comprehensive judgment
+
+⚠️ Make sure to set the correct difficulty level for each question in the "difficulty" field!
+"""
+
+            question_type_guidelines = f"""
+📝 Question Type Guidelines:
+
+1. **True/False (true_false)**:
+   - Format: Declarative statements that can be judged true or false
+   - Example: "Convolutional Neural Networks (CNNs) are used to extract visual features from images."
+   - Answer: Only "True" or "False"
+
+2. **Multiple Choice (multiple_choice)**:
+   - Format: "Which of the following...", "What is...", "The correct example is..."
+   - Must provide exactly 4 options
+   - Correct answer must exactly match one of the options
+
+3. **Short Answer (short_answer)**:
+   - Format: "Explain...", "Define...", "Describe the difference between..."
+   - ❌ Never use: "Which of the following", "Choose from", "Select" etc.
+   - Answer: 1-2 sentence clear descriptive response
+   - Example: "Explain the meaning of 'Representation Learning' in deep learning."
+
+⚠️ Never write short answer questions in multiple choice format!
+"""
+
             output_format_example = f"""{{
     "questions": [
         {{
-            "question": "What is the purpose of Bayes' rule?",
+            "question": "Bayes' theorem is the basic concept of calculating posterior probability using prior probability and likelihood.",
             "question_type": "true_false",
             "correct_answer": "True",
-            "explanation": "Bayes' rule is used to update beliefs about parameters based on observed data.",
-            "difficulty": "{difficulty.value}",
+            "explanation": "Bayes' theorem is the basic concept of calculating posterior probability using prior probability and likelihood.",
+            "difficulty": "easy",
             "topic": "Bayesian Statistics"
         }}
     ]
@@ -314,17 +379,22 @@ class BatchQuestionGenerator:
 
 === 생성 요구사항 ===
 - 총 문제 수: {total_questions}개
-- 난이도: {difficulty.value} ({difficulty_desc[difficulty]})
+- 전체 목표 난이도: {difficulty.value} ({difficulty_desc[difficulty]})
+{difficulty_instruction}
 - 문제 유형별 개수 (정확히 맞춰주세요):
   * OX 문제(true_false): {tf_count}개
   * 객관식 문제(multiple_choice): {mc_count}개
   * 주관식 문제(short_answer): {sa_count}개
+
+{question_type_guidelines}
 
 === 품질 기준 ===
 1. 컨텍스트와 직접 관련된 내용만
 2. 명확하고 애매하지 않은 문제
 3. 실용적이고 학습에 도움되는 내용
 4. 각 문제는 고유하고 중복되지 않음
+5. 난이도별로 적절한 복잡성 유지
+6. 문제 유형별 올바른 형태 엄격히 준수
 
 === 출력 형식 ===
 반드시 다음 JSON 형식으로 응답하세요:
@@ -334,9 +404,71 @@ class BatchQuestionGenerator:
 ⚠️ 중요사항:
 - 정확히 {total_questions}개의 문제를 생성하세요
 - 요청된 타입별 개수를 정확히 맞춰주세요: OX({tf_count}개), 객관식({mc_count}개), 주관식({sa_count}개)
+- 난이도 분배를 정확히 맞춰주세요: easy({difficulty_distribution['easy']}개), medium({difficulty_distribution['medium']}개), hard({difficulty_distribution['hard']}개)
 - {"한국어" if language == "ko" else "English"}로만 작성하세요
+- 문제 유형별 형태 가이드라인을 반드시 준수하세요!
+
+{question_type_guidelines}
 """
         return prompt
+
+    def _calculate_difficulty_distribution(self, total_questions: int, base_difficulty: Difficulty) -> Dict[str, int]:
+        """난이도 분배 계산 - 전체 난이도를 유지하면서 다양성 확보"""
+
+        # 문제 수가 너무 적으면 간단한 분배 적용
+        if total_questions <= 3:
+            if base_difficulty == Difficulty.EASY:
+                return {'easy': total_questions, 'medium': 0, 'hard': 0}
+            elif base_difficulty == Difficulty.HARD:
+                return {'easy': 0, 'medium': 0, 'hard': total_questions}
+            else:  # MEDIUM
+                return {'easy': 0, 'medium': total_questions, 'hard': 0}
+
+        # 4개 이상일 때는 다양성 확보
+        if base_difficulty == Difficulty.EASY:
+            # Easy 기준: 60% easy, 30% medium, 10% hard
+            easy_ratio, medium_ratio, hard_ratio = 0.6, 0.3, 0.1
+        elif base_difficulty == Difficulty.MEDIUM:
+            # Medium 기준: 30% easy, 40% medium, 30% hard
+            easy_ratio, medium_ratio, hard_ratio = 0.3, 0.4, 0.3
+        else:  # HARD
+            # Hard 기준: 20% easy, 30% medium, 50% hard
+            easy_ratio, medium_ratio, hard_ratio = 0.2, 0.3, 0.5
+
+        # 개수 계산 (최소 1개씩은 보장)
+        easy_count = max(1, round(total_questions * easy_ratio))
+        hard_count = max(1, round(total_questions * hard_ratio))
+        medium_count = total_questions - easy_count - hard_count
+
+        # medium이 0이 되면 다른 것에서 1개씩 빼서 조정
+        if medium_count <= 0:
+            if easy_count > 1:
+                easy_count -= 1
+                medium_count += 1
+            elif hard_count > 1:
+                hard_count -= 1
+                medium_count += 1
+            else:
+                # 극단적인 경우 medium을 1로 설정
+                medium_count = 1
+                if easy_count > hard_count:
+                    easy_count -= 1
+                else:
+                    hard_count -= 1
+
+        # 총합 검증 및 조정
+        actual_total = easy_count + medium_count + hard_count
+        if actual_total != total_questions:
+            medium_count += total_questions - actual_total
+
+        distribution = {
+            'easy': easy_count,
+            'medium': medium_count,
+            'hard': hard_count
+        }
+
+        logger.info(f"난이도 분배 ({base_difficulty.value} 기준): {distribution}")
+        return distribution
 
     def _get_batch_system_prompt(self, language: str = "ko") -> str:
         """배치 처리용 시스템 프롬프트"""
@@ -659,7 +791,7 @@ class QuizService:
         return state
 
     async def _batch_generate_node(self, state: WorkflowState) -> WorkflowState:
-        """배치 생성 노드 - 단일 API 호출!"""
+        """배치 생성 노드 - 단일 API 호출"""
         try:
             type_distribution = self._calculate_type_distribution(state["request"])
 
