@@ -8,7 +8,6 @@ from .pymupdf_loader import PyMuPDFLoader
 from .pypdf_loader import PyPDFLoader
 from .pdfplumber_loader import PDFPlumberLoader
 from .pdfminer_loader import PDFMinerLoader
-from .unstructured_loader import UnstructuredLoader
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,6 @@ class PDFLoaderFactory:
         "pdfplumber": PDFPlumberLoader,  # 2순위 - 테이블 특화
         "pypdf": PyPDFLoader,            # 3순위 - 가벼움
         "pdfminer": PDFMinerLoader,      # 4순위 - 정확도
-        "unstructured": UnstructuredLoader, # 5순위 - AI 기반
     }
 
     @classmethod
@@ -37,7 +35,7 @@ class PDFLoaderFactory:
     @classmethod
     def get_supported_loaders(cls) -> list[str]:
         """지원하는 로더 목록 (우선순위 순)"""
-        return ["pymupdf", "pdfplumber", "pypdf", "pdfminer", "unstructured"]
+        return ["pymupdf", "pdfplumber", "pypdf", "pdfminer"]
 
     @classmethod
     def get_priority_order(cls) -> Dict[str, int]:
@@ -47,7 +45,6 @@ class PDFLoaderFactory:
             "pdfplumber": 2,   # 테이블 특화
             "pypdf": 3,        # 가벼움
             "pdfminer": 4,     # 정확도
-            "unstructured": 5  # AI 기반
         }
 
     @classmethod

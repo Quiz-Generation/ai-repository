@@ -2,6 +2,7 @@
 📄 PyMuPDF Loader Implementation (1순위)
 """
 import logging
+import io
 from typing import Dict, Any
 from fastapi import UploadFile
 from .base import PDFLoader, PDFContent, PDFLoaderInfo
@@ -18,44 +19,48 @@ class PyMuPDFLoader(PDFLoader):
     async def extract_text_from_file(self, file: UploadFile) -> PDFContent:
         """업로드된 파일에서 텍스트 추출"""
         try:
-            # TODO: 실제 PyMuPDF 구현
-            # import fitz  # PyMuPDF
-            #
-            # file_content = await file.read()
-            # doc = fitz.open(stream=file_content, filetype="pdf")
-            #
-            # text = ""
-            # metadata = {}
-            #
-            # for page_num in range(len(doc)):
-            #     page = doc.load_page(page_num)
-            #     text += page.get_text()
-            #
-            # metadata = {
-            #     "title": doc.metadata.get("title", ""),
-            #     "author": doc.metadata.get("author", ""),
-            #     "subject": doc.metadata.get("subject", ""),
-            #     "creator": doc.metadata.get("creator", ""),
-            #     "producer": doc.metadata.get("producer", ""),
-            #     "creation_date": doc.metadata.get("creationDate"),
-            #     "modification_date": doc.metadata.get("modDate")
-            # }
-            #
-            # doc.close()
+            import fitz  # PyMuPDF
 
-            # 임시 더미 데이터
+            # 파일 내용 읽기
+            file_content = await file.read()
+
+            # PDF 문서 열기
+            doc = fitz.open(stream=file_content, filetype="pdf")
+
+            # 텍스트 추출
+            text = ""
+            for page_num in range(len(doc)):
+                page = doc.load_page(page_num)
+                text += page.get_text()
+                text += "\n\n"  # 페이지 구분
+
+            # 메타데이터 추출
+            metadata = {
+                "title": doc.metadata.get("title", ""),
+                "author": doc.metadata.get("author", ""),
+                "subject": doc.metadata.get("subject", ""),
+                "creator": doc.metadata.get("creator", ""),
+                "producer": doc.metadata.get("producer", ""),
+                "creation_date": doc.metadata.get("creationDate"),
+                "modification_date": doc.metadata.get("modDate"),
+                "total_pages": len(doc),
+                "loader": "pymupdf"
+            }
+
+            doc.close()
+
+            logger.info(f"✅ PyMuPDF로 {len(doc)}페이지 PDF 처리 완료")
+
             return PDFContent(
-                text="PyMuPDF로 추출된 텍스트 (TODO: 실제 구현 필요)",
-                metadata={
-                    "title": file.filename or "unknown",
-                    "author": "unknown",
-                    "pages": 1,
-                    "loader": "pymupdf"
-                },
-                page_count=1,
-                file_size=file.size or 0
+                text=text.strip(),
+                metadata=metadata,
+                page_count=len(doc),
+                file_size=file.size or len(file_content)
             )
 
+        except ImportError:
+            logger.error("❌ PyMuPDF 라이브러리가 설치되지 않았습니다. 'pip install PyMuPDF' 실행하세요.")
+            raise ImportError("PyMuPDF 라이브러리가 필요합니다")
         except Exception as e:
             logger.error(f"❌ PyMuPDF 텍스트 추출 실패: {e}")
             raise
@@ -63,18 +68,51 @@ class PyMuPDFLoader(PDFLoader):
     async def extract_text_from_path(self, file_path: str) -> PDFContent:
         """파일 경로에서 텍스트 추출"""
         try:
-            # TODO: 실제 PyMuPDF 파일 경로 구현
-            # import fitz
-            # doc = fitz.open(file_path)
-            # # 위와 동일한 로직
+            import fitz
+
+            # PDF 문서 열기
+            doc = fitz.open(file_path)
+
+            # 텍스트 추출
+            text = ""
+            for page_num in range(len(doc)):
+                page = doc.load_page(page_num)
+                text += page.get_text()
+                text += "\n\n"
+
+            # 메타데이터 추출
+            metadata = {
+                "title": doc.metadata.get("title", ""),
+                "author": doc.metadata.get("author", ""),
+                "subject": doc.metadata.get("subject", ""),
+                "creator": doc.metadata.get("creator", ""),
+                "producer": doc.metadata.get("producer", ""),
+                "creation_date": doc.metadata.get("creationDate"),
+                "modification_date": doc.metadata.get("modDate"),
+                "total_pages": len(doc),
+                "loader": "pymupdf",
+                "file_path": file_path
+            }
+
+            file_size = 0
+            try:
+                import os
+                file_size = os.path.getsize(file_path)
+            except:
+                pass
+
+            doc.close()
 
             return PDFContent(
-                text="PyMuPDF 파일 경로 추출 (TODO)",
-                metadata={"loader": "pymupdf"},
-                page_count=1,
-                file_size=0
+                text=text.strip(),
+                metadata=metadata,
+                page_count=len(doc),
+                file_size=file_size
             )
 
+        except ImportError:
+            logger.error("❌ PyMuPDF 라이브러리가 설치되지 않았습니다")
+            raise
         except Exception as e:
             logger.error(f"❌ PyMuPDF 파일 경로 추출 실패: {e}")
             raise
@@ -102,7 +140,8 @@ class PyMuPDFLoader(PDFLoader):
             "폰트 정보",
             "페이지 레이아웃",
             "링크 추출",
-            "북마크 추출"
+            "북마크 추출",
+            "페이지별 처리"
         ]
 
     def get_loader_info(self) -> PDFLoaderInfo:
@@ -117,7 +156,8 @@ class PyMuPDFLoader(PDFLoader):
                 "🖼️ 이미지 처리 지원",
                 "📋 풍부한 메타데이터",
                 "💾 메모리 효율적",
-                "🔧 안정적인 라이브러리"
+                "🔧 안정적인 라이브러리",
+                "📖 페이지별 처리 가능"
             ],
             cons=[
                 "📦 큰 라이브러리 크기",
@@ -131,22 +171,30 @@ class PyMuPDFLoader(PDFLoader):
     async def health_check(self) -> Dict[str, Any]:
         """PyMuPDF 헬스체크"""
         try:
-            # TODO: 실제 PyMuPDF 라이브러리 확인
-            # import fitz
-            # version = fitz.version
+            import fitz
+            version = fitz.version
 
             return {
                 "status": "healthy",
                 "loader": "pymupdf",
                 "priority": 1,
+                "version": version,
                 "features": self.get_supported_features(),
-                "note": "TODO: 실제 PyMuPDF 구현 필요"
+                "library_available": True
             }
 
+        except ImportError:
+            return {
+                "status": "unhealthy",
+                "loader": "pymupdf",
+                "error": "PyMuPDF 라이브러리가 설치되지 않음",
+                "library_available": False
+            }
         except Exception as e:
             logger.error(f"❌ PyMuPDF 헬스체크 실패: {e}")
             return {
                 "status": "unhealthy",
                 "loader": "pymupdf",
-                "error": str(e)
+                "error": str(e),
+                "library_available": False
             }
