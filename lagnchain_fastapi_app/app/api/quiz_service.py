@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/quiz",
-    tags=["Quiz - LangChain Batch Processing"]
+    tags=["퀴즈 서비스"]
 )
 
 

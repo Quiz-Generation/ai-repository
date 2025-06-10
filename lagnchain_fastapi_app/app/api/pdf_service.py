@@ -26,7 +26,7 @@ except ImportError:
     HAS_PYMUPDF = False
 
 # 벡터 서비스 import (상대 경로로 변경)
-from ..services.vector_service import get_global_vector_service
+from ..services.vector_service import get_global_vector_service, VectorDBFactory
 
 # 🔥 동적 PDF 추출 시스템 import 추가
 from ..services.dynamic_pdf import DynamicPDFService
@@ -37,8 +37,6 @@ from ..docs.pdf_service import (
     desc_upload_pdf,
     desc_get_documents,
     desc_get_document_info,
-    desc_search_all_documents,
-    desc_search_in_document,
     desc_health_check,
     desc_switch_database,
     desc_get_stats
@@ -46,7 +44,7 @@ from ..docs.pdf_service import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/pdf", tags=["PDF Vector"])
+router = APIRouter(prefix="/pdf", tags=["PDF 서비스"])
 
 # 전역 벡터 서비스 인스턴스 (WEAVIATE 기본 사용) - 싱글톤 사용
 vector_service = get_global_vector_service()
@@ -65,10 +63,10 @@ async def health_check() -> JSONResponse:
             content={
                 "status": "healthy",
                 "service": "PDF Vector Service (동적 추출기 지원)",
-                "vector_db": stats["db_type"],
+                "vector_db": stats["database_type"],
                 "total_documents": stats["total_documents"],
-                "total_uploaded_files": stats["total_uploaded_files"],
-                "supported_dbs": stats["supported_dbs"],
+                "total_uploaded_files": stats["total_documents"],
+                "supported_dbs": VectorDBFactory.get_supported_types(),
                 # 🔥 동적 추출기 정보 추가
                 "extraction_system": {
                     "type": "smart_auto_optimization",
@@ -205,7 +203,7 @@ async def upload_pdf(
                     "text_length": len(pdf_text),
                     "total_chunks": result["total_chunks"],
                     "stored_chunks": result["stored_chunks"],
-                    "db_type": vector_service.db_type,
+                    "db_type": vector_service.vector_db.name,
                     "upload_timestamp": datetime.now().isoformat(),
                     # 🧠 스마트 최적화 정보
                     "optimization_info": {
@@ -266,7 +264,7 @@ async def get_document_list() -> JSONResponse:
             content={
                 "message": "문서 목록 조회 성공",
                 "total_documents": len(documents),
-                "db_type": vector_service.db_type,
+                "db_type": vector_service.vector_db.name,
                 "documents": documents,
                 "note": "document_id를 사용하여 특정 문서로 RAG 퀴즈를 생성할 수 있습니다"
             }
@@ -297,7 +295,7 @@ async def get_document_info(
             content={
                 "message": "문서 정보 조회 성공",
                 "document": document_info,
-                "db_type": vector_service.db_type,
+                "db_type": vector_service.vector_db.name,
                 "rag_info": {
                     "can_generate_quiz": document_info["chunk_count"] >= 3,
                     "recommended_questions": min(10, document_info["chunk_count"] // 2),
@@ -310,8 +308,6 @@ async def get_document_info(
     except Exception as e:
         logger.error(f"문서 정보 조회 중 오류: {str(e)}")
         raise HTTPException(status_code=500, detail=f"문서 정보 조회 오류: {str(e)}")
-
-
 
 
 @router.post("/switch-db", description=desc_switch_database)
@@ -330,7 +326,7 @@ async def switch_database(db_type: str) -> JSONResponse:
             status_code=200,
             content={
                 "message": f"데이터베이스가 {db_type}으로 변경되었습니다",
-                "previous_db": vector_service.db_type,
+                "previous_db": vector_service.vector_db.name,
                 "current_db": db_type,
                 "total_documents": 0  # 새 DB이므로 0
             }

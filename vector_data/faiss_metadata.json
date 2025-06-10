@@ -1,0 +1,475 @@
+{
+  "documents": {
+    "af887d22-6b67-4286-a4c1-93b73e756036_0": {
+      "text": "Kookmin University, Seoul, Korea\nJaekoo Lee1\n1 Ph.D., Assistant Professor, School of Software, College of Computer Science\njaekoo@kookmin.ac.kr\n2학기, 2022\n심층학습(deep learning; DL) 최신기술\n: PyTorch 중심으로\njaekoo@kookmin.ac.kr\n\n⚫\nIntroduction\n⚫\nFoundation for neural network and deep learning\nBackground for deep learning\nRepresentation learning (deep learning)\nNeural networks\n⚫\nHands-on experience with PYTORCH\nFrameworks for deep learning\nOn Google Colab\n⚫\nDeep learning for computer vision\nConvolutional neural networks\nObject detection\nHands-on\n⚫\nDeep learning for sequence data (time series)\nRecurrent neural networks\nTransformer\nHands-on\n⚫\nConclusion\nOutline\n2\njaekoo@kookmin.ac.kr\n\n⚫About me\nJaekoo lee\n▪Kookmin university\n▪Assistant professor, School of software, College of computer science\n▪jaekoo@kookmin.ac.kr\nMachine intelligence (MI) lab. (http://mi.kookmin.ac.kr/)\n▪Our research topics",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 0,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 906
+      },
+      "faiss_idx": 0
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_1": {
+      "text": "aekoo@kookmin.ac.kr\nMachine intelligence (MI) lab. (http://mi.kookmin.ac.kr/)\n▪Our research topics\n3\nIntroduction\nArtificial intelligence\nMachine (deep) learning\nSystem (Robot) for intelligence\nBio or\nhealth-care analysis\nIoT (e.g. sensor) \nanalysis\nself-driving car\nor drone\nSecurity\nFundamentals\nApps.\njaekoo@kookmin.ac.kr\n\n⚫This tutorial intended to be the first course in deep learning\n⚫Tutorial objectives:\nunderstand fundamentals of deep learning\nhave hands-on experience (simple practice) with PyTorch\nmotivate to learn recent breakthroughs in deep learning\n4\nIntroduction\njaekoo@kookmin.ac.kr\n\n5\nIntroduction\njaekoo@kookmin.ac.kr\n\n⚫Artificial intelligence (AI):\nthe simulation of human intelligence processes by machines (computer systems)\ninclude (major components of AI)\n▪learning (the acquisition of information and rules for using the information), \n▪reasoning (using rules to reach approximate or definite conclusions),",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 1,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 938
+      },
+      "faiss_idx": 1
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_2": {
+      "text": "for using the information), \n▪reasoning (using rules to reach approximate or definite conclusions),\n▪knowledge,\n▪language understanding, and\n▪self-correction\nGoal:\n▪A machine that thinks or acts like a human\n6\nIntroduction\njaekoo@kookmin.ac.kr\n\n⚫AI in production\nSpeech recognition\nRecommender systems\nAutonomous driving\nReal-time object recognition\nRobotics\nReal-time language translation\nMany more…\n7\nIntroduction\njaekoo@kookmin.ac.kr\n\n⚫A brief timeline of historical events in AI\nIntroduction\n8\nearly AI stirs excitement\nmachine learning begins to flourish\ndeep learning\nbreakthroughs drive AI boom\njaekoo@kookmin.ac.kr\n\n⚫Start of AI = Acting humanly: the Turing test (1950)\n“Can machines think?” (the imitation game)\n⚫Understanding and imitating the brain\n[1950] one neuron (e.g. perceptron)\n→[1980] several neuron (e.g. multi layer perceptron)\n→[2010] many neuron (e.g. deep neural networks)",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 2,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 906
+      },
+      "faiss_idx": 2
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_3": {
+      "text": "[1980] several neuron (e.g. multi layer perceptron)\n→[2010] many neuron (e.g. deep neural networks)\n9\nIntroduction\njaekoo@kookmin.ac.kr\n\n⚫Reasons for deep learning's success\n⚫Performance with |data|\n10\nIntroduction\nDNN\nGPU\nBIG DATA\njaekoo@kookmin.ac.kr\n\n⚫Background for deep learning\n⚫Representation learning (deep learning)\n⚫Neural networks\n11\nFoundation for neural network and deep learning\njaekoo@kookmin.ac.kr\n\n⚫Field of artificial intelligence\n12\nBackground for deep learning\n⚫Key components of learning\nGray box: can be learned from data\njaekoo@kookmin.ac.kr\n\n⚫Definition of machine learning\nArthur Samuel (1959): The Machine Learning is a field of study that gives computers \nthe ability to learn without being explicitly programmed\nTom Michell (1998): A program is said to learn from experience  ‘E’  with respect to \nany task  ‘T’  and some measure of performance  ‘P’  if their performance in  ‘T’",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 3,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 910
+      },
+      "faiss_idx": 3
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_4": {
+      "text": "ith respect to \nany task  ‘T’  and some measure of performance  ‘P’  if their performance in  ‘T’  \nmeasured by  ‘P’ , improvement experience  ‘E’ \n⚫Basic premise of learning \n“using a set of observations to uncover an underlying process”\nbroad premise →many variations\n13\nBackground for deep learning\njaekoo@kookmin.ac.kr\n\n⚫Variations of learning\n14\nBackground for deep learning\nSupervised learning\ngiven (x, y)\nx is data, y is its label\nGoal:\nlearn a function\nto map x → y\nExamples:\nClassification\nRegression\nObject detection\nSegmentation\nImage captioning\nUnsupervised learning\ngiven (x)\njust data, no label\nGoal:\nlearn some underlying hidden \nstructure of the data\nExamples:\nClustering\nDimensionality reduction\nFeature learning\nDensity estimation\nReinforcement learning\ngiven\nProblems involving an agent\ninteracting with an environment which \nprovides numeric reward signals\nGoal:\nLearn how to take actions in order to",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 4,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 921
+      },
+      "faiss_idx": 4
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_5": {
+      "text": "an environment which \nprovides numeric reward signals\nGoal:\nLearn how to take actions in order to \nmaximize reward\nExamples:\nRobotics\nSemi-supervised learning\njaekoo@kookmin.ac.kr\n\n⚫Components of learning\nmetaphor: credit approval\n▪applicant information:\nformalization\n15\nBackground for deep learning\n?\ncomponent\nsymbol\nmetaphor of credit approval\ninput\nx\ncustomer application\noutput\n𝑦\napprove or deny\ntarget distribution\n𝑓= 𝑃𝑦x\nideal credit approval formula\ndata\n(x1, 𝑦1), (x2, 𝑦2),…, (x𝑁, 𝑦𝑁)\nhistorical records\nhypothesis\n𝑔: 𝒳→𝒴\nformula to be used\njaekoo@kookmin.ac.kr\n\n⚫Setup for machine learning\nsupervised learning case,\n16\nBackground for deep learning\ndata\nobjective (=loss=cost) \nfunction\noptimization\nand control\n(learning model)\njaekoo@kookmin.ac.kr\n\n⚫Effect of representation learning in algebraic viewpoint\nRepresentation matter\n▪example of different coordinates\nnot only the mapping from representation (e.",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 5,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 923
+      },
+      "faiss_idx": 5
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_6": {
+      "text": "Representation matter\n▪example of different coordinates\nnot only the mapping from representation (e.g. input) to output\nbut also the representation itself\ncan find good features more rapidly than human →better performance\n17\nRepresentation learning (deep learning)\njaekoo@kookmin.ac.kr\n\n⚫Representation learning\nAutomatically discover the representations \nneeded for feature detection or classification from raw data\ntoy example\n18\nRepresentation learning (deep learning)\ninput\noutput\nhidden \nrepresentation\nclass scores\nfeature representation\njaekoo@kookmin.ac.kr\n\n⚫Deep learning (or representation learning)\ndeep neural network with multiple levels of linear / non-linear operations\n▪introducing representation that are expressed in terms of other (simpler) representations\n▪each stage: a kind of trainable feature transform\n▪hierarchy of representations with increasing level of abstraction\nlearning representation →data-driven features",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 6,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 943
+      },
+      "faiss_idx": 6
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_7": {
+      "text": "representations with increasing level of abstraction\nlearning representation →data-driven features\ndeep neural network == universal approximator\n19\nRepresentation learning (deep learning)\nImage\npixel →edge →texton →motif \n→part →object\nText\ncharacter →word →word group \n→clause →sentence →story\nSpeech\nsample →spectral band →\nsound →… →phone →\nphoneme →word →\njaekoo@kookmin.ac.kr\n\n⚫Comparisons between traditional machine learning and deep learning\n20\nRepresentation learning (deep learning)\njaekoo@kookmin.ac.kr\n\n⚫Recap: From linear algebra\nfeature vector\n▪toy example (image →vector)\ninner product (similarity)\n21\nNeural networks\njaekoo@kookmin.ac.kr\n\n⚫Basic operation in a node of neural networks\ninner product == linear function\nactivation function == non-linear function\n▪various activation functions\n22\nNeural networks\njaekoo@kookmin.ac.kr\n\n⚫Perceptron\ncombination of linear (inner product)  + nonlinear",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 7,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 917
+      },
+      "faiss_idx": 7
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_8": {
+      "text": "ural networks\njaekoo@kookmin.ac.kr\n\n⚫Perceptron\ncombination of linear (inner product)  + nonlinear\nstarted from imitating the brain\n▪1940-1960: cybernetics\n23\nNeural networks\njaekoo@kookmin.ac.kr\n\ntoy example\n▪a perceptron ℎ(x) = sign(wTx)\n▪the perceptron implements\nℎ(x) = sign(wTx)\n24\nNeural networks\njaekoo@kookmin.ac.kr\n\n⚫XOR problem\n▪mission impossible! linear classifier (perceptron) cannot solve this!\nanother point of view: learning XOR\n25\nNeural networks\nx1 x2\nx1 XOR x2\n0\n0\n0\n0\n1\n1\n1\n0\n1\n1\n1\n0\njaekoo@kookmin.ac.kr\n\nMulti layer perceptron (MLP)\n▪1980-1990: connectionism (or parallel distributed processing) →neural networks\n▪toy example for multi layer perceptron (MLP)\n26\nNeural networks\njaekoo@kookmin.ac.kr\n\n⚫Linearity in neural networks\nNeural networks for visual recognition - problem: image classification\na toy example with linear classifier\n27\nNeural networks\n→find parameter (W, b) for correct answer!",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 8,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 928
+      },
+      "faiss_idx": 8
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_9": {
+      "text": "a toy example with linear classifier\n27\nNeural networks\n→find parameter (W, b) for correct answer!\njaekoo@kookmin.ac.kr\n\n⚫Linearity of neural networks for visual recognition\nlinear classifier\n▪as algebraic viewpoint\n▪as geometric viewpoint\n→extension to deep neural network == multiple levels of linear + nonlinear operations\n28\nNeural networks\njaekoo@kookmin.ac.kr\n\n⚫End-to-end structure\n29\nNeural networks\n1. linear transformation by 𝐖𝟏\n2. translation by 𝐛𝟏\n3. point wise application by activation function\njaekoo@kookmin.ac.kr\n\n⚫Zoo of neural networks\n30\nNeural networks\njaekoo@kookmin.ac.kr\n\n⚫Training and inference of network\n31\nNeural networks\n…\n“dog”\n=?\nerror\n“cat”\nlabels\nforward\nbackward\n…\nforward\npredicting label for unknown data\nlearned model\ntraining\ninference\n𝐷\nN\n𝐷unknown\njaekoo@kookmin.ac.kr\n\n⚫Computational graph\nsequential instructions (flowchart)\nhow concepts are related to each other",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 9,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 908
+      },
+      "faiss_idx": 9
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_10": {
+      "text": "⚫Computational graph\nsequential instructions (flowchart)\nhow concepts are related to each other\nexample\n32\nNeural networks\njaekoo@kookmin.ac.kr\n\n⚫What happen? in neural networks\n1.\nforward propagation yields an inferred 𝑦for x\n2. loss function used to calculate difference between real 𝑦and predicted 𝑦\n3. weights are adjusted during backward propagation\n4. repeat the process\n33\nNeural networks\n→decomposition of chain rule\njaekoo@kookmin.ac.kr\n\n⚫Error backpropagation and its chain rule (via computational graph)\n34\nNeural networks\nsubexpressions\njaekoo@kookmin.ac.kr\n\n35\nNeural networks\n⚫Recap: Derivative\n⚫Recap: Gradient descent \njaekoo@kookmin.ac.kr\n\n⚫Chain rule (via computational graph) in neural network \n36\nNeural networks\njaekoo@kookmin.ac.kr\n\n37\nNeural networks\n⚫Toy example for backpropagation\njaekoo@kookmin.ac.kr\n\n⚫Iterative optimization\ninstead of analytically setting\ngradient descent is a very general algorithm",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 10,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 934
+      },
+      "faiss_idx": 10
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_11": {
+      "text": "erative optimization\ninstead of analytically setting\ngradient descent is a very general algorithm\n▪gradient == the derivative of vector functions\n▪direction of greatest increase of a function\n▪repeatably update weights, iterate to next step\nw 𝑡+ 1 = w 𝑡−𝜂∇Ein(w(𝑡))\n▪example\n38\nNeural networks\njaekoo@kookmin.ac.kr\n\n⚫Extensions and variants of gradient descent\nupdating time of parameters\n▪full batch gradient descent\n▪stochastic gradient descent\n▪mini-batch gradient descent\noptimizer\n▪SGD + momentum\n▪NAG (nesterov accelerated gradient)\n▪Adagrad (adaptive gradient)\n▪Adadelta\n▪RMSProp\n▪Adam (adaptive gradient + moment)\n39\nNeural networks\njaekoo@kookmin.ac.kr\n\n⚫A toy example of training (weight updating) principle\n40\nNeural networks\njaekoo@kookmin.ac.kr\n\n⚫Power of deep neural networks (deep learning)\nend-to-end learning\n▪learn data-driven features from data\n▪hierarchical features & abstraction",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 11,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 905
+      },
+      "faiss_idx": 11
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_12": {
+      "text": "ng)\nend-to-end learning\n▪learn data-driven features from data\n▪hierarchical features & abstraction\nimportance of the depth of neural networks →powerful representation learning \n41\nNeural networks\njaekoo@kookmin.ac.kr\n\n⚫Regularization\ntoy example\nex. constrained optimization - norm penalty\n▪intuition of weight decay\nother strategies in deep learning\n▪bagging (bootstrap aggregation)\n▪dropout\n▪batch/layer/instance normlization\n▪etc\n42\nNeural networks\njaekoo@kookmin.ac.kr\n\n⚫Whole process of deep learning\ntraining == exploration of hypothesis (parameters) space\n43\nNeural networks\njaekoo@kookmin.ac.kr\n\n⚫Frameworks for deep learning\n⚫On Google Colab\n44\nHands-on experience with PYTORCH \njaekoo@kookmin.ac.kr\n\n45\nFrameworks for deep learning\n⚫Machine learning tools\njaekoo@kookmin.ac.kr\n\n⚫Implementation of deep neural networks\n== can be assembled like LEGO\n46\nFrameworks for deep learning\njaekoo@kookmin.",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 12,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 911
+      },
+      "faiss_idx": 12
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_13": {
+      "text": "f deep neural networks\n== can be assembled like LEGO\n46\nFrameworks for deep learning\njaekoo@kookmin.ac.kr\n\n47\nFrameworks for deep learning\nSoftware\nCreator\nSoftware license\nOpen\nsource\nPlatform\nWritten in\nInterface\nOpenMP\nsupport\nOpenCL support\nCUDA support\nParallel\nexecution\n(multi\nnode)\nAutomatic differentiation\nHas\npretrained\nmodels\nRecurrent nets Convolutional nets\nRBM/DBNs\nApache MXNet\nApache Software Foundation Apache 2.0\nYes\nLinux, macOS,\nWindows, AWS,\nAndroid, iOS,\nJavaScript\nSmall C++ core library\nC++, Python,\nJulia, Matlab,\nJavaScript,\nGo, R, Scala,\nPerl\nYes\nOn roadmap\nYes\nYes\nYes\nYes\nYes\nYes\nYes\nCaffe\nBerkeley Vision and Learning\nCenter\nBSD license\nYes\nLinux, macOS,\nWindows\nC++\nPython,\nMATLAB,\nC++\nYes\nUnder development\nYes\nYes\nYes\nYes\nYes\nYes\nChainer\nPreferred Networks\nMIT license\nYes\nLinux, macOS,\nWindows\nPython\nNo\nNo\nYes\nYes\nYes\nYes\nYes\nKeras\nFrançois Chollet\nMIT license\nYes",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 13,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 900
+      },
+      "faiss_idx": 13
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_14": {
+      "text": "e\nYes\nLinux, macOS,\nWindows\nPython\nNo\nNo\nYes\nYes\nYes\nYes\nYes\nKeras\nFrançois Chollet\nMIT license\nYes\nLinux, macOS,\nWindows\nPython\nPython, R\nOnly if using\nTheano as\nbackend\nUnder development for\nthe Theano backend (and\non roadmap for the\nTensorFlow backend)\nYes\nYes\nYes\nYes\nYes\nYes\nYes\nMicrosoft\nCognitive Toolkit\nMicrosoft Research\nMIT license\nYes\nWindows, Linux,\n(macOS via Docker\non roadmap)\nC++\nPython\n(Keras), C++,\nCommand\nline,\nBrainScript,\n(.NET on\nroadmap\n[)\nYes\nNo\nYes\nYes\nYes\nYes\nYes\nYes\nYes\nPyTorch\nAdam Paszke, Sam Gross,\nSoumith Chintala, Gregory\nChanan\nBSD license\nYes\nLinux, macOS,\nWindows\nPython, C, CUDA\nPython\nYes\nVia separately\nmaintained package\nYes\nYes\nYes\nYes\nYes\nYes\nYes\nTensorFlow\nGoogle Brain team\nApache 2.0\nYes\nLinux, macOS,\nWindows, Android\nC++, Python, CUDA\nPython\n(Keras),\nC/C++, Java,\nGo, R, Julia\nNo\nOn roadmap but already\nwith SYCL support\nYes\nYes\nYes\nYes\nYes\nYes\nYes\nTheano",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 14,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 905
+      },
+      "faiss_idx": 14
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_15": {
+      "text": ", Java,\nGo, R, Julia\nNo\nOn roadmap but already\nwith SYCL support\nYes\nYes\nYes\nYes\nYes\nYes\nYes\nTheano\nUniversité de Montréal\nBSD license\nYes\nCross-platform Python\nPython\n(Keras)\nYes\nUnder development\nYes\nYes\nYes\nYes\nYes\nYes\nTorch\nRonan Collobert, Koray\nKavukcuoglu, Clement\nFarabet\nBSD license\nYes\nLinux, macOS,\nWindows, Android,\niOS\nC, Lua\nLua, LuaJIT,\nC, utility\nlibrary for\nC++/OpenCL\nYes\nThird party\nimplementations\nYes\nThrough\nTwitter's\nAutograd\nYes\nYes\nYes\nYes\nYes\njaekoo@kookmin.ac.kr\n\n48\nFrameworks for deep learning\n⚫Overview of deep learning tools\njaekoo@kookmin.ac.kr\n\n⚫PyTorch (https://pytorch.org/) – version 1.0 released Dec., 2018\nenables fast, flexible experimentation and efficient production\nprovides automatic differentiation for all operations on tensors\nrun it all efficiently on GPU \n▪wrap cuDNN, cuBLAS, etc\n49\nFrameworks for deep learning\njaekoo@kookmin.ac.kr\n\n⚫A replacement for numpy",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 15,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 910
+      },
+      "faiss_idx": 15
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_16": {
+      "text": "p cuDNN, cuBLAS, etc\n49\nFrameworks for deep learning\njaekoo@kookmin.ac.kr\n\n⚫A replacement for numpy\n①looks exactly like numpy\n②PyTorch handles gradients for your model\n③trivial to run on GPU\n▪just construct arrays on a different device\n50\nFrameworks for deep learning\njaekoo@kookmin.ac.kr\n\n⚫Example of a dynamic neural network\nbuilding the graph\ncomputing the graph happen at the same time (dynamic)\n↔TensorFlow builds graph once, then run many times (static)\nbut TensorFlow 2.0 default dynamic graph\n51\nFrameworks for deep learning\n# back-propagation uses the dynamically created graph\n# a graph is created on the fly\n# create random Tensors for data and weights\ntensor\nforward pass\nbackward pass\njaekoo@kookmin.ac.kr\n\n⚫TensorFlow vs. PyTorch\n52\nFrameworks for deep learning\n# build graph\n# run each iteration\n# graph each iteration\n# TensorFlow (1.x)\n# PyTorch\njaekoo@kookmin.ac.kr\n\n⚫Example of own neural network",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 16,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 917
+      },
+      "faiss_idx": 16
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_17": {
+      "text": "ph each iteration\n# TensorFlow (1.x)\n# PyTorch\njaekoo@kookmin.ac.kr\n\n⚫Example of own neural network\n53\nFrameworks for deep learning\ncomputation graph\ncode for own neural network\njaekoo@kookmin.ac.kr\n\n⚫Convolutional layer in PyTorch\n54\nFrameworks for deep learning\njaekoo@kookmin.ac.kr\n\n⚫Example of using pretrained models\nwith torchvision\n55\nFrameworks for deep learning\nAlexNet\nVGG16\nResNet\njaekoo@kookmin.ac.kr\n\n⚫Google Colab\nis a Google’s free cloud service which will let you run your deep learning or machine \nlearning models in cloud\naccessing Colab\n▪https://colab.research.google.com/\n56\nOn Google Colab\njaekoo@kookmin.ac.kr\n\n⚫Using a free GPU for up to 12 hours at a time\nselect \"Runtime,\" \"Change runtime type,\" and this is the pop-up you see:\n⚫Installing libraries\ncurrently, software installations within Google Colab are not persistent, in that you \nmust reinstall libraries every time you (re-)connect to an instance",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 17,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 934
+      },
+      "faiss_idx": 17
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_18": {
+      "text": "re not persistent, in that you \nmust reinstall libraries every time you (re-)connect to an instance\nColab supports both the pip and apt package managers\n57\nOn Google Colab\njaekoo@kookmin.ac.kr\n\n⚫Uploading and using own data files\n⚫Now execute your codes of a neural network!\n58\nOn Google Colab\njaekoo@kookmin.ac.kr\n\n⚫PyTorch getting started\nhttps://pytorch.org/\n59\nOn Google Colab\njaekoo@kookmin.ac.kr\n\n⚫Task: neural networks\n60\nOn Google Colab\ntorch.nn 활용한신경망만들기\njaekoo@kookmin.ac.kr\n\n⚫Task: neural networks\n61\nOn Google Colab\n신경망정의\nConv2d(in, out, filter)\nLinear(in, out)\njaekoo@kookmin.ac.kr\n\n⚫Task: neural networks\n62\nOn Google Colab\n임의tensor 입력, 결과확인\njaekoo@kookmin.ac.kr\n\n⚫Task: neural networks\n63\nOn Google Colab\n손실함수\n신경망의연산그래프\njaekoo@kookmin.ac.kr\n\n⚫Task: neural networks\n64\nOn Google Colab\n오류역전파\n가중치갱신– 경사하강법\njaekoo@kookmin.ac.kr\n\n⚫Task: image classification\n65\nOn Google Colab\njaekoo@kookmin.",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 18,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 904
+      },
+      "faiss_idx": 18
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_19": {
+      "text": "전파\n가중치갱신– 경사하강법\njaekoo@kookmin.ac.kr\n\n⚫Task: image classification\n65\nOn Google Colab\njaekoo@kookmin.ac.kr\n\nabout data\n66\nOn Google Colab\n사진→다차원행렬형태의데이터표현\nCIFAR10: 비행기, 자동차, 새, 고양이, 사슴, 개, 개구리, 말, 배, 트럭으로구성된사진집합\n각사진은R/G/B 삼색으로구성된32*32 크기를가짐\n→3*32*32\njaekoo@kookmin.ac.kr\n\ntraining steps\n67\nOn Google Colab\nCIFAR10 사진데이터집합(훈련용, 추론용) 부르고, 정규화전처리수행\nCNN 신경망정의\nCNN 손실함수(훈련판단근거) 정의\n훈련용데이터집합으로신경망훈련\n추론용데이터집합으로신경망시험\njaekoo@kookmin.ac.kr\n\nstep – 1. loading and normalizing CIFAR10\n68\nOn Google Colab\n관련패키지선언\n데이터부르고,\n데이터[-1,1] 정규화\n결과확인\njaekoo@kookmin.ac.kr\n\n69\nOn Google Colab\n데이터집합의임의사진들과정답출력\njaekoo@kookmin.ac.kr\n\nstep – 2. define a CNN\n70\nOn Google Colab\n신경망구조정의\n신경망의전방연산정의\njaekoo@kookmin.ac.kr\n\nstep – 3. define a loss function and optimizer\n71\nOn Google Colab\n손실함수정의\n최적화정의\njaekoo@kookmin.ac.kr\n\nstep – 4. train the network\n72\nOn Google Colab\n신경망훈련과손실함수결과출력\njaekoo@kookmin.ac.kr\n\nstep – 5. test the network",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 19,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 906
+      },
+      "faiss_idx": 19
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_20": {
+      "text": "ain the network\n72\nOn Google Colab\n신경망훈련과손실함수결과출력\njaekoo@kookmin.ac.kr\n\nstep – 5. test the network\n73\nOn Google Colab\n추론데이터의임의사진들확인\njaekoo@kookmin.ac.kr\n\n74\nOn Google Colab\n훈련된신경망에동일한사진들추론수행\n추론결과출력\njaekoo@kookmin.ac.kr\n\n75\nOn Google Colab\n전체추론사진집합에시험하고, 정확도출력\njaekoo@kookmin.ac.kr\n\n76\nOn Google Colab\n각종류별정확도출력\njaekoo@kookmin.ac.kr\n\n⚫With programming materials\n77\nHands-on\njaekoo@kookmin.ac.kr\n\n⚫Convolutional neural networks\n⚫Object detection\n⚫Hands-on\n78\nDeep learning for computer vision\njaekoo@kookmin.ac.kr\n\n⚫Visual recognition problems\nimage classification\nobject detection\nshape estimation\naction/event recognition\nemotion classification\nimage captioning\nvideo summarization\n79\nConvolutional neural networks\njaekoo@kookmin.ac.kr\n\n⚫Human vs. computer in visual recognition\nhuman: represents increasingly more complex visual features along the ventral steam\ncomputer: the very same phenomenon emerges in deep neural networks",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 20,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 939
+      },
+      "faiss_idx": 20
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_21": {
+      "text": "atures along the ventral steam\ncomputer: the very same phenomenon emerges in deep neural networks \n80\nConvolutional neural networks\njaekoo@kookmin.ac.kr\n\n⚫Convolutional neural networks (CNNs): \nlayers have width, height, and depth \nstarted from statistical assumptions (locality, stationary)\n→fundamental components of CNNs\n▪convolutional layer (CONV)\n▪pooling layer (POOL)\n▪fully connected layer (FC)\nexample\n81\nConvolutional neural networks\njaekoo@kookmin.ac.kr\n\n⚫Convolutional (partial connected) layer \nfully connected layer vs. convolutional layer \n▪maintain a shape of input / output of each layer\n▪summarize and enhance the features of input\n▪fewer # of parameters weight (parameter) sharing\nif input is 256*256,\n▪fully connected layer:\n–\nunknown 256*256*10=655360 weights\n▪convolutional layer:\n–\nconvolving a 5*5 filter\n–\nunknown 5*5=25 weights (parameter sharing)\n82\nConvolutional neural networks",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 21,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 912
+      },
+      "faiss_idx": 21
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_22": {
+      "text": "nvolving a 5*5 filter\n–\nunknown 5*5=25 weights (parameter sharing)\n82\nConvolutional neural networks\nreceptive\nfield\nparallel\ndistributed structure\njaekoo@kookmin.ac.kr\n\n⚫Convolutional layer = convolutional filter + activation function\nconvolutional filter (kernel) == self-designed filter\n▪(spatial) filter and its feature map\n– a toy example of convolutional filer in 2D and 3D\n83\nConvolutional neural networks\njaekoo@kookmin.ac.kr\n\n▪filter’s hyperparameters\n– width*height*depth (e.g., 5*5*3, 3*3*3)\n– stride\n– padding (e.g., zero padding)\n84\nConvolutional neural networks\nfilters always extend the full depth of the input volume\njaekoo@kookmin.ac.kr\n\nFor your information, parameters != hyperparameters\n85\nConvolutional neural networks\njaekoo@kookmin.ac.kr\n\nresult\n▪convolutional filter\n▪activation function\n86\nConvolutional neural networks\njaekoo@kookmin.ac.kr\n\n⚫Pooling layer\nmakes the representations smaller and more manageable →down-sampling",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 22,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 953
+      },
+      "faiss_idx": 22
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_23": {
+      "text": "kookmin.ac.kr\n\n⚫Pooling layer\nmakes the representations smaller and more manageable →down-sampling\noperates over each activation map independently\nexamples\n▪average (sum) pooling\n▪max pooling\n87\nConvolutional neural networks\njaekoo@kookmin.ac.kr\n\n⚫Building block\n88\nConvolutional neural networks\njaekoo@kookmin.ac.kr\n\n⚫Full architectural description\nstacking CONV, POOL, FC layers\nTrend:\n▪smaller filters and deeper architectures\n▪getting rid of POOL/FC layers (just COVN layers)\nTypical architectures\n▪[(CONV-RELU)*N - POOL]*M - (FC-RELU)*K, SOFTMAX\nwhere N is usually up to 5, M is large, K < 3\nExamples\n89\nConvolutional neural networks\njaekoo@kookmin.ac.kr\n\n⚫CNN visualization: https://poloclub.github.io/cnn-explainer/\nConvolutional neural networks\njaekoo@kookmin.ac.kr\n\n⚫A bit of history\nwinners in ILSVRC (ImageNet large scale visual recognition competition)\n▪LeNet (1998)\n▪AlexNet (2012)",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 23,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 902
+      },
+      "faiss_idx": 23
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_24": {
+      "text": "nners in ILSVRC (ImageNet large scale visual recognition competition)\n▪LeNet (1998)\n▪AlexNet (2012)\n▪VGGNet (2014)\n▪GoogLeNet (2014)\n▪ResNet (2015)\n▪…\n91\nConvolutional neural networks\njaekoo@kookmin.ac.kr\n\n⚫LeNet-5\ninitial convolutional neural networks\n5*5 filter with stride 1\n2*2 pooling with stride 2\n92\nConvolutional neural networks\njaekoo@kookmin.ac.kr\n\n⚫AlexNet\n[(CONV-RELU) - POOL]*5 – FC*3 trained by ImageNet\n▪# of parameters in [(CONV-RELU) - POOL]*5 = 2M << # of parameters in FC*3 = 65M\nfirst use of ReLU\n▪solving the problem of vanishing gradient\napply methods of regularization\n▪data augmentation\n93\nConvolutional neural networks\njaekoo@kookmin.ac.kr\n\n▪dropout\nGPU 1 + GPU 2\nensemble method on test dataset\n94\nConvolutional neural networks\njaekoo@kookmin.ac.kr\n\n⚫VGGNet\nsmall filters\n▪only 3*3 filter with stride 1\n▪2*2 max pooling with stride 2\n▪example: stack of two 3*3 filters has same effective receptive field as one 5*5 filter",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 24,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 957
+      },
+      "faiss_idx": 24
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_25": {
+      "text": "th stride 2\n▪example: stack of two 3*3 filters has same effective receptive field as one 5*5 filter\ndeeper networks\n▪8 layers (AlexNet) →16 / 19 layers (VGG)\n95\nConvolutional neural networks\n#of weight\none 5*5 filter, 25\nstack of two 3*3 filters, 9+9 =18\njaekoo@kookmin.ac.kr\n\n⚫GoogLeNet\ndeeper networks with computational efficiency\n▪22 layers\n▪efficient inception module (inspired by network in network)\n– parallel filter operations (1*1, 3*3, 5*5)\n– 1*1 convolutions →reduce depth →dimension reduction\n▪reduce FC layers →only 5M parameters (12* less than AlexNet)\n▪auxiliary outputs to inject additional gradient at lower layer\n96\nConvolutional neural networks\njaekoo@kookmin.ac.kr\n\n⚫ResNet\nvery deep networks\n▪deeper networks are hard to optimize\n→residual connections (skip connections)\n▪using global average pooling\n▪beyond ResNet: DenseNet\n▪batch normalization (without dropout)\n97\nConvolutional neural networks",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 25,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 921
+      },
+      "faiss_idx": 25
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_26": {
+      "text": "ng\n▪beyond ResNet: DenseNet\n▪batch normalization (without dropout)\n97\nConvolutional neural networks\njaekoo@kookmin.ac.kr\n\n⚫대표적인컴퓨터비전문제\n사진분류예시\nObject detection\n사진단위인식\n픽셀단위인식\n다수의객체인식\njaekoo@kookmin.ac.kr\n\n⚫자율주행에서의객체인식기술사례\nObject detection\njaekoo@kookmin.ac.kr\n\n⚫객체인식혹은객체검출\n분류와위치를동시고려\n단일객체의경우\n▪분류– 기존사진분류와동일하게해결\n▪위치– 위치좌표를회귀문제로취급하여해결\nObject detection\njaekoo@kookmin.ac.kr\n\n→객체인식= 분류와위치추정을동시에고려하여손실함수설정\nCNNs을통해분류와위치추정에관련된특징추출함\nObject detection\njaekoo@kookmin.ac.kr\n\n다수의객체인경우\n▪사진마다객체수에비례하여출력의수가다름\nObject detection\njaekoo@kookmin.ac.kr\n\n⚫다수의객체인식의어려움\n단순하게주어진사진을여러개조각으로만들고,\nCNN에입력하여다수의객체와배경을분류한다면…\nObject detection\n결과적으로\n너무많고다양한위치와크기(비율)를고려하여\nCNN 입력을줘야하는연산복잡도문제가존재\n새로운접근이필요함!\njaekoo@kookmin.ac.kr\n\n⚫부분제안region proposals인선택적인탐색selective search\n객체검출을위한객체의영역후보를구하는방법중하나\n▪실제, R-CNN, Fast R-CNN, SPPNets 등객체인식학습모델에서활용됨\n상대적으로빠르게수행됨\n▪CPU로2000개부분을제안하는데수초정도만걸림\nObject detection - Deep learning for object detection",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 26,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 905
+      },
+      "faiss_idx": 26
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_27": {
+      "text": "델에서활용됨\n상대적으로빠르게수행됨\n▪CPU로2000개부분을제안하는데수초정도만걸림\nObject detection - Deep learning for object detection\njaekoo@kookmin.ac.kr\n\n⚫R-CNN\n문제: 매우느림(사진마다2000개제안영역의독립적인CNN 전방전파연산들수행필요)\nCNN의전방연산과영역선정교환\nObject detection - Deep learning for object detection\n관심영역선정\n영역크기통일\n각영역의\nCNN 전방전파연산\n(특징추출)\n영역의\nSVM 분류와위치회귀\njaekoo@kookmin.ac.kr\n\n⚫Fast R-CNN\nObject detection - Deep learning for object detection\nR-CNN: \n매우느린문제\n→과정의구조적교환으로해결\nImageNet 훈련된\nCNN 활용\n영역제안방법에의한\n관심영역선정\n(RoI POOL)\njaekoo@kookmin.ac.kr\n\n⚫RoI 추출\nRoI POOL \n▪입력의객체위치와상대적으로대응되는특징공간의영역설정\n▪격자형태의특징공간으로영역재설정\n▪재설정된영역을부분화하고, 통계최대값으로치환(max-pool)\n→동일한크기의특징영역추출\n▪특징영역들이약간어긋날수있음→RoI 정렬수행\nObject detection - Deep learning for object detection\njaekoo@kookmin.ac.kr\n\n⚫RoI 정렬\n영역의위치가상대적으로일치하지않은경우\n▪격자단위각요소값들(회색)의선형보간법을이용하여중간값추정(녹색)\n▪중간값들을기준으로부분화하고통계적최대값으로치환\nObject detection - Deep learning for object detection\njaekoo@kookmin.ac.kr\n\n⚫R-CNN과Fast R-CNN 비교\nObject detection - Deep learning for object detection",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 27,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 940
+      },
+      "faiss_idx": 27
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_28": {
+      "text": "on\njaekoo@kookmin.ac.kr\n\n⚫R-CNN과Fast R-CNN 비교\nObject detection - Deep learning for object detection\njaekoo@kookmin.ac.kr\n\n⚫Faster R-CNN\nCNN으로영역제안하는구조추가\n▪특징들에서영역을제안하는영역제안망region proposal network (RPN) 삽입\n– 선택적탐색→영역제안망\n그외의부분들은Fast R-CNN과같음\nObject detection - Deep learning for object detection\njaekoo@kookmin.ac.kr\n\n⚫영역제안망region proposal network (RPN)\n특징맵의각점마다고정크기의하나의앵커박스anchor box 활용\n각점마다앵커박스에객체가있는지를예측(픽셀단위로지스틱회귀per-pixel logistic regression)\n객체가있다고판단되는앵커박스에대응되는점에대해서는\n객체의정확한크기와앵커박스간의변환을예측\n하나의앵커박스를다수로확장가능\nObject detection - Deep learning for object detection\n①classify object/not-object\n②regress box location\njaekoo@kookmin.ac.kr\n\n⚫Faster R-CNN의손실함수\n4가지고려\n①영역제안망의객체유무손실\n②영역제안망의위치박스회귀손실\n③각객체들의최종분류손실\n④최종객체위치박스회귀손실\nObject detection - Deep learning for object detection\n①\n②\n③\n④\njaekoo@kookmin.ac.kr\n\n⚫Faster R-CNN 동작\n두단계수행\n▪1단계(파란색): 사진단위수행됨\n– CNN\n– 영역제안망\n▪2단계(녹색): 영역단위수행됨\n– RoI 요약및정렬\n– 객체분류예측",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 28,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 901
+      },
+      "faiss_idx": 28
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_29": {
+      "text": "kr\n\n⚫Faster R-CNN 동작\n두단계수행\n▪1단계(파란색): 사진단위수행됨\n– CNN\n– 영역제안망\n▪2단계(녹색): 영역단위수행됨\n– RoI 요약및정렬\n– 객체분류예측\n– 객체위치예측\nObject detection - Deep learning for object detection\njaekoo@kookmin.ac.kr\n\n⚫R-CNN 계열객체인식모델비교\nObject detection - Deep learning for object detection\njaekoo@kookmin.ac.kr\n\n⚫Faster R-CNN: 두단계객체인식→YOLO/SSD/RetinaNet: 단일단계객체인식\nObject detection - Deep learning for object detection\n✓각격자마다위치박스추정(5요소)\n✓(배경포함모든부류) 각분류예측결과\n→영역제안망과유사하지만보다부류에특정됨\njaekoo@kookmin.ac.kr\n\n⚫객체인식을위한깊은인공신경망정리\n근간이되는인공신경망\n▪VGG16\n▪ResNet/ResNet101\n▪Inception/Inception V2/Inception V3\n▪MobileNet\n→근간이되는인공신경망이깊고클수록좋은성능을가짐\n인공신경망의구조적단계다양성\n▪두단계: Faster R-CNN\n▪단일단계: YOLO/SSD/RetinaNet\n▪혼합단계: R-FCN\n대표적인인공신경망비교\n▪Faster R-CNN: 느리지만높은정확도(사진)\n▪SSD: 빠르지만낮은정확도(동영상)\nObject detection - Deep learning for object detection\njaekoo@kookmin.ac.kr\n\n⚫Detectron2: a PyTorch-based modular object detection library\nFacebook AI Research (FAIR)’s open-source projects",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 29,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 920
+      },
+      "faiss_idx": 29
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_30": {
+      "text": "PyTorch-based modular object detection library\nFacebook AI Research (FAIR)’s open-source projects\n▪will continue to accelerate progress in the area of object detection\n▪able to rapidly move research ideas into production models\n– e.g., AI camera system in Facebook’s Portal video-calling devices\nnext-generation platform for object detection and segmentation \n▪Detectron: release in 2018 (https://github.com/facebookresearch/Detectron)\n▪Detectron2: release in 2019, Oct. (https://github.com/facebookresearch/detectron2)\n117\nObject detection - Detectron2\njaekoo@kookmin.ac.kr\n\n⚫Detectron2: a PyTorch-based modular object detection library\nimplementation\n▪implemented in PyTorch (Detectron: Caffe2)\n▪modular, extensible design (more flexible)\n▪fast training on single or multiple GPU servers\n– much simpler to scale training to very large data sets\n▪including state-of-the-art object detection algorithms (high-quality reference)",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 30,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 930
+      },
+      "faiss_idx": 30
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_31": {
+      "text": "ry large data sets\n▪including state-of-the-art object detection algorithms (high-quality reference)\n– e.g., DensePose, panoptic feature pyramid networks, and variants of Mask R-CNN model family\n118\nObject detection - Detectron2\njaekoo@kookmin.ac.kr\n\n119\nObject detection - Detectron2\n⚫Example of ResNet+FPN (backbone) with Fast R-CNN (heads)\njaekoo@kookmin.ac.kr\n\n⚫https://google.github.io/mediapipe/\n120\nObject detection - MediaPipe\njaekoo@kookmin.ac.kr\n\n⚫Applications\n121\nObject detection - MediaPipe\njaekoo@kookmin.ac.kr\n\n⚫With programming materials\n122\nHands-on\njaekoo@kookmin.ac.kr\n\n⚫Recurrent neural networks\n⚫Transformer\n⚫Hands-on\n123\nDeep learning for sequence data (time series)\njaekoo@kookmin.ac.kr\n\n⚫Recurrent neural networks (RNNs) process sequences\nsequences == a variable-length input having temporal features (e.g., context dependence)\n▪e.g., time series data\n→recurrent connections (recurrent edges):",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 31,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 917
+      },
+      "faiss_idx": 31
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_32": {
+      "text": "tures (e.g., context dependence)\n▪e.g., time series data\n→recurrent connections (recurrent edges): \nconnections between neurons that are located in same layer \n124\nRecurrent neural networks\njaekoo@kookmin.ac.kr\n\n⚫A single neuron, fully connected recurrent layer\ncomputational graph (structure) in RNNs\n▪forward network\n– a toy example\n125\nRecurrent neural networks\nℎ𝑡= 𝑓𝑤(ℎ𝑡−1, x𝑡) = tanh(𝑊ℎℎℎ𝑡−1 + 𝑊xℎx𝑡)\n𝑦𝑡= 𝑊ℎ𝑦ℎ𝑡\nunfold\nx𝑡\n𝑦𝑡\nℎ𝑡\n𝑊ℎℎ\n𝑊xℎ\n𝑊ℎ𝑦\njaekoo@kookmin.ac.kr\n\n⚫Variation of RNNs\n126\nRecurrent neural networks\ne.g., speech to text\ne.g., translation\ne.g., image captioning\ne.g., text classification\njaekoo@kookmin.ac.kr\n\n⚫Details of feedforward\nsequential input\ntanh function\npropagating and updating hidden state \n127\nRecurrent neural networks\njaekoo@kookmin.ac.kr\n\n⚫A single neuron, fully connected recurrent layer\ncomputational graph in RNNs\n▪backward network\n– backpropagation through time (BPTT): computing gradient through RNN",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 32,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 941
+      },
+      "faiss_idx": 32
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_33": {
+      "text": "aph in RNNs\n▪backward network\n– backpropagation through time (BPTT): computing gradient through RNN\n– vanishing gradients: sensitivity decay exponentially over time\n128\nRecurrent neural networks\ntruncated BPTT\njaekoo@kookmin.ac.kr\n\n⚫RNNs\n1.\nprocesses information from input by incorporating it into hidden state that is \npassed forward through time\n2. forward through entire sequence to compute loss then backward through entire \nsequence to compute gradient\n129\nRecurrent neural networks\npredicted value: black\nerror: yellow\ngradient: orange\njaekoo@kookmin.ac.kr\n\n⚫Long short-term memory (LSTM)\nallow the networks to accumulate information over a long duration\n▪f: forget (keep) gate\n▪i: input (write) gate\n▪o: output gate\n▪෤c: memory cell\n130\nRecurrent neural networks\njaekoo@kookmin.ac.kr\n\nin LSTM, f: forget (keep) gate\n131\nRecurrent neural networks\njaekoo@kookmin.ac.kr\n\nin LSTM, i: input (write) gate",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 33,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 909
+      },
+      "faiss_idx": 33
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_34": {
+      "text": "get (keep) gate\n131\nRecurrent neural networks\njaekoo@kookmin.ac.kr\n\nin LSTM, i: input (write) gate\nRecurrent neural networks\n132\njaekoo@kookmin.ac.kr\n\nin LSTM, ෤c: memory cell\n133\nRecurrent neural networks\njaekoo@kookmin.ac.kr\n\nin LSTM, o: output gate\nRecurrent neural networks\n134\njaekoo@kookmin.ac.kr\n\n⚫Flow of gradient in LSTM\n135\nRecurrent neural networks\njaekoo@kookmin.ac.kr\n\n⚫Variation of LSTMs\n136\nRecurrent neural networks\nstacked LSTM\ndensely connected LSTM\njaekoo@kookmin.ac.kr\n\n⚫in LSTM, example of image captioning\n137\nRecurrent neural networks\njaekoo@kookmin.ac.kr\n\n⚫LSTM vs. RNN\n⚫Comparison between CNNs and RNNs\n138\nRecurrent neural networks\nCNNs\nRNNs\nwhat for\ngrid of values\nsequence of values\nextracting \nspatial features\ntemporal features\nsharing parameters\nsame filter across local regions\nsame weights across time steps\njaekoo@kookmin.ac.kr\n\nTransformer\njaekoo@kookmin.ac.kr\n\nTransformer",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 34,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 911
+      },
+      "faiss_idx": 34
+    },
+    "af887d22-6b67-4286-a4c1-93b73e756036_35": {
+      "text": "same weights across time steps\njaekoo@kookmin.ac.kr\n\nTransformer\njaekoo@kookmin.ac.kr\n\nTransformer\njaekoo@kookmin.ac.kr\n\n⚫With programming materials\n141\nHands-on\njaekoo@kookmin.ac.kr\n\n⚫Deep (representation) learning have achieved remarkable improvement\ne.g., computer vision, language understanding, …\n⚫Deep change is started by deep learning!\ndeep neural network == (linear + nonlinear)*M == universal approximator\nchange of paradigm →the deep learning revolution\n⚫Deep learning has power and limits\nrapidly changing, must stay in tune!!\n⚫Deep learning \nenablerOther fields\nConclusion\n142\njaekoo@kookmin.ac.kr\n\n⚫If you have any comments, \nsuggestions or questions then please do let me know!\n⚫For more information, contact me \njaekoo@kookmin.ac.kr\nData Science Laboratory (http://data.snu.ac.kr)\nElectrical and Computer Engineering\nSeoul National University\nQuestion and Answer\n143\nThank you ☺\njaekoo@kookmin.ac.kr",
+      "metadata": {
+        "document_id": "af887d22-6b67-4286-a4c1-93b73e756036",
+        "source": "ì__í__í_¸ì_¨ì_´ì_µí_©ìµ_ì_ ê¸°ì_  ê°_ì__ì__ë£_.pdf",
+        "chunk_index": 35,
+        "total_chunks": 37,
+        "upload_timestamp": "2025-06-09T17:19:56.816019",
+        "text_length": 919
+      },
+      "faiss_idx": 35
+    }
+  },
+  "id_map": {
+    "0": "af887d22-6b67-4286-a4c1-93b73e756036_0",
+    "1": "af887d22-6b67-4286-a4c1-93b73e756036_1",
+    "2": "af887d22-6b67-4286-a4c1-93b73e756036_2",
+    "3": "af887d22-6b67-4286-a4c1-93b73e756036_3",
+    "4": "af887d22-6b67-4286-a4c1-93b73e756036_4",
+    "5": "af887d22-6b67-4286-a4c1-93b73e756036_5",
+    "6": "af887d22-6b67-4286-a4c1-93b73e756036_6",
+    "7": "af887d22-6b67-4286-a4c1-93b73e756036_7",
+    "8": "af887d22-6b67-4286-a4c1-93b73e756036_8",
+    "9": "af887d22-6b67-4286-a4c1-93b73e756036_9",
+    "10": "af887d22-6b67-4286-a4c1-93b73e756036_10",
+    "11": "af887d22-6b67-4286-a4c1-93b73e756036_11",
+    "12": "af887d22-6b67-4286-a4c1-93b73e756036_12",
+    "13": "af887d22-6b67-4286-a4c1-93b73e756036_13",
+    "14": "af887d22-6b67-4286-a4c1-93b73e756036_14",
+    "15": "af887d22-6b67-4286-a4c1-93b73e756036_15",
+    "16": "af887d22-6b67-4286-a4c1-93b73e756036_16",
+    "17": "af887d22-6b67-4286-a4c1-93b73e756036_17",
+    "18": "af887d22-6b67-4286-a4c1-93b73e756036_18",
+    "19": "af887d22-6b67-4286-a4c1-93b73e756036_19",
+    "20": "af887d22-6b67-4286-a4c1-93b73e756036_20",
+    "21": "af887d22-6b67-4286-a4c1-93b73e756036_21",
+    "22": "af887d22-6b67-4286-a4c1-93b73e756036_22",
+    "23": "af887d22-6b67-4286-a4c1-93b73e756036_23",
+    "24": "af887d22-6b67-4286-a4c1-93b73e756036_24",
+    "25": "af887d22-6b67-4286-a4c1-93b73e756036_25",
+    "26": "af887d22-6b67-4286-a4c1-93b73e756036_26",
+    "27": "af887d22-6b67-4286-a4c1-93b73e756036_27",
+    "28": "af887d22-6b67-4286-a4c1-93b73e756036_28",
+    "29": "af887d22-6b67-4286-a4c1-93b73e756036_29",
+    "30": "af887d22-6b67-4286-a4c1-93b73e756036_30",
+    "31": "af887d22-6b67-4286-a4c1-93b73e756036_31",
+    "32": "af887d22-6b67-4286-a4c1-93b73e756036_32",
+    "33": "af887d22-6b67-4286-a4c1-93b73e756036_33",
+    "34": "af887d22-6b67-4286-a4c1-93b73e756036_34",
+    "35": "af887d22-6b67-4286-a4c1-93b73e756036_35"
+  },
+  "next_id": 36
+}
