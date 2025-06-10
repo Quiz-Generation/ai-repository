@@ -1,10 +1,13 @@
 """
 📝 Text Helper
 """
+import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from ..models.document_model import DocumentChunk
 from ..core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class TextHelper:
@@ -81,31 +84,56 @@ class TextHelper:
         chunk_overlap: int = 200
     ) -> List[str]:
         """텍스트를 단순 문자열 청크로 분할 (DocumentChunk 없이)"""
-        chunks = []
-        text_length = len(text)
-        start_index = 0
+        try:
+            logger.info(f"📝 텍스트 청킹 시작: 텍스트 길이={len(text)}, 청크크기={chunk_size}, 오버랩={chunk_overlap}")
 
-        while start_index < text_length:
-            end_index = min(start_index + chunk_size, text_length)
+            if not text or not text.strip():
+                logger.warning("⚠️ 빈 텍스트입니다.")
+                return []
 
-            # 오버랩을 위해 문장 경계에서 자르기 시도
-            if end_index < text_length:
-                last_sentence_end = text.rfind('.', start_index, end_index)
-                last_newline = text.rfind('\n', start_index, end_index)
-                boundary = max(last_sentence_end, last_newline)
-                if boundary > start_index:
-                    end_index = boundary + 1
+            chunks = []
+            text_length = len(text)
+            start_index = 0
+            loop_count = 0  # 무한루프 방지용 카운터
 
-            chunk_content = text[start_index:end_index].strip()
-            if chunk_content:
-                chunks.append(chunk_content)
+            while start_index < text_length and loop_count < 1000:  # 최대 1000번 반복 제한
+                loop_count += 1
+                end_index = min(start_index + chunk_size, text_length)
 
-            # 다음 청크 시작점 계산
-            start_index = max(0, end_index - chunk_overlap)
-            if start_index >= end_index:
-                break
+                # 오버랩을 위해 문장 경계에서 자르기 시도
+                if end_index < text_length:
+                    last_sentence_end = text.rfind('.', start_index, end_index)
+                    last_newline = text.rfind('\n', start_index, end_index)
+                    boundary = max(last_sentence_end, last_newline)
+                    if boundary > start_index:
+                        end_index = boundary + 1
 
-        return chunks
+                chunk_content = text[start_index:end_index].strip()
+                if chunk_content:
+                    chunks.append(chunk_content)
+                    logger.debug(f"청크 {len(chunks)}: 시작={start_index}, 끝={end_index}, 길이={len(chunk_content)}")
+
+                # 다음 청크 시작점 계산
+                next_start = max(start_index + 1, end_index - chunk_overlap)  # 최소 1글자씩 진행
+
+                if next_start >= text_length:  # 텍스트 끝에 도달
+                    break
+
+                if next_start <= start_index:  # 진행되지 않는 경우
+                    logger.warning(f"⚠️ 청킹에서 진행되지 않음: start_index={start_index}, next_start={next_start}")
+                    break
+
+                start_index = next_start
+
+            if loop_count >= 1000:
+                logger.error("❌ 청킹에서 무한루프 감지됨")
+
+            logger.info(f"✅ 텍스트 청킹 완료: {len(chunks)}개 청크 생성")
+            return chunks
+
+        except Exception as e:
+            logger.error(f"❌ 텍스트 청킹 실패: {e}")
+            return []
 
     def clean_text(self, text: str) -> str:
         """텍스트 정리"""

@@ -38,6 +38,10 @@ class DocumentService:
 
     async def upload_document(self, file: UploadFile) -> DocumentUploadResponse:
         """문서 업로드 및 처리 (동적 PDF 로더 사용)"""
+        # 초기 변수 설정
+        optimal_loader_type = "pymupdf"  # 기본값
+        pdf_content = None
+
         try:
             logger.info(f"📄 문서 업로드 시작: {file.filename}")
 
@@ -52,8 +56,8 @@ class DocumentService:
                     chunks_created=0,
                     created_at=datetime.now(),
                     metadata={
-                    "loader_used": "pymupdf",
-                    "analysis_result": {}
+                        "loader_used": optimal_loader_type,
+                        "analysis_result": {}
                     }
                 )
 
@@ -69,6 +73,8 @@ class DocumentService:
 
             # 5. 텍스트 청킹
             chunks = await self._create_text_chunks(pdf_content.text)
+            logger.info(f"📝 청킹 완료: {len(chunks)}개 청크 생성됨")
+
 
             # 6. 벡터화 및 저장 (TODO: 실제 구현)
             # vector_ids = await self._vectorize_and_store(chunks)
@@ -83,7 +89,7 @@ class DocumentService:
                 created_at=datetime.now(),
                 metadata={
                     "loader_used": optimal_loader_type,
-                    "analysis_result": pdf_content.metadata
+                    "analysis_result": pdf_content.metadata if pdf_content else {}
                 }
             )
 
@@ -99,7 +105,7 @@ class DocumentService:
                 created_at=datetime.now(),
                 metadata={
                     "loader_used": optimal_loader_type,
-                    "analysis_result": pdf_content.metadata
+                    "analysis_result": pdf_content.metadata if pdf_content else {}
                 }
             )
 
