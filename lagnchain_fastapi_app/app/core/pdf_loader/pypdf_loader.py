@@ -56,7 +56,7 @@ class PyPDFLoader(PDFLoader):
             except Exception as e:
                 logger.warning(f"메타데이터 추출 실패: {e}")
 
-            logger.info(f"✅ PyPDF로 {len(pdf_reader.pages)}페이지 PDF 처리 완료")
+            logger.info(f"SUCCESS PyPDF로 {len(pdf_reader.pages)}페이지 PDF 처리 완료")
 
             return PDFContent(
                 text=text.strip(),
@@ -66,10 +66,10 @@ class PyPDFLoader(PDFLoader):
             )
 
         except ImportError:
-            logger.error("❌ PyPDF2 라이브러리가 설치되지 않았습니다. 'pip install PyPDF2' 실행하세요.")
+            logger.error("ERROR PyPDF2 라이브러리가 설치되지 않았습니다. 'pip install PyPDF2' 실행하세요.")
             raise ImportError("PyPDF2 라이브러리가 필요합니다")
         except Exception as e:
-            logger.error(f"❌ PyPDF 텍스트 추출 실패: {e}")
+            logger.error(f"ERROR PyPDF 텍스트 추출 실패: {e}")
             raise
 
     async def extract_text_from_path(self, file_path: str) -> PDFContent:

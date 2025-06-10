@@ -65,7 +65,7 @@ class PDFMinerLoader(PDFLoader):
                 "supports_korean": True
             }
 
-            logger.info(f"✅ PDFMiner로 {page_count}페이지, {len(fonts_used)}개 폰트, {char_count}자 처리 완료")
+            logger.info(f"SUCCESS PDFMiner로 {page_count}페이지, {len(fonts_used)}개 폰트, {char_count}자 처리 완료")
 
             # 포맷된 텍스트가 있으면 사용, 없으면 기본 텍스트 사용
             final_text = formatted_text.strip() if formatted_text.strip() else text.strip()
@@ -78,10 +78,10 @@ class PDFMinerLoader(PDFLoader):
             )
 
         except ImportError:
-            logger.error("❌ pdfminer.six 라이브러리가 설치되지 않았습니다. 'pip install pdfminer.six' 실행하세요.")
+            logger.error("ERROR pdfminer.six 라이브러리가 설치되지 않았습니다. 'pip install pdfminer.six' 실행하세요.")
             raise ImportError("pdfminer.six 라이브러리가 필요합니다")
         except Exception as e:
-            logger.error(f"❌ PDFMiner 텍스트 추출 실패: {e}")
+            logger.error(f"ERROR PDFMiner 텍스트 추출 실패: {e}")
             raise
 
     async def extract_text_from_path(self, file_path: str) -> PDFContent:

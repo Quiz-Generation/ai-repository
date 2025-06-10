@@ -9,6 +9,9 @@ pdfplumber==0.10.3
 PyPDF2==3.0.1
 pdfminer.six==20231228
 
+# 언어 감지
+langdetect==1.0.9
+
 # 임베딩 및 텍스트 처리
 sentence-transformers==2.2.2
 langchain==0.1.0

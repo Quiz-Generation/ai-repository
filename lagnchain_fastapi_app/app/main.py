@@ -45,7 +45,7 @@ app.include_router(document_routes.router, prefix="/api/v1")
 @app.get("/health")
 async def health_check():
     """시스템 상태 확인"""
-    logger.info("✅ 헬스체크 요청 받음")
+    logger.info("HEALTH 헬스체크 요청 받음")
     return {
         "status": "healthy",
         "message": "API가 정상적으로 작동 중입니다."
@@ -53,7 +53,7 @@ async def health_check():
 
 # 개발 서버 실행
 if __name__ == "__main__":
-    logger.info("🚀 서버 시작")
+    logger.info("STARTUP 서버 시작")
     uvicorn.run(
         "main:app",
         host="0.0.0.0",

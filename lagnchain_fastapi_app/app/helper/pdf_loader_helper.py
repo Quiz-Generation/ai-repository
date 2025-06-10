@@ -1,11 +1,12 @@
 """
-📄 PDF Loader Selection Helper
+🔍 PDF Loader Selection Helper
 """
 import re
 import logging
 from typing import Dict, Any, Optional
 from fastapi import UploadFile
 from dataclasses import dataclass
+from ..core.pdf_loader.factory import PDFLoaderFactory
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +32,19 @@ class PDFLoaderHelper:
     async def analyze_pdf_characteristics(file: UploadFile) -> PDFAnalysisResult:
         """PDF 파일 특성 분석"""
         try:
-            # 파일 크기 기반 분석
             file_size = file.size or 0
             estimated_pages = max(1, file_size // (50 * 1024))  # 대략적인 페이지 수 추정
 
-            # 파일명 기반 언어 추정
+            # 파일명 기반 1차 언어 추정
             filename = file.filename or ""
-            language = PDFLoaderHelper._detect_language_from_filename(filename)
+            filename_language = PDFLoaderHelper._detect_language_from_filename(filename)
+
+            # 실제 텍스트 기반 언어 감지
+            text_language = await PDFLoaderHelper._detect_language_from_content(file)
+
+            # 파일명과 텍스트 분석 결과 종합
+            language = PDFLoaderHelper._combine_language_results(filename_language, text_language)
+            logger.info(f"STEP3-1 언어 감지 완료: 파일명={filename_language}, 텍스트={text_language}, 최종={language}")
 
             # 파일 크기 기반 복잡도 추정
             complexity = PDFLoaderHelper._estimate_complexity_from_size(file_size)
@@ -68,11 +75,11 @@ class PDFLoaderHelper:
             recommended_loader = PDFLoaderHelper._recommend_loader(analysis_result)
             analysis_result.recommended_loader = recommended_loader
 
-            logger.info(f"✅ PDF 분석 완료: {filename} -> {recommended_loader}")
+            logger.info(f"STEP3-2 PDF 분석 완료: {filename} -> {recommended_loader}")
             return analysis_result
 
         except Exception as e:
-            logger.error(f"❌ PDF 분석 실패: {e}")
+            logger.error(f"ERROR PDF 분석 실패: {e}")
             # 기본값 반환
             return PDFAnalysisResult(
                 language="unknown",
@@ -87,29 +94,148 @@ class PDFLoaderHelper:
             )
 
     @staticmethod
+    async def _detect_language_from_content(file: UploadFile) -> str:
+        """PDF 텍스트 내용에서 언어 감지 - 단순화된 버전"""
+        try:
+            # 파일 내용 읽기
+            file_content = await file.read()
+
+            # 파일 포인터 원위치
+            try:
+                await file.seek(0)
+            except:
+                pass
+
+            if not file_content:
+                logger.warning("WARNING 파일 내용이 비어있습니다")
+                return "unknown"
+
+            # PyMuPDF로 빠른 텍스트 추출
+            try:
+                import fitz
+                doc = fitz.open(stream=file_content, filetype="pdf")
+
+                if len(doc) == 0:
+                    logger.warning("WARNING PDF 페이지가 없습니다")
+                    return "unknown"
+
+                # 첫 페이지 텍스트 추출
+                page = doc.load_page(0)
+                sample_text = page.get_text()[:1000]  # 1000자만
+                doc.close()
+
+                if not sample_text.strip():
+                    logger.warning("WARNING 추출된 텍스트가 비어있습니다")
+                    return "unknown"
+
+                # 한글/영어 문자 카운트
+                korean_chars = len(re.findall(r'[가-힣]', sample_text))
+                english_chars = len(re.findall(r'[a-zA-Z]', sample_text))
+
+                logger.info(f"STEP3-1d 텍스트 분석: 한글={korean_chars}자, 영어={english_chars}자")
+
+                # 간단한 규칙 기반 판단
+                if korean_chars > 20:  # 한글이 20자 이상이면
+                    return "korean"
+                elif korean_chars > 5 and english_chars < korean_chars * 3:  # 한글이 조금이라도 있고 영어가 많지 않으면
+                    return "korean"
+                elif english_chars > 50:  # 영어가 50자 이상이면
+                    return "english"
+                else:
+                    return "unknown"
+
+            except Exception as e:
+                logger.warning(f"WARNING 텍스트 추출 실패: {e}")
+                return "unknown"
+
+        except Exception as e:
+            logger.error(f"ERROR 언어 감지 실패: {e}")
+            return "unknown"
+
+    @staticmethod
+    def _detect_language_with_langdetect(text: str) -> str:
+        """langdetect를 사용한 언어 감지"""
+        try:
+            from langdetect import detect, LangDetectException
+
+            # 텍스트 정리
+            clean_text = re.sub(r'[^\w\s가-힣]', ' ', text)
+            clean_text = ' '.join(clean_text.split())
+
+            if len(clean_text) < 20:  # 너무 짧으면 감지 어려움
+                return "unknown"
+
+            detected = detect(clean_text)
+
+            # 언어 코드를 일반적인 이름으로 변환
+            language_map = {
+                'ko': 'korean',
+                'en': 'english',
+                'ja': 'japanese',
+                'zh-cn': 'chinese',
+                'zh-tw': 'chinese'
+            }
+
+            return language_map.get(detected, detected)
+
+        except (ImportError, LangDetectException) as e:
+            logger.warning(f"WARNING langdetect 실패: {e}")
+            return "unknown"
+        except Exception as e:
+            logger.warning(f"WARNING 언어 감지 오류: {e}")
+            return "unknown"
+
+    @staticmethod
+    def _combine_language_results(filename_lang: str, text_lang: str) -> str:
+        """파일명과 텍스트 분석 결과 종합"""
+        logger.info(f"STEP3-1c 언어 결합: filename={filename_lang}, text={text_lang}")
+
+        # 파일명에서 korean이 감지되면 우선시 (한글 파일명은 확실함)
+        if filename_lang == "korean":
+            return "korean"
+        # 텍스트 분석 결과를 우선시
+        elif text_lang in ["korean", "english", "mixed"]:
+            return text_lang
+        elif filename_lang in ["english", "mixed"]:
+            return filename_lang
+        else:
+            # 둘 다 unknown이면 기본값으로 english 설정
+            return "english"
+
+    @staticmethod
     def _detect_language_from_filename(filename: str) -> str:
         """파일명에서 언어 감지"""
+        if not filename:
+            return "unknown"
+
+        logger.info(f"STEP3-1b 파일명 분석 시작: '{filename}'")
+
+        # 1. 파일명에 한글 문자가 있는지 직접 체크
+        korean_chars = len(re.findall(r'[가-힣]', filename))
+        logger.info(f"STEP3-1b 파일명에서 한글 문자 {korean_chars}개 발견")
+
+        if korean_chars > 0:
+            logger.info(f"STEP3-1b 한글 문자 발견으로 korean 반환")
+            return "korean"
+
+        # 2. 한글 관련 키워드 체크
         filename_lower = filename.lower()
-
-        # 한글 관련 키워드
-        korean_keywords = ['한글', '한국', 'korean', 'kr', '보고서', '문서', '계약서', '제안서']
-
-        # 영어 관련 키워드
-        english_keywords = ['english', 'en', 'report', 'document', 'contract', 'proposal']
-
-        # 테이블 관련 키워드
-        table_keywords = ['table', '표', 'chart', '차트', 'data', '데이터']
+        korean_keywords = ['한글', '한국', 'korean', 'kr', '보고서', '문서', '계약서', '제안서', '강의', '자료']
+        english_keywords = ['english', 'en', 'report', 'document', 'contract', 'proposal', 'lecture', 'material']
 
         korean_score = sum(1 for keyword in korean_keywords if keyword in filename_lower)
         english_score = sum(1 for keyword in english_keywords if keyword in filename_lower)
 
-        if korean_score > english_score:
+        logger.info(f"STEP3-1b 키워드 점수: korean={korean_score}, english={english_score}")
+
+        if korean_score > 0:
+            logger.info(f"STEP3-1b 한글 키워드 발견으로 korean 반환")
             return "korean"
-        elif english_score > korean_score:
+        elif english_score > 0:
+            logger.info(f"STEP3-1b 영어 키워드 발견으로 english 반환")
             return "english"
-        elif korean_score > 0 and english_score > 0:
-            return "mixed"
         else:
+            logger.info(f"STEP3-1b 키워드 없음으로 unknown 반환")
             return "unknown"
 
     @staticmethod

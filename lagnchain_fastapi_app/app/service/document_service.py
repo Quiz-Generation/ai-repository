@@ -43,7 +43,7 @@ class DocumentService:
         pdf_content = None
 
         try:
-            logger.info(f"📄 문서 업로드 시작: {file.filename}")
+            logger.info(f"STEP1 문서 업로드 시작: {file.filename}")
 
             # 1. 파일 검증
             if not self._validate_file(file):
@@ -63,7 +63,7 @@ class DocumentService:
 
             # 2. 동적 PDF 로더 선택
             optimal_loader_type = await self._select_optimal_pdf_loader(file)
-            logger.info(f"🎯 선택된 PDF 로더: {optimal_loader_type}")
+            logger.info(f"STEP2 선택된 PDF 로더: {optimal_loader_type}")
 
             # 3. 선택된 로더로 PDF 처리
             pdf_content = await self._extract_pdf_with_selected_loader(file, optimal_loader_type)
@@ -73,8 +73,7 @@ class DocumentService:
 
             # 5. 텍스트 청킹
             chunks = await self._create_text_chunks(pdf_content.text)
-            logger.info(f"📝 청킹 완료: {len(chunks)}개 청크 생성됨")
-
+            logger.info(f"STEP5 청킹 완료: {len(chunks)}개 청크 생성됨")
 
             # 6. 벡터화 및 저장 (TODO: 실제 구현)
             # vector_ids = await self._vectorize_and_store(chunks)
@@ -84,7 +83,7 @@ class DocumentService:
                 filename=file.filename or "unknown.pdf",
                 file_size=file.size or 0,
                 status="completed",
-                message=f"✅ {optimal_loader_type} 로더로 성공적으로 처리됨",
+                message=f"SUCCESS {optimal_loader_type} 로더로 성공적으로 처리됨",
                 chunks_created=len(chunks),
                 created_at=datetime.now(),
                 metadata={
@@ -94,7 +93,7 @@ class DocumentService:
             )
 
         except Exception as e:
-            logger.error(f"❌ 문서 업로드 실패: {e}")
+            logger.error(f"ERROR 문서 업로드 실패: {e}")
             return DocumentUploadResponse(
                 id="",
                 filename=file.filename or "unknown.pdf",
@@ -112,13 +111,13 @@ class DocumentService:
     async def _select_optimal_pdf_loader(self, file: UploadFile) -> str:
         """동적으로 최적의 PDF 로더 선택 (핵심 비즈니스 로직)"""
         try:
-            logger.info("🔍 PDF 파일 특성 분석 중...")
+            logger.info("STEP3 PDF 파일 특성 분석 중...")
 
             # Helper에서 세부 분석 로직 호출
             analysis_result = await PDFLoaderHelper.analyze_pdf_characteristics(file)
 
             logger.info(f"""
-            📊 PDF 분석 결과:
+            STEP3 PDF 분석 결과:
             - 언어: {analysis_result.language}
             - 테이블 존재: {analysis_result.has_tables}
             - 이미지 존재: {analysis_result.has_images}
@@ -133,8 +132,8 @@ class DocumentService:
             return analysis_result.recommended_loader
 
         except Exception as e:
-            logger.error(f"❌ PDF 로더 선택 실패: {e}")
-            logger.info("🔄 기본 로더(PyMuPDF) 사용")
+            logger.error(f"ERROR PDF 로더 선택 실패: {e}")
+            logger.info("FALLBACK 기본 로더(PyMuPDF) 사용")
             return "pymupdf"
 
     async def _extract_pdf_with_selected_loader(self, file: UploadFile, loader_type: str):
@@ -150,15 +149,15 @@ class DocumentService:
             # 텍스트 추출
             pdf_content = await pdf_loader.extract_text_from_file(file)
 
-            logger.info(f"✅ {loader_type} 로더로 텍스트 추출 완료")
+            logger.info(f"STEP4 {loader_type} 로더로 텍스트 추출 완료")
             return pdf_content
 
         except Exception as e:
-            logger.error(f"❌ PDF 추출 실패 ({loader_type}): {e}")
+            logger.error(f"ERROR PDF 추출 실패 ({loader_type}): {e}")
 
             # 실패 시 fallback 로더 시도
             if loader_type != "pymupdf":
-                logger.info("🔄 PyMuPDF 로더로 재시도")
+                logger.info("FALLBACK PyMuPDF 로더로 재시도")
                 fallback_loader = PDFLoaderFactory.create("pymupdf")
                 return await fallback_loader.extract_text_from_file(file)
             else:
@@ -172,7 +171,7 @@ class DocumentService:
             chunk_size=settings.CHUNK_SIZE,
             chunk_overlap=settings.CHUNK_OVERLAP
         )
-        logger.info(f"📝 텍스트 청킹 완료: {len(chunks)}개 청크 생성")
+        logger.info(f"STEP5 텍스트 청킹 완료: {len(chunks)}개 청크 생성")
         return chunks
 
     def _validate_file(self, file: UploadFile) -> bool:
@@ -198,7 +197,7 @@ class DocumentService:
         # 디렉토리 생성
         os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
-        logger.info(f"💾 파일 저장: {save_path}")
+        logger.info(f"STEP4a 파일 저장: {save_path}")
         return save_path
 
     async def get_loader_selection_info(self) -> Dict[str, Any]:

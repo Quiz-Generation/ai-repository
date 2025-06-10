@@ -36,20 +36,20 @@ class PyMuPDFLoader(PDFLoader):
 
             # 메타데이터 추출
             metadata = {
-                "title": doc.metadata.get("title", ""),
-                "author": doc.metadata.get("author", ""),
-                "subject": doc.metadata.get("subject", ""),
-                "creator": doc.metadata.get("creator", ""),
-                "producer": doc.metadata.get("producer", ""),
-                "creation_date": doc.metadata.get("creationDate"),
-                "modification_date": doc.metadata.get("modDate"),
+                "title": doc.metadata.get("title", "") if doc.metadata else "",
+                "author": doc.metadata.get("author", "") if doc.metadata else "",
+                "subject": doc.metadata.get("subject", "") if doc.metadata else "",
+                "creator": doc.metadata.get("creator", "") if doc.metadata else "",
+                "producer": doc.metadata.get("producer", "") if doc.metadata else "",
+                "creation_date": doc.metadata.get("creationDate") if doc.metadata else None,
+                "modification_date": doc.metadata.get("modDate") if doc.metadata else None,
                 "total_pages": len(doc),
                 "loader": "pymupdf"
             }
 
             doc.close()
 
-            logger.info(f"✅ PyMuPDF로 {len(doc)}페이지 PDF 처리 완료")
+            logger.info(f"SUCCESS PyMuPDF로 {len(doc)}페이지 PDF 처리 완료")
 
             return PDFContent(
                 text=text.strip(),
@@ -59,10 +59,10 @@ class PyMuPDFLoader(PDFLoader):
             )
 
         except ImportError:
-            logger.error("❌ PyMuPDF 라이브러리가 설치되지 않았습니다. 'pip install PyMuPDF' 실행하세요.")
+            logger.error("ERROR PyMuPDF 라이브러리가 설치되지 않았습니다. 'pip install PyMuPDF' 실행하세요.")
             raise ImportError("PyMuPDF 라이브러리가 필요합니다")
         except Exception as e:
-            logger.error(f"❌ PyMuPDF 텍스트 추출 실패: {e}")
+            logger.error(f"ERROR PyMuPDF 텍스트 추출 실패: {e}")
             raise
 
     async def extract_text_from_path(self, file_path: str) -> PDFContent:
@@ -82,13 +82,13 @@ class PyMuPDFLoader(PDFLoader):
 
             # 메타데이터 추출
             metadata = {
-                "title": doc.metadata.get("title", ""),
-                "author": doc.metadata.get("author", ""),
-                "subject": doc.metadata.get("subject", ""),
-                "creator": doc.metadata.get("creator", ""),
-                "producer": doc.metadata.get("producer", ""),
-                "creation_date": doc.metadata.get("creationDate"),
-                "modification_date": doc.metadata.get("modDate"),
+                "title": doc.metadata.get("title", "") if doc.metadata else "",
+                "author": doc.metadata.get("author", "") if doc.metadata else "",
+                "subject": doc.metadata.get("subject", "") if doc.metadata else "",
+                "creator": doc.metadata.get("creator", "") if doc.metadata else "",
+                "producer": doc.metadata.get("producer", "") if doc.metadata else "",
+                "creation_date": doc.metadata.get("creationDate") if doc.metadata else None,
+                "modification_date": doc.metadata.get("modDate") if doc.metadata else None,
                 "total_pages": len(doc),
                 "loader": "pymupdf",
                 "file_path": file_path
@@ -111,10 +111,10 @@ class PyMuPDFLoader(PDFLoader):
             )
 
         except ImportError:
-            logger.error("❌ PyMuPDF 라이브러리가 설치되지 않았습니다")
+            logger.error("ERROR PyMuPDF 라이브러리가 설치되지 않았습니다")
             raise
         except Exception as e:
-            logger.error(f"❌ PyMuPDF 파일 경로 추출 실패: {e}")
+            logger.error("ERROR PyMuPDF 파일 경로 추출 실패: {e}")
             raise
 
     def validate_file(self, file: UploadFile) -> bool:

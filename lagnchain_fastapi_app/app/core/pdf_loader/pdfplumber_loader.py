@@ -69,7 +69,7 @@ class PDFPlumberLoader(PDFLoader):
                 except:
                     pass
 
-                logger.info(f"✅ PDFPlumber로 {len(pdf.pages)}페이지, {tables_found}개 테이블 처리 완료")
+                logger.info(f"SUCCESS PDFPlumber로 {len(pdf.pages)}페이지, {tables_found}개 테이블 처리 완료")
 
                 return PDFContent(
                     text=text.strip(),
@@ -79,10 +79,10 @@ class PDFPlumberLoader(PDFLoader):
                 )
 
         except ImportError:
-            logger.error("❌ pdfplumber 라이브러리가 설치되지 않았습니다. 'pip install pdfplumber' 실행하세요.")
+            logger.error("ERROR pdfplumber 라이브러리가 설치되지 않았습니다. 'pip install pdfplumber' 실행하세요.")
             raise ImportError("pdfplumber 라이브러리가 필요합니다")
         except Exception as e:
-            logger.error(f"❌ PDFPlumber 텍스트 추출 실패: {e}")
+            logger.error(f"ERROR PDFPlumber 텍스트 추출 실패: {e}")
             raise
 
     async def extract_text_from_path(self, file_path: str) -> PDFContent:

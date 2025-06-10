@@ -85,10 +85,10 @@ class TextHelper:
     ) -> List[str]:
         """텍스트를 단순 문자열 청크로 분할 (DocumentChunk 없이)"""
         try:
-            logger.info(f"📝 텍스트 청킹 시작: 텍스트 길이={len(text)}, 청크크기={chunk_size}, 오버랩={chunk_overlap}")
+            logger.info(f"STEP5a 텍스트 청킹 시작: 텍스트 길이={len(text)}, 청크크기={chunk_size}, 오버랩={chunk_overlap}")
 
             if not text or not text.strip():
-                logger.warning("⚠️ 빈 텍스트입니다.")
+                logger.warning("WARNING 빈 텍스트입니다.")
                 return []
 
             chunks = []
@@ -111,7 +111,7 @@ class TextHelper:
                 chunk_content = text[start_index:end_index].strip()
                 if chunk_content:
                     chunks.append(chunk_content)
-                    logger.debug(f"청크 {len(chunks)}: 시작={start_index}, 끝={end_index}, 길이={len(chunk_content)}")
+                    logger.debug(f"STEP5a 청크 {len(chunks)}: 시작={start_index}, 끝={end_index}, 길이={len(chunk_content)}")
 
                 # 다음 청크 시작점 계산
                 next_start = max(start_index + 1, end_index - chunk_overlap)  # 최소 1글자씩 진행
@@ -120,19 +120,19 @@ class TextHelper:
                     break
 
                 if next_start <= start_index:  # 진행되지 않는 경우
-                    logger.warning(f"⚠️ 청킹에서 진행되지 않음: start_index={start_index}, next_start={next_start}")
+                    logger.warning(f"WARNING 청킹에서 진행되지 않음: start_index={start_index}, next_start={next_start}")
                     break
 
                 start_index = next_start
 
             if loop_count >= 1000:
-                logger.error("❌ 청킹에서 무한루프 감지됨")
+                logger.error("ERROR 청킹에서 무한루프 감지됨")
 
-            logger.info(f"✅ 텍스트 청킹 완료: {len(chunks)}개 청크 생성")
+            logger.info(f"STEP5b 텍스트 청킹 완료: {len(chunks)}개 청크 생성")
             return chunks
 
         except Exception as e:
-            logger.error(f"❌ 텍스트 청킹 실패: {e}")
+            logger.error(f"ERROR 텍스트 청킹 실패: {e}")
             return []
 
     def clean_text(self, text: str) -> str:
