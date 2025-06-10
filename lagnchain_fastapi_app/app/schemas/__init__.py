@@ -1,1 +1,3 @@
-
+"""
+📋 API Schemas Package
+"""
