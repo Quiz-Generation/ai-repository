@@ -1,27 +1,37 @@
+# FastAPI 관련
 fastapi==0.104.1
-uvicorn==0.24.0
-pydantic==2.5.0
-pytest==7.4.0
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# PDF 처리 라이브러리들
+PyMuPDF==1.23.8  # fitz
+pdfplumber==0.10.3
 PyPDF2==3.0.1
-PyMuPDF==1.26.0
-langchain-community==0.0.13
-# 퀴즈 생성 최적화를 위한 PDF 라이브러리
 pdfminer.six==20221105
-pdfplumber==0.10.0
 
-# LLM 서비스 (퀴즈 생성)
-openai>=1.0.0
-anthropic>=0.7.0  # 선택사항
+# 언어 감지
+langdetect==1.0.9
 
-# 벡터 데이터베이스
-weaviate-client>=3.25.0
-chromadb>=0.4.0
-
-# 추가 유틸리티
-python-multipart>=0.0.6  # 파일 업로드용
-python-dotenv>=1.0.0  # 환경 변수 관리
-
-# 🔥 고성능 벡터 검색
-faiss-cpu==1.7.4  # Meta FAISS - 초고속 벡터 검색
-chromadb==0.4.15
+# 임베딩 및 텍스트 처리
 sentence-transformers==2.2.2
+langchain==0.1.0
+langchain-community==0.0.10
+
+# 벡터 DB 및 임베딩 관련
+transformers==4.35.0
+torch==2.1.0
+numpy==1.24.3
+
+# 벡터 데이터베이스 클라이언트
+faiss-cpu==1.7.4
+pymilvus[model]==2.3.4
+
+# 기타 유틸리티
+python-dotenv==1.0.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Additional utilities
+requests==2.31.0
