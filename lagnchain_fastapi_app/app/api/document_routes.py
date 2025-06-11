@@ -28,14 +28,14 @@ async def get_vector_service() -> VectorDBService:
 @router.post("/upload")
 async def upload_pdf_to_vector_db(
     file: UploadFile = File(...),
-    vector_db_type: Optional[str] = Form(None),
-    chunk_size: int = Form(1000),
-    chunk_overlap: int = Form(200),
     doc_service: DocumentService = Depends(get_document_service),
     vector_service: VectorDBService = Depends(get_vector_service)
 ) -> JSONResponse:
     """
-    📄 PDF 파일 업로드 및 벡터 DB 저장 (문서 ID 반환)
+    📄 PDF 파일 업로드 및 벡터 DB 저장 (간단 버전)
+    - 파일명만 입력, 나머지는 자동 처리
+    - 벡터 DB: Milvus 우선 (전역 설정)
+    - 청크 크기: 자동 최적화
     """
     try:
         logger.info("=" * 50)
@@ -61,12 +61,13 @@ async def upload_pdf_to_vector_db(
                 detail=f"PDF 처리 실패: {extraction_result.get('error', 'Unknown error')}"
             )
 
-        # 벡터 DB 초기화 (지정된 타입 또는 자동 선택)
-        logger.info("STEP4 벡터 DB 초기화 시작")
-        if vector_db_type:
-            selected_db = await vector_service.initialize_vector_db(vector_db_type)
-        else:
-            selected_db = await vector_service.initialize_vector_db()
+        # 🔥 벡터 DB 강제 Milvus 초기화 (기존 서비스 무시)
+        logger.info("STEP4 Milvus 벡터 DB 강제 초기화")
+        await vector_service.force_switch_to_milvus()
+
+        # 🎯 자동 청크 설정 (한국어 최적화)
+        auto_chunk_size = 800  # 한국어에 최적화된 크기
+        auto_chunk_overlap = 100  # 적당한 오버랩
 
         # 메타데이터 구성
         metadata = {
@@ -79,32 +80,37 @@ async def upload_pdf_to_vector_db(
         }
 
         # 벡터 DB에 저장
-        logger.info("STEP5 벡터 DB 저장 시작")
+        logger.info("STEP5 Milvus 벡터 DB 저장 시작")
         vector_result = await vector_service.store_pdf_content(
             pdf_content=extraction_result["content"],
             metadata=metadata,
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap
+            chunk_size=auto_chunk_size,
+            chunk_overlap=auto_chunk_overlap
         )
 
-        # 🔥 문서 ID 생성 (첫 번째 저장된 ID 사용)
-        document_id = vector_result.get("stored_ids", [None])[0] if vector_result.get("stored_ids") else None
+        # 🔥 파일 ID 가져오기 (파일별 단일 ID)
+        file_id = vector_result.get("file_id")
 
-        # 결과 반환
+        # 간단한 응답 반환
         response_data = {
             "success": vector_result["success"],
-            "message": "PDF 업로드 및 벡터 저장 완료",
-            "document_id": document_id,  # 🎯 문서 ID 반환
+            "message": "PDF 업로드 완료",
+            "file_id": file_id,
             "filename": file.filename,
-            "vector_db_type": selected_db,
+            "vector_db_type": vector_service.current_db_type,  # 🎯 실제 사용된 DB
             "chunk_count": vector_result.get("chunk_count", 0),
-            "stored_document_count": vector_result.get("stored_document_count", 0)
+            "auto_settings": {
+                "chunk_size": auto_chunk_size,
+                "chunk_overlap": auto_chunk_overlap,
+                "pdf_loader": extraction_result["loader_used"],
+                "language": analysis_result.language
+            }
         }
 
         if not vector_result["success"]:
             response_data["error"] = vector_result.get("error")
 
-        logger.info("SUCCESS PDF 업로드 완료")
+        logger.info(f"SUCCESS PDF 업로드 완료: {file.filename} -> {vector_service.current_db_type}")
         return JSONResponse(content=response_data)
 
     except Exception as e:
@@ -154,17 +160,16 @@ async def switch_vector_db(
 # 📋 3. 현재 벡터 DB의 모든 문서 조회
 @router.get("/all-documents")
 async def get_all_documents(
-    limit: Optional[int] = Query(None, description="조회할 문서 수 제한"),
     vector_service: VectorDBService = Depends(get_vector_service)
 ) -> JSONResponse:
     """
-    📋 현재 벡터 DB에 저장된 모든 문서 조회
+    📋 현재 벡터 DB에 저장된 모든 문서 조회 (최근 100건)
     """
     try:
         logger.info("STEP_DOCS 모든 문서 조회 시작")
 
-        # 모든 문서 조회
-        result = await vector_service.get_all_documents(limit)
+        # 🔥 기본적으로 최근 100건만 조회 (limit 파라미터 제거)
+        result = await vector_service.get_all_documents()
 
         if result["success"]:
             response_data = {
@@ -204,4 +209,46 @@ async def get_vector_db_status(
         return JSONResponse(content=status)
     except Exception as e:
         logger.error(f"ERROR 벡터 DB 상태 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# 💥 5. 벡터 DB 모든 데이터 삭제 (위험한 작업)
+@router.delete("/clear-all")
+async def clear_all_documents(
+    confirm_token: str = Form(..., description="삭제 확인 토큰: CLEAR_ALL_CONFIRM"),
+    vector_service: VectorDBService = Depends(get_vector_service)
+) -> JSONResponse:
+    """
+    💥 벡터 DB의 모든 데이터 삭제 (위험한 작업)
+
+    ⚠️ 주의: 이 작업은 되돌릴 수 없습니다!
+    confirm_token에 "CLEAR_ALL_CONFIRM"을 입력해야 합니다.
+    """
+    try:
+        logger.info("🚨 DANGER 벡터 DB 전체 삭제 요청")
+
+        # 전체 삭제 실행
+        result = await vector_service.clear_all_documents(confirm_token)
+
+        if result["success"]:
+            response_data = {
+                "success": True,
+                "message": result["message"],
+                "vector_db_type": result["vector_db_type"],
+                "deleted_count": result.get("deleted_count", 0),
+                "remaining_count": result.get("remaining_count", 0)
+            }
+            logger.info(f"SUCCESS 벡터 DB 전체 삭제 완료: {result.get('deleted_count', 0)}개 삭제")
+        else:
+            response_data = {
+                "success": False,
+                "message": "전체 삭제 실패",
+                "error": result.get("error"),
+                "vector_db_type": result.get("vector_db_type")
+            }
+
+        return JSONResponse(content=response_data)
+
+    except Exception as e:
+        logger.error(f"ERROR 벡터 DB 전체 삭제 실패: {e}")
         raise HTTPException(status_code=500, detail=str(e))

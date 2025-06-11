@@ -333,3 +333,32 @@ class MilvusDB(VectorDatabase):
                 "attempted_connection": f"{self.host}:{self.port}" if not self.use_lite else "Lite mode",
                 "use_lite": self.use_lite
             }
+
+    async def clear_all(self) -> bool:
+        """Milvus 컬렉션의 모든 데이터 삭제"""
+        try:
+            if not self.client:
+                await self.initialize()
+
+            from pymilvus import utility
+
+            logger.info("🚨 DANGER Milvus 컬렉션 전체 삭제 시작")
+
+            # 컬렉션이 존재하는지 확인
+            if utility.has_collection(self.collection_name):
+                # 컬렉션 삭제 (데이터와 함께)
+                utility.drop_collection(self.collection_name)
+                logger.info(f"SUCCESS Milvus 컬렉션 '{self.collection_name}' 삭제 완료")
+
+                # 컬렉션 재생성 (initialize 메서드 재호출)
+                await self.initialize()
+                logger.info(f"SUCCESS Milvus 컬렉션 '{self.collection_name}' 재생성 완료")
+
+                return True
+            else:
+                logger.info(f"INFO Milvus 컬렉션 '{self.collection_name}'이 존재하지 않음")
+                return True
+
+        except Exception as e:
+            logger.error(f"ERROR Milvus 전체 삭제 실패: {e}")
+            return False
