@@ -8,19 +8,17 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 from fastapi import UploadFile
 
-from ..schemas.document_schema import (
-    DocumentUploadResponse,
-    DocumentSearchResponse,
-    DocumentSearchResult,
-    DocumentListResponse,
-    DocumentDetailResponse
-)
 from ..helper.pdf_loader_helper import PDFLoaderHelper, PDFAnalysisResult
 from ..helper.text_helper import TextHelper
 from ..core.pdf_loader.factory import PDFLoaderFactory
-from ..core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# 🎯 하드코딩된 설정값들 (config 의존성 제거)
+MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+UPLOAD_DIR = "data/uploads"
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 200
 
 
 class DocumentService:
@@ -124,7 +122,7 @@ class DocumentService:
                 "fallback_attempts": fallback_attempts
             }
 
-    async def upload_document(self, file: UploadFile) -> DocumentUploadResponse:
+    async def upload_document(self, file: UploadFile) -> Dict[str, Any]:
         """문서 업로드 및 처리 (동적 PDF 로더 사용)"""
         # 초기 변수 설정
         optimal_loader_type = "pymupdf"  # 기본값
@@ -135,19 +133,19 @@ class DocumentService:
 
             # 1. 파일 검증
             if not self._validate_file(file):
-                return DocumentUploadResponse(
-                    id="",
-                    filename=file.filename or "unknown.pdf",
-                    file_size=file.size or 0,
-                    status="failed",
-                    message="파일 검증 실패",
-                    chunks_created=0,
-                    created_at=datetime.now(),
-                    metadata={
+                return {
+                    "id": "",
+                    "filename": file.filename or "unknown.pdf",
+                    "file_size": file.size or 0,
+                    "status": "failed",
+                    "message": "파일 검증 실패",
+                    "chunks_created": 0,
+                    "created_at": datetime.now(),
+                    "metadata": {
                         "loader_used": optimal_loader_type,
                         "analysis_result": {}
                     }
-                )
+                }
 
             # 2. 동적 PDF 로더 선택
             optimal_loader_type = await self._select_optimal_pdf_loader(file)
@@ -163,35 +161,35 @@ class DocumentService:
             chunks = await self._create_text_chunks(pdf_content.text)
             logger.info(f"STEP5 청킹 완료: {len(chunks)}개 청크 생성됨")
 
-            return DocumentUploadResponse(
-                id=f"doc_{int(time.time())}",
-                filename=file.filename or "unknown.pdf",
-                file_size=file.size or 0,
-                status="completed",
-                message=f"SUCCESS {optimal_loader_type} 로더로 성공적으로 처리됨",
-                chunks_created=len(chunks),
-                created_at=datetime.now(),
-                metadata={
+            return {
+                "id": f"doc_{int(time.time())}",
+                "filename": file.filename or "unknown.pdf",
+                "file_size": file.size or 0,
+                "status": "completed",
+                "message": f"SUCCESS {optimal_loader_type} 로더로 성공적으로 처리됨",
+                "chunks_created": len(chunks),
+                "created_at": datetime.now(),
+                "metadata": {
                     "loader_used": optimal_loader_type,
                     "analysis_result": pdf_content.metadata if pdf_content else {}
                 }
-            )
+            }
 
         except Exception as e:
             logger.error(f"ERROR 문서 업로드 실패: {e}")
-            return DocumentUploadResponse(
-                id="",
-                filename=file.filename or "unknown.pdf",
-                file_size=file.size or 0,
-                status="failed",
-                message=f"처리 실패: {str(e)}",
-                chunks_created=0,
-                created_at=datetime.now(),
-                metadata={
+            return {
+                "id": "",
+                "filename": file.filename or "unknown.pdf",
+                "file_size": file.size or 0,
+                "status": "failed",
+                "message": f"처리 실패: {str(e)}",
+                "chunks_created": 0,
+                "created_at": datetime.now(),
+                "metadata": {
                     "loader_used": optimal_loader_type,
                     "analysis_result": pdf_content.metadata if pdf_content else {}
                 }
-            )
+            }
 
     async def _select_optimal_pdf_loader(self, file: UploadFile) -> str:
         """동적으로 최적의 PDF 로더 선택 (핵심 비즈니스 로직)"""
@@ -253,8 +251,8 @@ class DocumentService:
         # TextHelper의 인스턴스 메서드 사용 (기존 로직 유지)
         chunks = self.text_helper.split_text_simple(
             text,
-            chunk_size=settings.CHUNK_SIZE,
-            chunk_overlap=settings.CHUNK_OVERLAP
+            chunk_size=CHUNK_SIZE,
+            chunk_overlap=CHUNK_OVERLAP
         )
         logger.info(f"STEP5 텍스트 청킹 완료: {len(chunks)}개 청크 생성")
         return chunks
@@ -267,7 +265,7 @@ class DocumentService:
         if not file.filename.lower().endswith('.pdf'):
             return False
 
-        if file.size and file.size > settings.MAX_FILE_SIZE:
+        if file.size and file.size > MAX_FILE_SIZE:
             return False
 
         return True
@@ -276,10 +274,10 @@ class DocumentService:
         """업로드된 파일 저장"""
         timestamp = int(time.time())
         filename = f"{timestamp}_{file.filename}"
-        save_path = os.path.join(settings.UPLOAD_DIR, filename)
+        save_path = os.path.join(UPLOAD_DIR, filename)
 
         # 디렉토리 생성
-        os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
 
         logger.info(f"STEP4a 파일 저장: {save_path}")
         return save_path
@@ -303,7 +301,7 @@ class DocumentService:
         query: str,
         top_k: int = 10,
         filters: Optional[Dict[str, Any]] = None
-    ) -> DocumentSearchResponse:
+    ) -> Dict[str, Any]:
         """문서 검색"""
         start_time = time.time()
 
@@ -312,23 +310,23 @@ class DocumentService:
 
         search_time = time.time() - start_time
 
-        return DocumentSearchResponse(
-            query=query,
-            results=results,
-            total_found=len(results),
-            search_time=search_time
-        )
+        return {
+            "query": query,
+            "results": results,
+            "total_found": len(results),
+            "search_time": search_time
+        }
 
     async def list_documents(
         self,
         skip: int = 0,
         limit: int = 10
-    ) -> List[DocumentListResponse]:
+    ) -> List[Dict[str, Any]]:
         """문서 목록 조회"""
         # TODO: 실제 구현
         return []
 
-    async def get_document_detail(self, document_id: str) -> Optional[DocumentDetailResponse]:
+    async def get_document_detail(self, document_id: str) -> Optional[Dict[str, Any]]:
         """문서 상세 정보 조회"""
         # TODO: 실제 구현
         return None

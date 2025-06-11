@@ -5,7 +5,7 @@ import logging
 import hashlib
 import uuid
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from sentence_transformers import SentenceTransformer
 
 from ..core.vector_db.factory import VectorDBFactory
