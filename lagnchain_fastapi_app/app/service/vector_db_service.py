@@ -198,6 +198,15 @@ class VectorDBService:
     async def get_vector_db_status(self) -> Dict[str, Any]:
         """벡터 DB 상태 정보 조회"""
         try:
+            # 🔥 현재 DB가 없으면 자동으로 Milvus 초기화
+            if not self.current_db_type or not self.vector_db:
+                logger.info("STEP_AUTO Milvus 자동 초기화 시작 (기본값)")
+                try:
+                    await self.initialize_vector_db("milvus")
+                except Exception as e:
+                    logger.warning(f"WARNING Milvus 자동 초기화 실패, FAISS로 폴백: {e}")
+                    await self.initialize_vector_db("faiss")
+
             status = {
                 "current_db_type": self.current_db_type,
                 "embedding_model": self.model_name,
