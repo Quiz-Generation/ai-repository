@@ -7,7 +7,7 @@ python-multipart==0.0.6
 PyMuPDF==1.23.8  # fitz
 pdfplumber==0.10.3
 PyPDF2==3.0.1
-pdfminer.six==20231228
+pdfminer.six==20221105
 
 # 언어 감지
 langdetect==1.0.9
@@ -17,7 +17,21 @@ sentence-transformers==2.2.2
 langchain==0.1.0
 langchain-community==0.0.10
 
+# 벡터 DB 및 임베딩 관련
+transformers==4.35.0
+torch==2.1.0
+numpy==1.24.3
+
+# 벡터 데이터베이스 클라이언트
+faiss-cpu==1.7.4
+pymilvus[model]==2.3.4
+
 # 기타 유틸리티
 python-dotenv==1.0.0
-pydantic==2.5.2
+pydantic==2.5.0
 pydantic-settings==2.1.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Additional utilities
+requests==2.31.0

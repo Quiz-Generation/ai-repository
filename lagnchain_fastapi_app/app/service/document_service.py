@@ -15,12 +15,8 @@ from ..schemas.document_schema import (
     DocumentListResponse,
     DocumentDetailResponse
 )
-from ..models.document_model import Document, DocumentChunk
-from ..repository.document_repository import DocumentRepository
-from ..repository.vector_repository import VectorRepository
-from ..helper.pdf_helper import PDFHelper
-from ..helper.text_helper import TextHelper
 from ..helper.pdf_loader_helper import PDFLoaderHelper, PDFAnalysisResult
+from ..helper.text_helper import TextHelper
 from ..core.pdf_loader.factory import PDFLoaderFactory
 from ..core.config import settings
 
@@ -31,10 +27,102 @@ class DocumentService:
     """문서 처리 메인 서비스"""
 
     def __init__(self):
-        self.document_repo = DocumentRepository()
-        self.vector_repo = VectorRepository()
-        self.pdf_helper = PDFHelper()
         self.text_helper = TextHelper()
+
+    async def process_pdf_with_dynamic_selection(
+        self,
+        file: UploadFile,
+        recommended_loader: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        🚀 벡터 DB 통합용 PDF 처리 메서드
+        - 동적 로더 선택 및 텍스트 추출
+        - 폴백 메커니즘 포함
+        """
+        loader_used = recommended_loader or "pymupdf"
+        fallback_attempts = 0
+
+        try:
+            logger.info(f"STEP_PDF PDF 처리 시작: {file.filename} (로더: {loader_used})")
+
+            # 1. 파일 검증
+            if not self._validate_file(file):
+                return {
+                    "success": False,
+                    "error": "파일 검증 실패",
+                    "loader_used": loader_used,
+                    "fallback_attempts": fallback_attempts
+                }
+
+            # 2. 선택된 로더로 PDF 처리 시도
+            try:
+                pdf_content = await self._extract_pdf_with_selected_loader(file, loader_used)
+
+                if not pdf_content or not hasattr(pdf_content, 'text') or not pdf_content.text.strip():
+                    raise ValueError("추출된 텍스트가 비어있습니다")
+
+                logger.info(f"SUCCESS {loader_used} 로더로 PDF 처리 완료")
+
+                return {
+                    "success": True,
+                    "content": pdf_content.text,
+                    "loader_used": loader_used,
+                    "processing_time": datetime.now().isoformat(),
+                    "fallback_attempts": fallback_attempts,
+                    "content_length": len(pdf_content.text),
+                    "metadata": getattr(pdf_content, 'metadata', {})
+                }
+
+            except Exception as e:
+                logger.warning(f"WARNING {loader_used} 로더 실패: {e}")
+
+                # 3. 폴백 메커니즘 - 우선순위 순서로 시도
+                fallback_loaders = ["pymupdf", "pdfplumber", "pypdf", "pdfminer"]
+
+                for fallback_loader in fallback_loaders:
+                    if fallback_loader == loader_used:
+                        continue
+
+                    try:
+                        fallback_attempts += 1
+                        logger.info(f"FALLBACK {fallback_loader} 로더로 재시도 ({fallback_attempts})")
+
+                        pdf_content = await self._extract_pdf_with_selected_loader(file, fallback_loader)
+
+                        if pdf_content and hasattr(pdf_content, 'text') and pdf_content.text.strip():
+                            logger.info(f"SUCCESS {fallback_loader} 폴백 로더로 PDF 처리 완료")
+
+                            return {
+                                "success": True,
+                                "content": pdf_content.text,
+                                "loader_used": fallback_loader,
+                                "processing_time": datetime.now().isoformat(),
+                                "fallback_attempts": fallback_attempts,
+                                "content_length": len(pdf_content.text),
+                                "metadata": getattr(pdf_content, 'metadata', {}),
+                                "fallback_reason": f"원본 로더({loader_used}) 실패: {str(e)}"
+                            }
+
+                    except Exception as fallback_error:
+                        logger.warning(f"WARNING {fallback_loader} 폴백 로더도 실패: {fallback_error}")
+                        continue
+
+                # 모든 로더 실패
+                return {
+                    "success": False,
+                    "error": f"모든 PDF 로더 실패. 마지막 오류: {str(e)}",
+                    "loader_used": loader_used,
+                    "fallback_attempts": fallback_attempts
+                }
+
+        except Exception as e:
+            logger.error(f"ERROR PDF 처리 중 예외 발생: {e}")
+            return {
+                "success": False,
+                "error": f"PDF 처리 중 예외: {str(e)}",
+                "loader_used": loader_used,
+                "fallback_attempts": fallback_attempts
+            }
 
     async def upload_document(self, file: UploadFile) -> DocumentUploadResponse:
         """문서 업로드 및 처리 (동적 PDF 로더 사용)"""
@@ -74,9 +162,6 @@ class DocumentService:
             # 5. 텍스트 청킹
             chunks = await self._create_text_chunks(pdf_content.text)
             logger.info(f"STEP5 청킹 완료: {len(chunks)}개 청크 생성됨")
-
-            # 6. 벡터화 및 저장 (TODO: 실제 구현)
-            # vector_ids = await self._vectorize_and_store(chunks)
 
             return DocumentUploadResponse(
                 id=f"doc_{int(time.time())}",
@@ -165,7 +250,7 @@ class DocumentService:
 
     async def _create_text_chunks(self, text: str) -> List[str]:
         """텍스트를 청크로 분할"""
-        # TextHelper의 단순 문자열 분할 사용
+        # TextHelper의 인스턴스 메서드 사용 (기존 로직 유지)
         chunks = self.text_helper.split_text_simple(
             text,
             chunk_size=settings.CHUNK_SIZE,
@@ -189,7 +274,6 @@ class DocumentService:
 
     async def _save_uploaded_file(self, file: UploadFile) -> str:
         """업로드된 파일 저장"""
-        # TODO: 실제 파일 저장 로직
         timestamp = int(time.time())
         filename = f"{timestamp}_{file.filename}"
         save_path = os.path.join(settings.UPLOAD_DIR, filename)
@@ -206,7 +290,12 @@ class DocumentService:
             "supported_loaders": PDFLoaderFactory.get_supported_loaders(),
             "priority_order": PDFLoaderFactory.get_priority_order(),
             "selection_rules": PDFLoaderHelper.get_loader_selection_rules(),
-            "all_loaders_info": PDFLoaderFactory.get_all_loaders_info()
+            "capabilities": {
+                "pymupdf": "고성능, 빠른 처리, 기본 추천",
+                "pdfplumber": "테이블 특화, 레이아웃 보존",
+                "pypdf": "경량, 메모리 효율적",
+                "pdfminer": "정확도 높음, 복잡한 PDF"
+            }
         }
 
     async def search_documents(

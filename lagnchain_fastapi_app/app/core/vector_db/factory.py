@@ -1,44 +1,43 @@
 """
 🏭 Vector Database Factory
 """
-from typing import Type
+from typing import Dict, Type, List
 from .base import VectorDatabase
 from .milvus_db import MilvusDB
-from .weaviate_db import WeaviateDB
 from .faiss_db import FaissDB
 
 
 class VectorDBFactory:
-    """벡터 데이터베이스 팩토리"""
+    """벡터 데이터베이스 팩토리 클래스"""
 
-    _databases = {
-        "milvus": MilvusDB,     # 1순위
-        "weaviate": WeaviateDB, # 2순위
-        "faiss": FaissDB,       # 3순위
+    _registry: Dict[str, Type[VectorDatabase]] = {
+        "milvus": MilvusDB,    # 1순위 - 고성능 분산 벡터 DB
+        "faiss": FaissDB,      # 2순위 - 로컬 파일 기반
+    }
+
+    _priority_order = {
+        "milvus": 1,  # 최우선 (Docker 컨테이너)
+        "faiss": 2,   # 폴백
     }
 
     @classmethod
     def create(cls, db_type: str, db_path: str) -> VectorDatabase:
         """벡터 DB 인스턴스 생성"""
-        if db_type not in cls._databases:
+        if db_type not in cls._registry:
             raise ValueError(f"지원하지 않는 벡터 DB 타입: {db_type}")
 
-        db_class = cls._databases[db_type]
+        db_class = cls._registry[db_type]
         return db_class(db_path)
 
     @classmethod
-    def get_supported_types(cls) -> list[str]:
-        """지원하는 DB 타입 목록 (우선순위 순)"""
-        return ["milvus", "weaviate", "faiss"]
+    def get_supported_types(cls) -> List[str]:
+        """지원되는 벡터 DB 타입 목록"""
+        return list(cls._registry.keys())
 
     @classmethod
-    def get_priority_order(cls) -> dict[str, int]:
-        """벡터 DB 우선순위 반환"""
-        return {
-            "milvus": 1,
-            "weaviate": 2,
-            "faiss": 3
-        }
+    def get_priority_order(cls) -> Dict[str, int]:
+        """우선순위 정보"""
+        return cls._priority_order.copy()
 
     @classmethod
     def get_recommended_db(cls) -> str:

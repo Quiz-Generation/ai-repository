@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # FastAPI 애플리케이션
+  app:
+    build: .
+    ports:
+      - "7000:7000"
+    environment:
+      - VECTOR_DB_TYPE=milvus
+      - MILVUS_HOST=milvus
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    depends_on:
+      - milvus
+    networks:
+      - vector_net
+
+  # Milvus 벡터 데이터베이스 (1순위) - 간단한 standalone 설정
+  milvus:
+    image: milvusdb/milvus:v2.3.2
+    container_name: milvus-standalone
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    command: ["milvus", "run", "standalone"]
+    environment:
+      - ETCD_USE_EMBED=true
+      - ETCD_DATA_DIR=/var/lib/milvus/etcd
+      - COMMON_STORAGETYPE=local
+    volumes:
+      - milvus_data:/var/lib/milvus
+    networks:
+      - vector_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
+volumes:
+  milvus_data:
+
+networks:
+  vector_net:
+    driver: bridge

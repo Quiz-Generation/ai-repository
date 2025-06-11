@@ -60,6 +60,11 @@ class VectorDatabase(ABC):
         pass
 
     @abstractmethod
+    async def get_all_documents(self, limit: Optional[int] = None) -> List[VectorDocument]:
+        """모든 문서 조회"""
+        pass
+
+    @abstractmethod
     async def health_check(self) -> Dict[str, Any]:
         """헬스체크"""
         pass
