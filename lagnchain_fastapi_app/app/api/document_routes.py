@@ -160,39 +160,46 @@ async def switch_vector_db(
 # 📋 3. 현재 벡터 DB의 모든 문서 조회
 @router.get("/all-documents")
 async def get_all_documents(
+    limit: int = Query(100, description="조회할 파일 수 제한 (기본: 100개 파일)"),
     vector_service: VectorDBService = Depends(get_vector_service)
 ) -> JSONResponse:
     """
-    📋 현재 벡터 DB에 저장된 모든 문서 조회 (최근 100건)
+    📋 현재 벡터 DB에 저장된 파일 조회 (최신순)
+    - limit: 조회할 파일 개수 제한 (기본: 100개 파일)
+    - 파일별로 그룹화하여 표시 (최신 업로드순)
     """
     try:
-        logger.info("STEP_DOCS 모든 문서 조회 시작")
+        logger.info(f"STEP_DOCS 파일 조회 시작 (limit: {limit}개 파일)")
 
-        # 🔥 기본적으로 최근 100건만 조회 (limit 파라미터 제거)
-        result = await vector_service.get_all_documents()
+        # limit 범위 제한 (1~1000 파일)
+        actual_limit = max(1, min(limit, 1000))
+
+        # 파일 조회
+        result = await vector_service.get_all_documents(actual_limit)
 
         if result["success"]:
             response_data = {
                 "success": True,
-                "message": "문서 조회 완료",
+                "message": "파일 조회 완료",
                 "vector_db_type": result["vector_db_type"],
-                "total_documents": result["total_documents"],
-                "total_files": result["total_files"],
+                "total_documents": result["total_documents"],  # 전체 청크 수
+                "total_files": result["total_files"],  # 실제 반환된 파일 수
+                "all_files_count": result.get("all_files_count", 0),  # 전체 파일 수
                 "limit_applied": result.get("limit_applied"),
                 "files": result["files"]
             }
         else:
             response_data = {
                 "success": False,
-                "message": "문서 조회 실패",
+                "message": "파일 조회 실패",
                 "error": result.get("error")
             }
 
-        logger.info(f"SUCCESS 문서 조회 완료: {result.get('total_documents', 0)}개 문서")
+        logger.info(f"SUCCESS 파일 조회 완료: {result.get('total_files', 0)}개 파일 반환 (전체 {result.get('all_files_count', 0)}개 중)")
         return JSONResponse(content=response_data)
 
     except Exception as e:
-        logger.error(f"ERROR 문서 조회 실패: {e}")
+        logger.error(f"ERROR 파일 조회 실패: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

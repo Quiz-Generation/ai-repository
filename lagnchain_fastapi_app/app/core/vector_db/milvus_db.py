@@ -232,9 +232,11 @@ class MilvusDB(VectorDatabase):
             if not self.client:
                 await self.initialize()
 
-            # 쿼리로 모든 문서 조회
-            expr = ""  # 빈 표현식으로 모든 문서 조회
             limit_count = limit if limit else 1000  # 기본 제한
+            logger.info(f"STEP_QUERY Milvus 전체 문서 조회 시작 (제한: {limit_count})")
+
+            # 🔥 timestamp 기반 쿼리 (실제로 작동하는 방법)
+            expr = 'metadata["upload_timestamp"] != ""'
 
             query_results = self.client.query(
                 expr=expr,
@@ -242,22 +244,26 @@ class MilvusDB(VectorDatabase):
                 limit=limit_count
             )
 
-            documents = []
-            for result in query_results:
-                doc = VectorDocument(
-                    id=result.get("id", ""),
-                    content=result.get("content", ""),
-                    embedding=[],  # 임베딩은 조회하지 않음 (성능상 이유)
-                    metadata=result.get("metadata", {})
-                )
-                documents.append(doc)
-
+            documents = self._parse_query_results(query_results)
             logger.info(f"SUCCESS Milvus에서 {len(documents)}개 문서 조회 완료")
             return documents
 
         except Exception as e:
             logger.error(f"ERROR Milvus 문서 조회 실패: {e}")
             return []
+
+    def _parse_query_results(self, query_results) -> List[VectorDocument]:
+        """쿼리 결과를 VectorDocument 리스트로 변환"""
+        documents = []
+        for result in query_results:
+            doc = VectorDocument(
+                id=result.get("id", ""),
+                content=result.get("content", ""),
+                embedding=[],  # 임베딩은 조회하지 않음 (성능상 이유)
+                metadata=result.get("metadata", {})
+            )
+            documents.append(doc)
+        return documents
 
     async def health_check(self) -> Dict[str, Any]:
         """Milvus 헬스체크"""

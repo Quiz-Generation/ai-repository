@@ -27,9 +27,12 @@ class PyMuPDFLoader(PDFLoader):
             # PDF 문서 열기
             doc = fitz.open(stream=file_content, filetype="pdf")
 
+            # 🔥 문서 닫기 전에 페이지 수 저장
+            page_count = len(doc)
+
             # 텍스트 추출
             text = ""
-            for page_num in range(len(doc)):
+            for page_num in range(page_count):
                 page = doc.load_page(page_num)
                 text += page.get_text()
                 text += "\n\n"  # 페이지 구분
@@ -43,18 +46,18 @@ class PyMuPDFLoader(PDFLoader):
                 "producer": doc.metadata.get("producer", "") if doc.metadata else "",
                 "creation_date": doc.metadata.get("creationDate") if doc.metadata else None,
                 "modification_date": doc.metadata.get("modDate") if doc.metadata else None,
-                "total_pages": len(doc),
+                "total_pages": page_count,
                 "loader": "pymupdf"
             }
 
             doc.close()
 
-            logger.info(f"SUCCESS PyMuPDF로 {len(doc)}페이지 PDF 처리 완료")
+            logger.info(f"SUCCESS PyMuPDF로 {page_count}페이지 PDF 처리 완료")
 
             return PDFContent(
                 text=text.strip(),
                 metadata=metadata,
-                page_count=len(doc),
+                page_count=page_count,
                 file_size=file.size or len(file_content)
             )
 
@@ -73,9 +76,12 @@ class PyMuPDFLoader(PDFLoader):
             # PDF 문서 열기
             doc = fitz.open(file_path)
 
+            # 🔥 문서 닫기 전에 페이지 수 저장
+            page_count = len(doc)
+
             # 텍스트 추출
             text = ""
-            for page_num in range(len(doc)):
+            for page_num in range(page_count):
                 page = doc.load_page(page_num)
                 text += page.get_text()
                 text += "\n\n"
@@ -89,7 +95,7 @@ class PyMuPDFLoader(PDFLoader):
                 "producer": doc.metadata.get("producer", "") if doc.metadata else "",
                 "creation_date": doc.metadata.get("creationDate") if doc.metadata else None,
                 "modification_date": doc.metadata.get("modDate") if doc.metadata else None,
-                "total_pages": len(doc),
+                "total_pages": page_count,
                 "loader": "pymupdf",
                 "file_path": file_path
             }
@@ -106,7 +112,7 @@ class PyMuPDFLoader(PDFLoader):
             return PDFContent(
                 text=text.strip(),
                 metadata=metadata,
-                page_count=len(doc),
+                page_count=page_count,
                 file_size=file_size
             )
 

@@ -52,6 +52,9 @@ class DocumentService:
                     "fallback_attempts": fallback_attempts
                 }
 
+            # 🔥 파일 포인터를 처음으로 리셋 (중요!)
+            await file.seek(0)
+
             # 2. 선택된 로더로 PDF 처리 시도
             try:
                 pdf_content = await self._extract_pdf_with_selected_loader(file, loader_used)
@@ -84,6 +87,9 @@ class DocumentService:
                     try:
                         fallback_attempts += 1
                         logger.info(f"FALLBACK {fallback_loader} 로더로 재시도 ({fallback_attempts})")
+
+                        # 🔥 폴백 시도 전에도 파일 포인터 리셋
+                        await file.seek(0)
 
                         pdf_content = await self._extract_pdf_with_selected_loader(file, fallback_loader)
 
@@ -222,6 +228,9 @@ class DocumentService:
     async def _extract_pdf_with_selected_loader(self, file: UploadFile, loader_type: str):
         """선택된 로더로 PDF 텍스트 추출"""
         try:
+            # 🔥 파일 포인터를 처음으로 리셋 (안전장치)
+            await file.seek(0)
+
             # 팩토리에서 로더 생성
             pdf_loader = PDFLoaderFactory.create(loader_type)
 
@@ -241,6 +250,8 @@ class DocumentService:
             # 실패 시 fallback 로더 시도
             if loader_type != "pymupdf":
                 logger.info("FALLBACK PyMuPDF 로더로 재시도")
+                # 🔥 폴백 시도 전에도 파일 포인터 리셋
+                await file.seek(0)
                 fallback_loader = PDFLoaderFactory.create("pymupdf")
                 return await fallback_loader.extract_text_from_file(file)
             else:
