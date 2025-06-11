@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 
-from .api import document_routes
+from .api import document_routes, quiz_routes
 
 # 로깅 설정
 log_dir = "../logs"
@@ -55,13 +55,14 @@ app.add_middleware(
 
 # 라우터 등록
 app.include_router(document_routes.router)
+app.include_router(quiz_routes.router)
 
 
 @app.get("/")
 async def root():
     """루트 엔드포인트"""
     return {
-        "message": "PDF Processing with Vector DB API",
+        "message": "PDF Processing with Vector DB & AI Quiz Generation API",
         "version": "2.0.0",
         "features": [
             "🔍 동적 PDF 로더 선택 (PyMuPDF, PDFPlumber, PyPDF2, PDFMiner)",
@@ -69,18 +70,28 @@ async def root():
             "🧠 임베딩 생성 및 유사도 검색",
             "🌐 다국어 지원 (한국어 특화)",
             "📊 복잡도 기반 자동 선택",
-            "🔄 폴백 메커니즘"
+            "🔄 폴백 메커니즘",
+            "🤖 AI 기반 문제 생성 (LangGraph)",
+            "📚 다중 도메인 문제 생성",
+            "🎯 난이도별 맞춤 문제"
         ],
         "endpoints": {
-            "upload_and_store": "/documents/upload-and-store",
-            "vector_search": "/documents/search",
+            "document_upload": "/documents/upload",
+            "document_list": "/documents/all-documents",
             "vector_status": "/documents/vector-status",
-            "vector_initialize": "/documents/vector-initialize",
             "vector_switch": "/documents/vector-switch",
-            "vector_delete": "/documents/vector-documents/{filename}",
-            "all_documents": "/documents/all-documents",
-            "loader_info": "/documents/loaders",
-            "system_info": "/documents/info"
+            "quiz_files": "/quiz/available-files",
+            "quiz_generate": "/quiz/generate",
+            "quiz_generate_simple": "/quiz/generate-simple",
+            "quiz_options": "/quiz/options"
+        },
+        "ai_features": {
+            "quiz_generation": {
+                "workflow": "문서요약 → 주제추출 → 키워드추출 → 문제생성 → 품질검증",
+                "difficulties": ["easy", "medium", "hard"],
+                "question_types": ["multiple_choice", "true_false", "short_answer", "essay", "fill_blank"],
+                "multi_domain": "AWS, 심리학, 알고리즘, 기술 등 다양한 도메인 지원"
+            }
         }
     }
 
