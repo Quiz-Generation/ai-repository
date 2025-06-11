@@ -284,9 +284,9 @@ class QuizGeneratorAgent:
             return state
 
     async def _generate_questions(self, state: QuizState) -> QuizState:
-        """❓ 4단계: 체계적이고 논리적인 문제 생성 (실용적 개선)"""
+        """❓ 4단계: 교수급 고품질 문제 생성 (대학 시험 + 자격증 대응)"""
         try:
-            logger.info("STEP4 체계적 문제 생성 시작")
+            logger.info("STEP4 교수급 문제 생성 시작")
 
             keywords = state["keywords"]
             topics = state["core_topics"]
@@ -294,77 +294,90 @@ class QuizGeneratorAgent:
             domain_context = state["domain_context"]
             summary = state["summary"]
 
-            # 🎯 도메인 기반 문제 방향성 결정
-            domain_guidance = self._get_domain_guidance(domain_context)
+            # 🎯 시험 유형별 맞춤 가이드
+            exam_style = self._get_exam_style_guidance(domain_context, request.difficulty)
 
-            # 🎯 난이도별 간단명료한 전략
+            # 🎯 난이도별 교수 관점 전략
             if request.difficulty == DifficultyLevel.EASY:
-                approach = "핵심 개념 정의와 기본 특징 확인"
-                style = "명확한 개념 문제"
+                professor_approach = "기본 개념 확실히 이해했는지 확인하는 문제"
+                cognitive_focus = "암기와 이해 검증"
             elif request.difficulty == DifficultyLevel.MEDIUM:
-                approach = "개념 간 비교분석과 실제 적용"
-                style = "분석적 사고 문제"
+                professor_approach = "개념을 실제 상황에 적용할 수 있는지 평가하는 문제"
+                cognitive_focus = "적용과 분석 능력 평가"
             else:  # HARD
-                approach = "종합적 판단과 심화 이해"
-                style = "복합적 사고 문제"
+                professor_approach = "여러 개념을 종합하여 창의적으로 사고할 수 있는지 측정하는 문제"
+                cognitive_focus = "종합적 사고와 문제해결 능력 측정"
 
-            # 🔥 간단하고 효과적인 프롬프트 (JSON 파싱 성공률 최적화)
+            # 🔥 뛰어난 대학교 교수 관점의 프롬프트
             question_prompt = f"""
-당신은 전문 출제위원입니다. 다음 학습 내용을 바탕으로 정확하고 체계적인 문제를 출제하세요.
+당신은 명문대학교의 베테랑 교수이자 수년간 우수한 시험 문제를 출제해온 전문가입니다.
+학생들이 진정으로 성장할 수 있는 고품질 문제를 만드는 것이 당신의 철학입니다.
 
-**학습 내용**:
-{summary[:800]}
+📚 **강의 내용**:
+{summary[:1000]}
 
-**출제 조건**:
+🎯 **출제 조건**:
 - 문제 수: {request.num_questions}개
-- 난이도: {request.difficulty.value} ({approach})
+- 난이도: {request.difficulty.value} ({professor_approach})
 - 문제 유형: {request.question_type.value}
 
-**도메인 가이드**:
-{domain_guidance}
+🏫 **시험 환경 가이드**:
+{exam_style}
 
-**출제 원칙**:
-1. 해당 분야에서 실제로 중요한 내용 중심
-2. 도메인에 자연스럽게 부합하는 문제만 출제
-3. 논리적이고 명확한 해설 제공
-4. 억지스러운 타 분야 연결 금지
+📋 **교수로서의 출제 철학**:
 
-**객관식 선택지 구성**:
-- 정답: 가장 정확한 답
-- 오답1: 부분적으로 맞지만 핵심 누락
-- 오답2: 흔한 오개념
-- 오답3: 명백히 틀린 답
+1. **학습 목표 명확성**: 각 문제는 명확한 학습 목표를 가져야 함
+2. **공정성**: 강의에서 다룬 내용 기반, 함정 문제 지양
+3. **변별력**: 잘 아는 학생과 그렇지 않은 학생을 명확히 구분
+4. **교육적 가치**: 틀려도 배울 수 있는 의미 있는 문제
+5. **실용성**: 졸업 후에도 도움이 되는 실질적 지식
 
-반드시 다음 JSON 형식으로만 출력하세요:
+🎨 **{request.question_type.value} 문제 출제 전략**:
+{self._get_professor_question_strategy(request.question_type)}
+
+⚖️ **객관식 선택지 설계 (해당 시)**:
+- **정답**: 명확하고 완전한 정답
+- **매력적 오답**: 부분적 이해 학생이 선택할 만한 답
+- **흔한 실수**: 자주 혼동하는 개념이나 계산 실수
+- **명백한 오답**: 확실히 틀렸지만 공부 안 한 학생이 찍을 만한 답
+
+🔍 **품질 기준** ({cognitive_focus}):
+- 문제가 명확하고 모호하지 않은가?
+- 해당 난이도에 적합한 인지 부하인가?
+- 실제 시험에서 출제할 만한 수준인가?
+- 학생이 성장할 수 있는 교육적 가치가 있는가?
+
+출력은 반드시 다음 JSON 형식으로만 해주세요:
 
 ```json
 {{
   "questions": [
     {{
       "id": 1,
-      "question": "문제 내용",
+      "question": "명확하고 정확한 문제 내용",
       "type": "{request.question_type.value}",
       "difficulty": "{request.difficulty.value}",
       "options": ["선택지1", "선택지2", "선택지3", "선택지4"],
       "correct_answer": "정답",
-      "explanation": "정답인 이유와 오답들의 문제점을 포함한 명확한 해설",
-      "keywords": ["키워드1", "키워드2"]
+      "explanation": "정답인 이유와 오답 분석을 포함한 교육적 해설",
+      "learning_objective": "이 문제로 확인하고자 하는 학습 목표",
+      "keywords": ["핵심키워드1", "핵심키워드2"]
     }}
   ]
 }}
 ```
 
-위 형식을 정확히 따라 {request.num_questions}개 문제를 생성하세요.
+**교수로서 당부**: 학생들이 단순 암기가 아닌 진정한 이해를 바탕으로 답할 수 있는 문제를 만들어주세요. {request.num_questions}개의 문제를 정성껏 출제해주시기 바랍니다.
 """
 
             messages = [
-                SystemMessage(content="당신은 전문 출제위원입니다. 학습자에게 도움이 되는 정확한 문제를 만드는 것이 목표입니다."),
+                SystemMessage(content="당신은 명문대학교의 베테랑 교수입니다. 수년간 우수한 시험 문제를 출제하며 학생들의 성장을 도운 교육 전문가입니다."),
                 HumanMessage(content=question_prompt)
             ]
 
             response = await self.llm.ainvoke(messages)
 
-            # JSON 파싱 시도
+            # JSON 파싱 시도 (기존 로직 유지)
             try:
                 import json
 
@@ -401,7 +414,7 @@ class QuizGeneratorAgent:
                 state["generated_questions"] = questions
                 state["current_step"] = "question_generator"
 
-                logger.info(f"SUCCESS 체계적 문제 생성 완료: {len(questions)}개")
+                logger.info(f"SUCCESS 교수급 문제 생성 완료: {len(questions)}개")
                 return state
 
             except json.JSONDecodeError as e:
@@ -417,63 +430,76 @@ class QuizGeneratorAgent:
             state["errors"].append(f"문제 생성 실패: {str(e)}")
             return state
 
-    def _get_domain_guidance(self, domain_context: Dict[str, Any]) -> str:
-        """도메인별 간단한 출제 가이드"""
-        guidance = []
+    def _get_exam_style_guidance(self, domain_context: Dict[str, Any], difficulty: DifficultyLevel) -> str:
+        """시험 유형별 맞춤 가이드"""
+        guidance_parts = []
 
+        # 도메인별 시험 스타일
         for filename, info in domain_context.items():
             filename_lower = filename.lower()
 
             if "aws" in filename_lower or "cloud" in filename_lower:
-                guidance.append("클라우드/AWS: 인프라 설계, 서비스 선택, 비용 최적화 중심")
+                guidance_parts.append("🔧 **IT 자격증 스타일**: 실무 시나리오 중심, 서비스 선택과 설정 문제")
 
             elif "dynamic" in filename_lower or "algorithm" in filename_lower:
-                guidance.append("알고리즘: 효율성 분석, 문제 해결 전략, 복잡도 이해 중심")
+                guidance_parts.append("💻 **전산학 전공 스타일**: 알고리즘 효율성, 복잡도 분석, 구현 원리 중심")
 
-            elif "심리" in filename_lower or "psychology" in filename_lower:
-                guidance.append("심리학: 이론 이해, 개념 구분, 실제 적용 사례 중심")
+            elif "심리" in filename_lower:
+                guidance_parts.append("🧠 **인문사회 전공 스타일**: 이론 이해, 개념 적용, 사례 분석 중심")
 
             else:
-                guidance.append(f"해당 분야의 핵심 개념과 실제 활용에 집중")
+                guidance_parts.append("📚 **일반 대학 시험 스타일**: 개념 이해와 실제 적용의 균형")
 
-        return " | ".join(guidance) if guidance else "해당 분야의 핵심 개념 중심"
+        # 난이도별 추가 가이드
+        if difficulty == DifficultyLevel.EASY:
+            guidance_parts.append("📝 **초급 수준**: 기본 개념 확인, 명확한 정답, 학습 동기 부여")
+        elif difficulty == DifficultyLevel.MEDIUM:
+            guidance_parts.append("📈 **중급 수준**: 응용 문제, 상황 판단, 실무 연결성")
+        else:
+            guidance_parts.append("🎯 **고급 수준**: 종합 분석, 창의적 사고, 전문가 수준 이해")
 
-    def _get_question_type_guide(self, question_type: QuestionType) -> str:
-        """문제 유형별 특화 가이드"""
-        guides = {
+        return "\n".join(guidance_parts)
+
+    def _get_professor_question_strategy(self, question_type: QuestionType) -> str:
+        """교수 관점의 문제 유형별 전략"""
+        strategies = {
             QuestionType.MULTIPLE_CHOICE: """
-🎯 **객관식 설계 전략**:
-- 정답: 이론적으로 가장 정확하고 완전한 답
-- 매력적 오답: 부분적으로 맞지만 핵심을 놓친 답
-- 흔한 오개념: 학습자가 자주 혼동하는 개념
-- 명백한 오답: 확실히 틀렸지만 논리적으로 배제 가능한 답
+**객관식 출제 전략**:
+- 단순 암기보다는 이해도 측정 중심
+- 선택지 간 명확한 구별 기준 제시
+- "가장 적절한", "옳지 않은" 등 명확한 지시문
+- 실제 상황 적용 능력 평가
 """,
             QuestionType.TRUE_FALSE: """
-🎯 **참/거짓 설계 전략**:
-- 명확한 이론적 근거가 있는 진술
-- 절대적 표현 vs 조건부 표현 구별
-- 자주 오해되는 개념의 정확성 테스트
+**참/거짓 출제 전략**:
+- 명확한 이론적 근거가 있는 진술만 사용
+- "항상", "절대", "모든" 등 절대적 표현 신중 사용
+- 핵심 개념의 정확한 이해 여부 확인
+- 자주 혼동하는 개념들 구별 능력 측정
 """,
             QuestionType.SHORT_ANSWER: """
-🎯 **단답형 설계 전략**:
-- 핵심 용어의 정확한 명칭
-- 수치나 공식의 정확한 표현
-- 간결하고 명확한 답안
+**단답형 출제 전략**:
+- 핵심 용어의 정확한 기억과 이해
+- 계산 문제의 경우 중간 과정보다 최종 답안 중심
+- 명확하고 간결한 답안이 나올 수 있는 문제
+- 주관적 해석 여지가 적은 객관적 답안
 """,
             QuestionType.ESSAY: """
-🎯 **서술형 설계 전략**:
-- 논리적 구조의 답안 요구
-- 다면적 분석과 종합 판단
-- 근거와 결론의 명확한 연결
+**서술형 출제 전략**:
+- 논리적 사고 과정을 평가할 수 있는 문제
+- 여러 개념을 종합하여 설명하는 능력 측정
+- 명확한 채점 기준이 있는 구조화된 답안 요구
+- 창의적 사고와 비판적 분석 능력 평가
 """,
             QuestionType.FILL_BLANK: """
-🎯 **빈칸 채우기 설계 전략**:
-- 문맥상 핵심이 되는 개념어
-- 논리적 흐름을 완성하는 핵심 단어
-- 전문 용어의 정확한 사용
+**빈칸 채우기 출제 전략**:
+- 문맥상 핵심이 되는 용어나 개념
+- 논리적 흐름을 완성하는 중요한 단어
+- 전문 용어의 정확한 사용법 확인
+- 문장 전체의 의미를 이해해야 풀 수 있는 문제
 """
         }
-        return guides.get(question_type, "")
+        return strategies.get(question_type, "")
 
     async def _validate_questions(self, state: QuizState) -> QuizState:
         """✅ 5단계: 문제 품질 검증"""

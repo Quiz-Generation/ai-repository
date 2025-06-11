@@ -19,7 +19,7 @@ router = APIRouter(prefix="/quiz", tags=["quiz"])
 class QuizGenerationRequest(BaseModel):
     """문제 생성 요청 모델"""
     file_id: str  # 🔥 단일 파일 ID만 받음
-    num_questions: int = 5
+    num_questions: int = 10
     difficulty: str = "medium"  # easy, medium, hard
     question_type: str = "multiple_choice"  # multiple_choice, true_false, short_answer, essay, fill_blank
     custom_topic: Optional[str] = None
@@ -73,15 +73,19 @@ async def generate_quiz(
     """
     🤖 AI 기반 문제 생성 (단일 PDF 파일)
 
+    **🎓 대상**: 대학생 시험 + 자격증 준비생
+    **📊 문제 수량**: 1-50개 (사용자 특성에 따라 조절)
+    **📝 문제 유형**: OX, 객관식, 주관식 (객관식 위주)
+
     **요청 파라미터:**
     - file_id: 대상 파일 ID (단일 파일)
-    - num_questions: 생성할 문제 수 (1-10개)
+    - num_questions: 생성할 문제 수 (1-50개)
     - difficulty: 난이도 (easy/medium/hard)
     - question_type: 문제 유형 (multiple_choice/true_false/short_answer/essay/fill_blank)
     - custom_topic: 특정 주제 지정 (선택사항)
 
     **AI 워크플로우:**
-    1. 📄 문서 분석 → 2. 🎯 핵심 개념 추출 → 3. 🔑 키워드 매핑 → 4. ❓ 응용 문제 생성 → 5. ✅ 품질 검증
+    1. 📄 문서 분석 → 2. 🎯 핵심 개념 추출 → 3. 🔑 키워드 매핑 → 4. ❓ 교수급 문제 생성 → 5. ✅ 품질 검증
     """
     try:
         logger.info("🚀 AI 문제 생성 API 시작 (단일 파일)")
@@ -90,8 +94,8 @@ async def generate_quiz(
         if not request.file_id:
             raise HTTPException(status_code=400, detail="file_id는 필수입니다")
 
-        if not (1 <= request.num_questions <= 10):
-            raise HTTPException(status_code=400, detail="문제 수는 1-10개 사이여야 합니다")
+        if not (1 <= request.num_questions <= 50):
+            raise HTTPException(status_code=400, detail="문제 수는 1-50개 사이여야 합니다")
 
         if request.difficulty not in ["easy", "medium", "hard"]:
             raise HTTPException(status_code=400, detail="difficulty는 easy/medium/hard 중 하나여야 합니다")
@@ -129,7 +133,7 @@ async def generate_quiz(
 @router.get("/generate-simple")
 async def generate_quiz_simple(
     file_id: str = Query(..., description="파일 ID (단일 파일)"),
-    num_questions: int = Query(5, description="생성할 문제 수 (1-10개)"),
+    num_questions: int = Query(10, description="생성할 문제 수 (1-50개)"),
     difficulty: str = Query("medium", description="난이도 (easy/medium/hard)"),
     question_type: str = Query("multiple_choice", description="문제 유형"),
     custom_topic: Optional[str] = Query(None, description="특정 주제 (선택사항)"),
@@ -138,6 +142,7 @@ async def generate_quiz_simple(
     """
     🤖 AI 기반 문제 생성 (간단한 GET 방식)
     - 단일 파일 ID로 간단하게 문제 생성
+    - 대학생 + 자격증 준비생 맞춤형
     """
     try:
         logger.info("🚀 AI 문제 생성 API (간단 버전) 시작")
@@ -224,7 +229,7 @@ async def get_quiz_options() -> JSONResponse:
                 ],
                 "constraints": {
                     "min_questions": 1,
-                    "max_questions": 10,
+                    "max_questions": 50,
                     "min_files": 1,
                     "max_files": 10
                 }
