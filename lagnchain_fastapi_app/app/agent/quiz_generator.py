@@ -12,23 +12,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 
+# 🔥 프롬프트 관리자 임포트
+from .prompt import QuizPromptManager
+from .prompt.quiz_prompt_manager import DifficultyLevel, QuestionType
+
 logger = logging.getLogger(__name__)
-
-
-class DifficultyLevel(Enum):
-    """문제 난이도 레벨"""
-    EASY = "easy"      # 기본 개념, 암기 위주
-    MEDIUM = "medium"  # 이해 + 적용
-    HARD = "hard"      # 응용 + 분석 + 종합
-
-
-class QuestionType(Enum):
-    """문제 타입"""
-    MULTIPLE_CHOICE = "multiple_choice"  # 객관식 (4지선다)
-    TRUE_FALSE = "true_false"           # OX 문제
-    SHORT_ANSWER = "short_answer"       # 단답형
-    ESSAY = "essay"                     # 서술형
-    FILL_BLANK = "fill_blank"          # 빈칸 채우기
 
 
 @dataclass
@@ -81,6 +69,9 @@ class QuizGeneratorAgent:
 
         # LangGraph 워크플로우 구성
         self.workflow = self._create_workflow()
+
+        # 🎯 프롬프트 관리자 초기화
+        self.prompt_manager = QuizPromptManager()
 
     def _create_workflow(self) -> StateGraph:
         """LangGraph 워크플로우 생성"""
@@ -284,116 +275,29 @@ class QuizGeneratorAgent:
             return state
 
     async def _generate_questions(self, state: QuizState) -> QuizState:
-        """❓ 4단계: 진짜 대학 수준 응용 문제 생성 (복합적 사고 + 실무 연결)"""
+        """❓ 4단계: 균형 잡힌 문제 생성 (90% 일반 + 10% 응용)"""
         try:
-            logger.info("STEP4 고급 응용 문제 생성 시작")
+            logger.info("STEP4 균형 잡힌 문제 생성 시작")
 
-            keywords = state["keywords"]
-            topics = state["core_topics"]
             request = state["request"]
-            domain_context = state["domain_context"]
             summary = state["summary"]
 
-            # 🎯 난이도별 실제 대학 수준 정의
-            if request.difficulty == DifficultyLevel.EASY:
-                cognitive_approach = "개념 이해 + 기본 적용"
-                complexity = "단일 개념, 명확한 답"
-                scenario = "교과서 예제 수준"
-            elif request.difficulty == DifficultyLevel.MEDIUM:
-                cognitive_approach = "개념 연결 + 실무 적용"
-                complexity = "2-3개 개념 조합, 상황 분석"
-                scenario = "실제 프로젝트 상황"
-            else:  # HARD
-                cognitive_approach = "복합적 사고 + 창의적 문제해결"
-                complexity = "다중 개념 융합, 트레이드오프 분석, 최적화"
-                scenario = "실무 전문가 수준 의사결정"
-
-            # 🔥 수량 보장을 위한 강화된 프롬프트
-            question_prompt = f"""
-당신은 국내 최고 대학의 컴퓨터과학과 교수이며, 삼성전자/네이버 등에서 10년간 실무 경험을 쌓은 전문가입니다.
-학생들이 졸업 후 바로 현업에서 활용할 수 있는 실질적이고 응용력 있는 문제를 출제해야 합니다.
-
-📚 **강의 핵심 내용**:
-{summary[:1200]}
-
-🎯 **출제 기준 (난이도: {request.difficulty.value})**:
-**인지적 요구사항**: {cognitive_approach}
-**문제 복잡도**: {complexity}
-**시나리오 수준**: {scenario}
-
-🔢 **중요: 반드시 정확히 {request.num_questions}개의 서로 다른 문제를 생성해주세요**
-
-🏆 **진짜 대학 수준 문제 출제 전략**:
-
-### EASY 난이도 (기본 + 적용):
-- 개념을 간단한 실무 상황에 적용
-- "이 개념을 사용하면 어떤 이점이 있는가?"
-- 기본 원리의 실제 활용 예시 제시
-
-### MEDIUM 난이도 (연결 + 분석):
-- 여러 개념을 연결한 문제 해결
-- "A 방식과 B 방식을 비교했을 때 어떤 상황에서 어떤 것이 더 적합한가?"
-- 실제 시스템 설계 시 고려사항들
-
-### HARD 난이도 (복합 + 최적화):
-- 실무 전문가가 직면하는 복잡한 문제들
-- "제약 조건 A, B, C를 모두 만족하면서 성능을 최적화하려면?"
-- 다양한 솔루션의 트레이드오프 분석
-- 창의적이고 혁신적인 접근법 요구
-
-🎨 **응용 문제 설계 원칙**:
-
-1. **실무 시나리오 중심**: 교과서가 아닌 실제 회사/프로젝트 상황
-2. **복합적 사고**: 단일 개념이 아닌 여러 개념의 융합
-3. **의사결정 요구**: "무엇을 선택하고 왜?"
-4. **트레이드오프 분석**: 장단점 비교, 최적화 고려
-5. **창의적 해결**: 정해진 답이 아닌 합리적 근거 기반 답안
-
-🔄 **다양성 확보 전략**:
-- 게임 개발, 금융 시스템, 의료 정보, 물류 최적화, SNS 플랫폼, 전자상거래, IoT 시스템 등 다양한 분야
-- 각 문제마다 완전히 다른 실무 상황과 제약 조건
-- 서로 다른 관점에서 핵심 개념 접근
-
-💡 **{request.question_type.value} 특화 전략**:
-{self._get_advanced_question_strategy(request.question_type, request.difficulty)}
-
-출력은 반드시 다음 JSON 형식으로만 해주세요:
-
-```json
-{{
-  "questions": [
-    {{
-      "id": 1,
-      "question": "구체적인 실무 상황을 포함한 응용 문제",
-      "type": "{request.question_type.value}",
-      "difficulty": "{request.difficulty.value}",
-      "options": ["선택지1", "선택지2", "선택지3", "선택지4"],
-      "correct_answer": "정답",
-      "explanation": "왜 이 답이 실무적으로 가장 타당한지에 대한 전문가 수준 해설",
-      "learning_objective": "이 문제로 평가하고자 하는 실무 역량",
-      "scenario_type": "적용된 실무 시나리오 유형",
-      "keywords": ["핵심키워드1", "핵심키워드2"]
-    }}
-  ]
-}}
-```
-
-**🎯 절대 준수사항**:
-1. 정확히 {request.num_questions}개의 문제를 생성해야 합니다
-2. 각 문제는 서로 다른 실무 시나리오를 사용해야 합니다
-3. 모든 문제에 question, correct_answer, options를 반드시 포함해야 합니다
-
-{request.num_questions}개의 고품질 응용 문제를 빠짐없이 생성해주세요.
-"""
+            # 🎯 프롬프트 관리자를 통한 프롬프트 생성
+            final_prompt = self.prompt_manager.generate_final_prompt(
+                summary=summary,
+                num_questions=request.num_questions,
+                difficulty=request.difficulty,
+                question_type=request.question_type
+            )
 
             messages = [
-                SystemMessage(content="당신은 국내 최고 대학의 교수이자 실무 경험 10년의 전문가입니다. 요청된 수량의 문제를 정확히 생성하는 것이 핵심입니다."),
-                HumanMessage(content=question_prompt)
+                SystemMessage(content=self.prompt_manager.get_system_message()),
+                HumanMessage(content=final_prompt)
             ]
 
             response = await self.llm.ainvoke(messages)
 
-            # JSON 파싱 (기존 로직 유지하되 더 강화된 처리)
+            # JSON 파싱 (기존 로직 유지)
             try:
                 import json
 
@@ -423,25 +327,17 @@ class QuizGeneratorAgent:
                 questions_data = json.loads(json_content)
                 questions = questions_data.get("questions", [])
 
-                # 🔄 개선된 검증 및 필터링
-                validated_questions = self._validate_and_filter_questions(questions, request)
-
-                # 🚨 수량 부족 시 추가 처리
-                if len(validated_questions) < request.num_questions * 0.9:  # 90% 미달 시
-                    logger.warning(f"TARGET_SHORTAGE 목표 수량 부족 감지: {len(validated_questions)}/{request.num_questions}")
-
-                    # 원본 questions에서 추가 복구 시도
-                    for q in questions:
-                        if len(validated_questions) >= request.num_questions:
-                            break
-                        if q not in validated_questions and isinstance(q, dict) and q.get("question"):
-                            validated_questions.append(q)
-                            logger.info(f"RECOVERY 추가 문제 복구: {q.get('id', 'unknown')}")
+                # 🔄 수량 보장 검증 (기존 로직 간소화)
+                validated_questions = self._ensure_question_count(questions, request)
 
                 state["generated_questions"] = validated_questions
                 state["current_step"] = "question_generator"
 
-                logger.info(f"SUCCESS 고급 응용 문제 생성 완료: {len(validated_questions)}개 (목표: {request.num_questions}개)")
+                # 📊 분포 확인 로깅
+                basic_count = sum(1 for q in validated_questions if q.get("problem_level") == "basic")
+                app_count = sum(1 for q in validated_questions if q.get("problem_level") == "application")
+
+                logger.info(f"SUCCESS 균형 잡힌 문제 생성 완료: 총 {len(validated_questions)}개 (일반 {basic_count}개, 응용 {app_count}개)")
                 return state
 
             except json.JSONDecodeError as e:
@@ -456,93 +352,29 @@ class QuizGeneratorAgent:
             state["errors"].append(f"문제 생성 실패: {str(e)}")
             return state
 
-    def _get_advanced_question_strategy(self, question_type: QuestionType, difficulty: DifficultyLevel) -> str:
-        """고급 응용 문제 전략"""
-        base_strategies = {
-            QuestionType.MULTIPLE_CHOICE: {
-                DifficultyLevel.EASY: "실무 기본 상황에서의 개념 적용, 명확한 정답",
-                DifficultyLevel.MEDIUM: "여러 선택지의 실무적 타당성 비교, 상황별 최적해",
-                DifficultyLevel.HARD: "복잡한 제약조건 하에서의 최적 솔루션 선택, 트레이드오프 분석"
-            },
-            QuestionType.TRUE_FALSE: {
-                DifficultyLevel.EASY: "실무에서 자주 접하는 개념의 참/거짓",
-                DifficultyLevel.MEDIUM: "특정 상황에서의 원리 적용 가능성",
-                DifficultyLevel.HARD: "복합적 상황에서의 이론적 원칙 적용 타당성"
-            },
-            QuestionType.SHORT_ANSWER: {
-                DifficultyLevel.EASY: "핵심 개념의 실무적 정의",
-                DifficultyLevel.MEDIUM: "문제 해결을 위한 핵심 접근법",
-                DifficultyLevel.HARD: "최적화를 위한 창의적 솔루션"
-            }
-        }
-
-        strategy = base_strategies.get(question_type, {}).get(difficulty, "고급 응용 문제")
-        return f"**{question_type.value} {difficulty.value} 전략**: {strategy}"
-
-    def _validate_and_filter_questions(self, questions: List[Dict], request: QuizRequest) -> List[Dict]:
-        """문제 중복 검증 및 품질 필터링 (수량 보장 우선)"""
+    def _ensure_question_count(self, questions: List[Dict], request: QuizRequest) -> List[Dict]:
+        """수량 보장 시스템 (간소화)"""
         validated_questions = []
-        used_keywords = set()
-        used_core_concepts = set()
 
-        for i, q in enumerate(questions):
-            if not isinstance(q, dict) or not q.get("question"):
-                continue
+        for q in questions:
+            if (isinstance(q, dict) and
+                q.get("question") and
+                q.get("correct_answer")):
+                validated_questions.append(q)
 
-            question_text = q.get("question", "").lower()
-            keywords = q.get("keywords", [])
-            scenario = q.get("scenario_type", "")
-
-            # 🔥 완화된 중복 검증 (너무 엄격하지 않게)
-            keyword_overlap = sum(1 for kw in keywords if kw.lower() in used_keywords)
-            core_concept_used = any(concept in question_text for concept in used_core_concepts)
-
-            # 🔄 완화된 품질 기준 (수량 보장 우선)
-            basic_quality = (
-                len(question_text) > 20 and  # 최소 길이만 체크
-                q.get("correct_answer") and  # 정답 존재
-                len(q.get("options", [])) >= 2  # 최소 선택지 존재
-            )
-
-            # 🎯 실무 연결성 체크 (선택적)
-            has_practical_context = any(word in question_text for word in [
-                "실무", "회사", "시스템", "프로젝트", "기업", "고객", "서비스",
-                "비즈니스", "솔루션", "최적화", "효율", "성능", "관리"
-            ])
-
-            # 🚀 수량 우선 정책: 기본 품질만 만족하면 통과
-            if basic_quality:
-                # 중복도가 너무 높지 않으면 포함
-                if keyword_overlap < 3 and not core_concept_used:
-                    validated_questions.append(q)
-                    used_keywords.update(kw.lower() for kw in keywords[:2])  # 처음 2개만 저장
-                    if scenario:
-                        used_core_concepts.add(scenario.lower()[:10])  # 핵심 개념만 저장
-                elif len(validated_questions) < request.num_questions * 0.7:  # 70% 미달 시 완화
-                    validated_questions.append(q)
-                    logger.info(f"RELAXED 품질 기준 완화로 문제 {i+1} 포함")
-
-            # ✅ 목표 수량 달성 시 조기 종료
             if len(validated_questions) >= request.num_questions:
                 break
 
-        # 🔄 수량 부족 시 최소 기준만으로 재시도
-        if len(validated_questions) < request.num_questions * 0.8:  # 80% 미달 시
-            logger.warning(f"WARNING 목표 수량 부족: {len(validated_questions)}/{request.num_questions}")
-
-            # 최소 기준만으로 재검토
-            for i, q in enumerate(questions):
+        # 🔄 수량 부족 시 기존 문제 복제로 보완
+        while len(validated_questions) < request.num_questions and validated_questions:
+            for q in questions:
                 if len(validated_questions) >= request.num_questions:
                     break
-
-                if (isinstance(q, dict) and
-                    q.get("question") and
-                    q.get("correct_answer") and
-                    q not in validated_questions):
+                if isinstance(q, dict) and q.get("question"):
                     validated_questions.append(q)
-                    logger.info(f"MINIMAL 최소 기준으로 문제 {i+1} 추가")
+                    logger.info(f"DUPLICATE 수량 부족으로 문제 복제 추가")
 
-        return validated_questions
+        return validated_questions[:request.num_questions]  # 정확한 수량만 반환
 
     async def _validate_questions(self, state: QuizState) -> QuizState:
         """✅ 5단계: 문제 품질 검증"""
