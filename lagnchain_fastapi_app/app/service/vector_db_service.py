@@ -5,7 +5,7 @@ import logging
 import hashlib
 import uuid
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from sentence_transformers import SentenceTransformer
 
 from ..core.vector_db.factory import VectorDBFactory
@@ -372,29 +372,30 @@ class VectorDBService:
             }
 
     async def get_all_documents(self, limit: Optional[int] = None) -> Dict[str, Any]:
-        """벡터 DB의 모든 문서 조회"""
+        """벡터 DB의 문서 조회 (파일 단위)"""
         try:
             # 벡터 DB 초기화 확인
             if not self.vector_db:
                 await self.initialize_vector_db()
 
-            # 🔥 기본적으로 최근 100건만 조회 (limit 파라미터는 내부용)
-            actual_limit = limit if limit else 100
-            logger.info(f"STEP_VECTOR 모든 문서 조회 시작 (제한: {actual_limit}건)")
+            # 🔥 파일 개수 제한 (기본 100개 파일)
+            file_limit = limit if limit else 100
+            logger.info(f"STEP_VECTOR 파일 조회 시작 (제한: {file_limit}개 파일)")
 
-            # 벡터 DB에서 모든 문서 조회
-            documents = await self.vector_db.get_all_documents(actual_limit)
+            # 🔥 충분히 많은 청크를 조회해서 모든 파일을 찾기 위해
+            chunk_limit = 10000  # 충분히 큰 수로 설정
+            documents = await self.vector_db.get_all_documents(chunk_limit)
 
-            # 파일별 문서 그룹화 (+ file_id 사용)
+            # 🔥 파일별로 그룹화 (file_id 기준)
             files_info = {}
             for doc in documents:
                 filename = doc.metadata.get("filename", "unknown")
-                file_id = doc.metadata.get("file_id", "unknown")  # 🎯 file_id 사용
+                file_id = doc.metadata.get("file_id", "unknown")
 
-                if filename not in files_info:
-                    files_info[filename] = {
+                if file_id not in files_info:
+                    files_info[file_id] = {
                         "filename": filename,
-                        "file_id": file_id,  # 🎯 파일별 단일 ID
+                        "file_id": file_id,
                         "document_count": 0,
                         "total_chunks": 0,
                         "file_size": doc.metadata.get("file_size", 0),
@@ -405,29 +406,43 @@ class VectorDBService:
                         "first_chunk_content": ""
                     }
 
-                files_info[filename]["document_count"] += 1
-                files_info[filename]["total_chunks"] = doc.metadata.get("total_chunks", 0)
+                files_info[file_id]["document_count"] += 1
+                files_info[file_id]["total_chunks"] = doc.metadata.get("total_chunks", 0)
 
                 # 첫 번째 청크의 내용 저장 (미리보기용)
-                if files_info[filename]["first_chunk_content"] == "":
+                if files_info[file_id]["first_chunk_content"] == "":
                     content_preview = doc.content[:200] + "..." if len(doc.content) > 200 else doc.content
-                    files_info[filename]["first_chunk_content"] = content_preview
+                    files_info[file_id]["first_chunk_content"] = content_preview
+
+            # 🔥 파일 리스트를 최신순으로 정렬 (upload_timestamp 기준)
+            sorted_files = sorted(
+                files_info.values(),
+                key=lambda x: x.get("upload_timestamp", ""),
+                reverse=True
+            )
+
+            # 🔥 파일 개수만큼 제한
+            limited_files = sorted_files[:file_limit]
+
+            # 전체 청크 수 계산
+            total_chunks = sum(doc.metadata.get("total_chunks", 1) for doc in documents)
 
             result = {
                 "success": True,
                 "vector_db_type": self.current_db_type,
-                "total_documents": len(documents),
-                "total_files": len(files_info),
-                "limit_applied": actual_limit,
-                "files": list(files_info.values()),
+                "total_documents": total_chunks,  # 전체 청크 수
+                "total_files": len(limited_files),  # 실제 반환된 파일 수
+                "all_files_count": len(files_info),  # 전체 파일 수
+                "limit_applied": file_limit,
+                "files": limited_files,
                 "embedding_model": self.model_name
             }
 
-            logger.info(f"SUCCESS 모든 문서 조회 완료: {len(documents)}개 문서, {len(files_info)}개 파일")
+            logger.info(f"SUCCESS 파일 조회 완료: {len(limited_files)}개 파일 (전체 {len(files_info)}개 중)")
             return result
 
         except Exception as e:
-            logger.error(f"ERROR 모든 문서 조회 실패: {e}")
+            logger.error(f"ERROR 파일 조회 실패: {e}")
             return {
                 "success": False,
                 "error": str(e),
