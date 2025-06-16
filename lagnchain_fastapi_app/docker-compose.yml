@@ -1,23 +1,7 @@
 version: '3.8'
 
 services:
-  # FastAPI 애플리케이션
-  app:
-    build: .
-    ports:
-      - "7000:7000"
-    environment:
-      - VECTOR_DB_TYPE=milvus
-      - MILVUS_HOST=milvus
-    volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-    depends_on:
-      - milvus
-    networks:
-      - vector_net
-
-  # Milvus 벡터 데이터베이스 (1순위) - 간단한 standalone 설정
+  # Milvus 벡터 데이터베이스 - standalone 설정
   milvus:
     image: milvusdb/milvus:v2.3.2
     container_name: milvus-standalone
@@ -29,6 +13,9 @@ services:
       - ETCD_USE_EMBED=true
       - ETCD_DATA_DIR=/var/lib/milvus/etcd
       - COMMON_STORAGETYPE=local
+      - MINIO_ADDRESS=localhost
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
     volumes:
       - milvus_data:/var/lib/milvus
     networks:
@@ -39,9 +26,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 90s
+    restart: always
 
 volumes:
   milvus_data:
+    driver: local
 
 networks:
   vector_net:
