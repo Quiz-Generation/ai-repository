@@ -281,9 +281,11 @@ class QuizGeneratorAgent:
 
             request = state["request"]
             summary = state["summary"]
+            topics = state["core_topics"]
+            keywords = state["keywords"]
 
-            # 🎯 프롬프트 관리자를 통한 프롬프트 생성
-            final_prompt = self.prompt_manager.generate_final_prompt(
+            # 🎯 1단계: PDF 기반 문제 생성
+            pdf_prompt = self.prompt_manager.generate_final_prompt(
                 summary=summary,
                 num_questions=request.num_questions,
                 difficulty=request.difficulty,
@@ -292,89 +294,127 @@ class QuizGeneratorAgent:
 
             messages = [
                 SystemMessage(content=self.prompt_manager.get_system_message()),
-                HumanMessage(content=final_prompt)
+                HumanMessage(content=pdf_prompt)
             ]
 
             response = await self.llm.ainvoke(messages)
+            pdf_questions = self._parse_questions(response.content)
 
-            # JSON 파싱 (기존 로직 유지)
-            try:
-                import json
-
-                content = response.content
-                if "```json" in content:
-                    json_start = content.find("```json") + 7
-                    json_end = content.find("```", json_start)
-                    json_content = content[json_start:json_end].strip()
-                elif "```" in content:
-                    json_start = content.find("```") + 3
-                    json_end = content.find("```", json_start)
-                    json_content = content[json_start:json_end].strip()
-                else:
-                    json_content = content.strip()
-                    if not json_content.startswith("{"):
-                        lines = json_content.split('\n')
-                        json_lines = []
-                        in_json = False
-                        for line in lines:
-                            if line.strip().startswith('{') or in_json:
-                                in_json = True
-                                json_lines.append(line)
-                                if line.strip().endswith('}') and json_lines:
-                                    break
-                        json_content = '\n'.join(json_lines)
-
-                questions_data = json.loads(json_content)
-                questions = questions_data.get("questions", [])
-
-                # 🔄 수량 보장 검증 (기존 로직 간소화)
-                validated_questions = self._ensure_question_count(questions, request)
-
-                state["generated_questions"] = validated_questions
-                state["current_step"] = "question_generator"
-
-                # 📊 분포 확인 로깅
-                basic_count = sum(1 for q in validated_questions if q.get("problem_level") == "basic")
-                app_count = sum(1 for q in validated_questions if q.get("problem_level") == "application")
-
-                logger.info(f"SUCCESS 균형 잡힌 문제 생성 완료: 총 {len(validated_questions)}개 (일반 {basic_count}개, 응용 {app_count}개)")
+            # 📊 PDF 기반 문제 수 확인
+            if len(pdf_questions) >= request.num_questions:
+                state["generated_questions"] = pdf_questions[:request.num_questions]
+                logger.info(f"SUCCESS PDF 기반 문제 생성 완료: {len(pdf_questions)}개")
                 return state
 
-            except json.JSONDecodeError as e:
-                logger.error(f"ERROR JSON 파싱 실패: {e}")
-                logger.error(f"LLM 응답 내용: {response.content[:500]}...")
-                state["generated_questions"] = [{"raw_content": response.content, "parsing_error": str(e)}]
-                state["errors"].append(f"JSON 파싱 실패: {str(e)}")
-                return state
+            # 🎯 2단계: AI 기반 추가 문제 생성
+            remaining_count = request.num_questions - len(pdf_questions)
+            logger.info(f"PDF 기반 문제 부족: {remaining_count}개 추가 생성 필요")
+
+            # AI 기반 문제 생성을 위한 프롬프트
+            ai_prompt = f"""
+당신은 전문 교육 컨텐츠 개발자입니다. 주어진 주제와 키워드를 바탕으로 추가 문제를 생성해주세요.
+
+📚 **기존 컨텐츠 요약**:
+{summary}
+
+🎯 **핵심 주제들**:
+{chr(10).join(f"- {topic}" for topic in topics)}
+
+🔑 **핵심 키워드들**:
+{chr(10).join(f"- {keyword}" for keyword in keywords)}
+
+📝 **문제 생성 조건**:
+- 추가 생성 필요 수량: {remaining_count}개
+- 난이도: {request.difficulty.value}
+- 문제 유형: {request.question_type.value}
+- 기존 문제와 중복되지 않도록 주의
+- 주제의 일반화된 이해를 측정하는 문제 생성
+- 실제 교육 현장에서 사용 가능한 수준의 문제
+
+**출력 형식**:
+```json
+{{
+  "questions": [
+    {{
+      "id": 1,
+      "question": "문제 내용",
+      "type": "{request.question_type.value}",
+      "difficulty": "{request.difficulty.value}",
+      "options": ["선택지1", "선택지2", "선택지3", "선택지4"],
+      "correct_answer": "정답",
+      "explanation": "정답 해설",
+      "learning_objective": "학습 목표",
+      "problem_level": "basic 또는 application",
+      "keywords": ["키워드1", "키워드2"],
+      "source": "ai_generated"
+    }}
+  ]
+}}
+```
+
+정확히 {remaining_count}개의 추가 문제를 생성해주세요.
+"""
+
+            messages = [
+                SystemMessage(content="당신은 전문 교육 컨텐츠 개발자입니다."),
+                HumanMessage(content=ai_prompt)
+            ]
+
+            response = await self.llm.ainvoke(messages)
+            ai_questions = self._parse_questions(response.content)
+
+            # 📊 최종 문제 목록 생성
+            final_questions = pdf_questions + ai_questions[:remaining_count]
+
+            # 🔄 문제 순서 섞기
+            import random
+            random.shuffle(final_questions)
+
+            state["generated_questions"] = final_questions
+            state["current_step"] = "question_generator"
+
+            # 📊 분포 확인 로깅
+            basic_count = sum(1 for q in final_questions if q.get("problem_level") == "basic")
+            app_count = sum(1 for q in final_questions if q.get("problem_level") == "application")
+            pdf_count = sum(1 for q in final_questions if q.get("source") != "ai_generated")
+            ai_count = sum(1 for q in final_questions if q.get("source") == "ai_generated")
+
+            logger.info(f"SUCCESS 문제 생성 완료: 총 {len(final_questions)}개")
+            logger.info(f"- PDF 기반: {pdf_count}개")
+            logger.info(f"- AI 기반: {ai_count}개")
+            logger.info(f"- 일반 문제: {basic_count}개")
+            logger.info(f"- 응용 문제: {app_count}개")
+
+            return state
 
         except Exception as e:
             logger.error(f"ERROR 문제 생성 실패: {e}")
             state["errors"].append(f"문제 생성 실패: {str(e)}")
             return state
 
-    def _ensure_question_count(self, questions: List[Dict], request: QuizRequest) -> List[Dict]:
-        """수량 보장 시스템 (간소화)"""
-        validated_questions = []
+    def _parse_questions(self, content: str) -> List[Dict]:
+        """JSON 응답 파싱"""
+        try:
+            import json
 
-        for q in questions:
-            if (isinstance(q, dict) and
-                q.get("question") and
-                q.get("correct_answer")):
-                validated_questions.append(q)
+            if "```json" in content:
+                json_start = content.find("```json") + 7
+                json_end = content.find("```", json_start)
+                json_content = content[json_start:json_end].strip()
+            elif "```" in content:
+                json_start = content.find("```") + 3
+                json_end = content.find("```", json_start)
+                json_content = content[json_start:json_end].strip()
+            else:
+                json_content = content.strip()
 
-            if len(validated_questions) >= request.num_questions:
-                break
+            questions_data = json.loads(json_content)
+            return questions_data.get("questions", [])
 
-        # 🔄 수량 부족 시 기존 문제 복제로 보완
-        while len(validated_questions) < request.num_questions and validated_questions:
-            for q in questions:
-                if len(validated_questions) >= request.num_questions:
-                    break
-                if isinstance(q, dict) and q.get("question"):
-                    validated_questions.append(q)
-                    logger.info(f"DUPLICATE 수량 부족으로 문제 복제 추가")
-
-        return validated_questions[:request.num_questions]  # 정확한 수량만 반환
+        except json.JSONDecodeError as e:
+            logger.error(f"ERROR JSON 파싱 실패: {e}")
+            logger.error(f"LLM 응답 내용: {content[:500]}...")
+            return []
 
     async def _validate_questions(self, state: QuizState) -> QuizState:
         """✅ 5단계: 문제 품질 검증"""
