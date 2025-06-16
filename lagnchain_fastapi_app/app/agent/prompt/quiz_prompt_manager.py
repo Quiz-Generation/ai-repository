@@ -48,10 +48,10 @@ class QuizPromptManager:
 
 **문제 품질 가이드**:
 1. **다양성 확보**
-   - 기본 개념 (20%)
-   - 원리 이해 (30%)
-   - 실제 응용 (30%)
-   - 심화 분석 (20%)
+   - 기본 개념 (15%)
+   - 원리 이해 (25%)
+   - 실제 응용 (35%)
+   - 심화 분석 (25%)
 
 2. **선택지 구성**
    - 정답: 깊은 이해와 분석이 필요한 답
@@ -65,6 +65,8 @@ class QuizPromptManager:
    - 관련 개념 연결
    - 실제 적용 예시
    - 추가 학습 포인트
+   - 실무 적용 방안
+   - 창의적 해결방안
 
 4. **문제 구성**
    - 명확한 문제 상황
@@ -72,6 +74,24 @@ class QuizPromptManager:
    - 실무/실생활 연계
    - 심층적 사고 유도
    - 창의적 해결방안 요구
+   - 실제 프로젝트 사례
+   - 다양한 해결방안 제시
+
+5. **실무 연계**
+   - 실제 프로젝트 기반
+   - 구체적인 시나리오
+   - 실무적 제약조건
+   - 현실적 고려사항
+   - 실용적 해결방안
+   - 성능 최적화 방안
+
+6. **창의적 사고 유도**
+   - 개방형 문제
+   - 다양한 해결방안
+   - 실무 적용 사례
+   - 최적화 방안
+   - 확장 가능성
+   - 혁신적 접근
 
 **출력 형식**:
 ```json
@@ -86,12 +106,18 @@ class QuizPromptManager:
       "correct_answer": "정답",
       "explanation": "정답 해설",
       "learning_objective": "학습 목표",
-      "problem_level": "basic/application/analysis/creation",
+      "problem_level": "basic/application/analysis/creation/optimization/scalability",
       "keywords": ["키워드1", "키워드2"],
-      "concept_depth": "basic/understanding/application/analysis/creation",
+      "concept_depth": "basic/understanding/application/analysis/creation/optimization/scalability",
       "real_world_connection": "실무/실생활 연계 설명",
       "critical_thinking": "비판적 사고 요구사항",
-      "creative_thinking": "창의적 사고 요구사항"
+      "creative_thinking": "창의적 사고 요구사항",
+      "practical_application": "실무 적용 방안",
+      "optimization_strategy": "최적화 전략",
+      "alternative_solutions": "대체 해결방안",
+      "project_scenario": "프로젝트 시나리오",
+      "performance_considerations": "성능 고려사항",
+      "scalability_analysis": "확장성 분석"
     }}
   ]
 }}
@@ -113,6 +139,7 @@ class QuizPromptManager:
   * 기본 특징 구별
   * 간단한 예시 적용
   * 실생활 연계
+  * 기본적인 실무 적용
 - **학생 반응**: "아, 이 정도는 기본이니까 맞춰야지"
 - **난이도 느낌**: 공부했으면 확실히 맞출 수 있는 수준
 - **문제 구성**:
@@ -120,6 +147,7 @@ class QuizPromptManager:
   * 직관적인 선택지
   * 구체적인 예시 포함
   * 실생활 연계
+  * 기본적인 실무 사례
 """,
             DifficultyLevel.MEDIUM: """
 🟡 **MEDIUM 난이도 가이드**:
@@ -129,6 +157,7 @@ class QuizPromptManager:
   * 조건부 적용
   * 단계적 해결 과정
   * 실무 사례 적용
+  * 성능 최적화 고려
 - **학생 반응**: "음... 좀 생각해봐야겠네, 하지만 풀 만해"
 - **난이도 느낌**: 조금 고민하면 답을 찾을 수 있는 수준
 - **문제 구성**:
@@ -137,6 +166,7 @@ class QuizPromptManager:
   * 선택지 간 미묘한 차이
   * 구체적인 적용 사례
   * 실무적 고려사항
+  * 성능 최적화 방안
 """,
             DifficultyLevel.HARD: """
 🔴 **HARD 난이도 가이드**:
@@ -147,6 +177,8 @@ class QuizPromptManager:
   * 심화 원리 이해
   * 창의적 해결방안
   * 실무 프로젝트 적용
+  * 성능 최적화 전략
+  * 확장성 고려
 - **학생 반응**: "어렵네... 하지만 차근차근 분석하면 풀 수 있을 것 같아"
 - **난이도 느낌**: 상위권 학생들도 고민이 필요한 수준
 - **문제 구성**:
@@ -155,6 +187,8 @@ class QuizPromptManager:
   * 최적화 요구
   * 실무적 고려사항
   * 창의적 사고 요구
+  * 성능 최적화 방안
+  * 확장성 분석
 """
         }
         return guides.get(difficulty, "")
@@ -166,9 +200,9 @@ class QuizPromptManager:
             QuestionType.MULTIPLE_CHOICE: """
 📝 **객관식 4지선다 가이드**:
 - **정답**: 깊은 이해와 분석이 필요한 답
-- **오답1**: 부분적으로 맞지만 완전하지 않은 답
-- **오답2**: 흔히 헷갈리는 유사 개념
-- **오답3**: 명백히 틀렸지만 공부 안 한 학생이 선택할 만한 답
+- **오답1**: 부분적으로 맞는 답
+- **오답2**: 흔한 오개념
+- **오답3**: 관련은 있지만 틀린 답
 
 **선택지 구성 원칙**:
 1. 모든 선택지가 문법적으로 일관성 있게
@@ -177,6 +211,8 @@ class QuizPromptManager:
 4. 각 선택지가 독립적이고 명확하게
 5. 실무/실생활 연계된 선택지 포함
 6. 창의적 사고를 요구하는 선택지 포함
+7. 성능 최적화 관련 선택지 포함
+8. 확장성 고려한 선택지 포함
 """,
             QuestionType.TRUE_FALSE: """
 ⭕ **참/거짓 문제 가이드**:
@@ -186,6 +222,8 @@ class QuizPromptManager:
   * 핵심 개념의 정확한 이해 여부 확인
   * 실무 적용 가능성 검토
   * 창의적 해결방안 고려
+  * 성능 최적화 방안 검토
+  * 확장성 분석
 
 **문제 구성 원칙**:
 1. 각 진술이 독립적이고 명확하게
@@ -194,6 +232,8 @@ class QuizPromptManager:
 4. 명확한 판단 기준 제시
 5. 실무/실생활 연계
 6. 창의적 사고 유도
+7. 성능 최적화 고려
+8. 확장성 분석
 """,
             QuestionType.SHORT_ANSWER: """
 ✏️ **단답형 문제 가이드**:
@@ -203,6 +243,8 @@ class QuizPromptManager:
   * 주관적 해석 여지가 적은 객관적 답안
   * 실무 적용 가능성
   * 창의적 해결방안
+  * 성능 최적화 방안
+  * 확장성 고려
 
 **문제 구성 원칙**:
 1. 명확한 답변 범위 제시
@@ -211,6 +253,8 @@ class QuizPromptManager:
 4. 채점 기준 명시
 5. 실무/실생활 연계
 6. 창의적 사고 유도
+7. 성능 최적화 방안
+8. 확장성 분석
 """,
             QuestionType.ESSAY: """
 📝 **서술형 문제 가이드**:
@@ -220,6 +264,8 @@ class QuizPromptManager:
   * 명확한 채점 기준
   * 실무 적용 가능성
   * 창의적 해결방안
+  * 성능 최적화 전략
+  * 확장성 분석
 
 **문제 구성 원칙**:
 1. 명확한 문제 상황
@@ -228,6 +274,8 @@ class QuizPromptManager:
 4. 충분한 답변 시간 고려
 5. 실무/실생활 연계
 6. 창의적 사고 유도
+7. 성능 최적화 방안
+8. 확장성 분석
 """,
             QuestionType.FILL_BLANK: """
 ✏️ **빈칸 채우기 가이드**:
@@ -237,6 +285,8 @@ class QuizPromptManager:
   * 전문 용어 사용
   * 실무 적용 가능성
   * 창의적 해결방안
+  * 성능 최적화 방안
+  * 확장성 고려
 
 **문제 구성 원칙**:
 1. 명확한 문맥 제공
@@ -245,6 +295,8 @@ class QuizPromptManager:
 4. 채점 기준 명시
 5. 실무/실생활 연계
 6. 창의적 사고 유도
+7. 성능 최적화 방안
+8. 확장성 분석
 """
         }
         return guides.get(question_type, "")
@@ -264,6 +316,8 @@ class QuizPromptManager:
   * 실제 교육 현장에서 사용 가능한 수준
   * 실무/실생활 연계
   * 창의적 사고 유도
+  * 성능 최적화 고려
+  * 확장성 분석
 
 - **응용 문제 {application_count}개 (10%)**: 실무/심화 응용 문제
   * 실제 상황 적용
@@ -272,6 +326,8 @@ class QuizPromptManager:
   * 실무/실생활 연계
   * 복잡한 문제 해결
   * 최적화 요구
+  * 성능 최적화 전략
+  * 확장성 분석
 
 **문제 품질 기준**:
 1. **개념 깊이**
@@ -280,6 +336,8 @@ class QuizPromptManager:
    - Application: 실제 적용
    - Analysis: 심층 분석
    - Creation: 창의적 해결
+   - Optimization: 성능 최적화
+   - Scalability: 확장성 분석
 
 2. **실무 연계**
    - 실제 사례 기반
@@ -287,6 +345,8 @@ class QuizPromptManager:
    - 현실적 제약조건
    - 실용적 해결방안
    - 창의적 접근
+   - 성능 최적화
+   - 확장성 고려
 
 3. **교육적 가치**
    - 명확한 학습 목표
@@ -294,13 +354,21 @@ class QuizPromptManager:
    - 실력 향상 기여
    - 자기주도학습 유도
    - 창의적 사고 개발
+   - 성능 최적화 능력
+   - 확장성 사고
 
 **중요**: 각 문제마다 다음을 명시해주세요:
-- problem_level: "basic/application/analysis/creation"
-- concept_depth: "basic/understanding/application/analysis/creation"
+- problem_level: "basic/application/analysis/creation/optimization/scalability"
+- concept_depth: "basic/understanding/application/analysis/creation/optimization/scalability"
 - real_world_connection: 실무/실생활 연계 설명
 - critical_thinking: 비판적 사고 요구사항
 - creative_thinking: 창의적 사고 요구사항
+- practical_application: 실무 적용 방안
+- optimization_strategy: 최적화 전략
+- alternative_solutions: 대체 해결방안
+- project_scenario: 프로젝트 시나리오
+- performance_considerations: 성능 고려사항
+- scalability_analysis: 확장성 분석
 """
 
     @classmethod
