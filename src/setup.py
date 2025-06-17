@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 
 setup(
-    name="lagnchain_fastapi_app",
+    name="src",
     version="0.1.0",
     author="devjun",
     author_email="jyporse@naver.com",
@@ -28,14 +28,15 @@ setup(
         "sentence-transformers==2.2.2",
         "langchain==0.1.0",
         "langchain-community==0.0.10",
+        "langchain-openai==0.0.5",
+        "langgraph==0.0.20",
 
         # 벡터 DB 및 임베딩 관련
         "transformers==4.35.0",
         "torch==2.2.0",
-        "numpy==1.24.3",
+        "numpy==1.26.4",
 
         # 벡터 데이터베이스 클라이언트
-        "faiss-cpu==1.7.4",
         "pymilvus[model]==2.3.4",
 
         # 기타 유틸리티
