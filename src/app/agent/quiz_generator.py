@@ -11,6 +11,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
+from langchain.prompts import ChatPromptTemplate
 
 # 🔥 프롬프트 관리자 임포트
 from .prompt import QuizPromptManager
@@ -27,6 +28,7 @@ class QuizRequest:
     difficulty: DifficultyLevel = DifficultyLevel.MEDIUM
     question_type: QuestionType = QuestionType.MULTIPLE_CHOICE
     custom_topic: Optional[str] = None  # 특정 주제 지정
+    additional_instructions: Optional[List[str]] = None  # 추가 지시사항
 
 
 class QuizState(TypedDict):
@@ -73,53 +75,65 @@ class QuizGeneratorAgent:
         # 🎯 프롬프트 관리자 초기화
         self.prompt_manager = QuizPromptManager()
 
+        # 프롬프트 템플릿 초기화
+        self.summary_template = ChatPromptTemplate.from_messages([
+            ("system", "당신은 전문 교육 컨텐츠 분석가입니다."),
+            ("human", "{prompt}")
+        ])
+
+        self.topic_template = ChatPromptTemplate.from_messages([
+            ("system", "당신은 전문 교육과정 설계자입니다."),
+            ("human", "{prompt}")
+        ])
+
+        self.keyword_template = ChatPromptTemplate.from_messages([
+            ("system", "당신은 전문 시험 출제 전문가입니다."),
+            ("human", "{prompt}")
+        ])
+
+        self.question_template = ChatPromptTemplate.from_messages([
+            ("system", "{system_message}"),
+            ("human", "{prompt}")
+        ])
+
     def _create_workflow(self) -> StateGraph:
         """LangGraph 워크플로우 생성"""
-
-        # 워크플로우 그래프 생성
         workflow = StateGraph(QuizState)
 
-        # 노드 추가
-        workflow.add_node("document_summarizer", self._summarize_documents)
-        workflow.add_node("topic_extractor", self._extract_core_topics)
-        workflow.add_node("keyword_extractor", self._extract_keywords)
+        # 병렬 처리 노드 추가
+        workflow.add_node("parallel_processor", self._parallel_process)
         workflow.add_node("question_generator", self._generate_questions)
         workflow.add_node("quality_validator", self._validate_questions)
 
         # 워크플로우 순서 정의
-        workflow.set_entry_point("document_summarizer")
-        workflow.add_edge("document_summarizer", "topic_extractor")
-        workflow.add_edge("topic_extractor", "keyword_extractor")
-        workflow.add_edge("keyword_extractor", "question_generator")
+        workflow.set_entry_point("parallel_processor")
+        workflow.add_edge("parallel_processor", "question_generator")
         workflow.add_edge("question_generator", "quality_validator")
         workflow.add_edge("quality_validator", END)
 
         return workflow.compile()
 
-    async def _summarize_documents(self, state: QuizState) -> QuizState:
-        """📄 1단계: 문서 요약"""
+    async def _parallel_process(self, state: QuizState) -> QuizState:
+        """📄 병렬 처리: 문서 요약, 핵심 주제 추출, 키워드 추출"""
         try:
-            logger.info("STEP1 문서 요약 시작")
+            logger.info("병렬 처리 시작")
 
             # 문서 내용 결합
             combined_content = ""
             domain_info = {}
-
             for doc in state["documents"]:
                 filename = doc.get("filename", "Unknown")
                 content = doc.get("content", "")
-
-                combined_content += f"\n\n=== {filename} ===\n{content[:2000]}"  # 첫 2000자만
-
-                # 도메인 정보 수집
+                combined_content += f"\n\n=== {filename} ===\n{content[:2000]}"
                 domain_info[filename] = {
                     "language": doc.get("language", "unknown"),
                     "file_size": doc.get("file_size", 0),
                     "chunk_count": doc.get("total_chunks", 0)
                 }
 
-            # 🔥 다중 도메인 대응 요약 프롬프트
-            summary_prompt = f"""
+            # 병렬 처리 태스크 정의
+            async def summarize_documents():
+                summary_prompt = f"""
 당신은 전문 교육 컨텐츠 분석가입니다. 주어진 문서들을 분석하여 종합적인 요약을 작성해주세요.
 
 📋 **분석 대상 문서들:**
@@ -127,55 +141,28 @@ class QuizGeneratorAgent:
 
 🎯 **요약 지침:**
 1. 각 문서의 핵심 내용을 파악하고 주요 개념을 추출하세요
-2. 서로 다른 도메인(기술, 학문, 실무 등)의 문서라면 각각의 특성을 반영하세요
+2. 서로 다른 도메인의 문서라면 각각의 특성을 반영하세요
 3. 교육/학습 목적에 적합한 핵심 지식을 중심으로 요약하세요
 4. 문제 출제가 가능한 구체적인 사실, 개념, 절차를 포함하세요
 
 **요약 길이:** 500-800자
 **출력 형식:** 각 문서별로 구분하여 요약한 후 전체 종합 요약
 """
+                chain = self.summary_template | self.llm
+                response = await chain.ainvoke({"prompt": summary_prompt})
+                return response.content
 
-            # LLM 호출
-            messages = [
-                SystemMessage(content="당신은 전문 교육 컨텐츠 분석가입니다."),
-                HumanMessage(content=summary_prompt)
-            ]
-
-            response = await self.llm.ainvoke(messages)
-            summary = response.content
-
-            # 상태 업데이트
-            state["summary"] = summary
-            state["domain_context"] = domain_info
-            state["current_step"] = "document_summarizer"
-
-            logger.info("SUCCESS 문서 요약 완료")
-            return state
-
-        except Exception as e:
-            logger.error(f"ERROR 문서 요약 실패: {e}")
-            state["errors"].append(f"문서 요약 실패: {str(e)}")
-            return state
-
-    async def _extract_core_topics(self, state: QuizState) -> QuizState:
-        """🎯 2단계: 핵심 주제 추출"""
-        try:
-            logger.info("STEP2 핵심 주제 추출 시작")
-
-            summary = state["summary"]
-            request = state["request"]
-
-            # 🔥 주제 추출 프롬프트 (일반화된)
-            topic_prompt = f"""
+            async def extract_topics():
+                topic_prompt = f"""
 문서 요약을 바탕으로 핵심 주제들을 추출해주세요.
 
 📋 **문서 요약:**
-{summary}
+{combined_content}
 
 🎯 **추출 조건:**
-- 난이도: {request.difficulty.value}
-- 목표 문제 수: {request.num_questions}개
-- 문제 유형: {request.question_type.value}
+- 난이도: {state["request"].difficulty.value}
+- 목표 문제 수: {state["request"].num_questions}개
+- 문제 유형: {state["request"].question_type.value}
 
 **주제 추출 지침:**
 1. 교육적 가치가 높은 핵심 개념들을 선별하세요
@@ -190,52 +177,27 @@ class QuizGeneratorAgent:
 
 **주제 개수:** 5-8개 (문제 수보다 많게)
 """
+                chain = self.topic_template | self.llm
+                response = await chain.ainvoke({"prompt": topic_prompt})
+                topics_text = response.content
+                topics = []
+                for line in topics_text.split('\n'):
+                    if line.strip().startswith('-') or line.strip().startswith('•'):
+                        topic = line.strip().lstrip('- •').strip()
+                        if topic:
+                            topics.append(topic)
+                return topics
 
-            messages = [
-                SystemMessage(content="당신은 전문 교육과정 설계자입니다."),
-                HumanMessage(content=topic_prompt)
-            ]
-
-            response = await self.llm.ainvoke(messages)
-
-            # 주제 파싱 (간단한 파싱)
-            topics_text = response.content
-            topics = []
-            for line in topics_text.split('\n'):
-                if line.strip().startswith('-') or line.strip().startswith('•'):
-                    topic = line.strip().lstrip('- •').strip()
-                    if topic:
-                        topics.append(topic)
-
-            state["core_topics"] = topics
-            state["current_step"] = "topic_extractor"
-
-            logger.info(f"SUCCESS 핵심 주제 추출 완료: {len(topics)}개")
-            return state
-
-        except Exception as e:
-            logger.error(f"ERROR 핵심 주제 추출 실패: {e}")
-            state["errors"].append(f"주제 추출 실패: {str(e)}")
-            return state
-
-    async def _extract_keywords(self, state: QuizState) -> QuizState:
-        """🔑 3단계: 핵심 키워드 추출"""
-        try:
-            logger.info("STEP3 키워드 추출 시작")
-
-            topics = state["core_topics"]
-            request = state["request"]
-
-            # 🔥 키워드 추출 프롬프트
-            keyword_prompt = f"""
+            async def extract_keywords():
+                keyword_prompt = f"""
 추출된 핵심 주제들을 바탕으로 문제 출제용 키워드들을 추출해주세요.
 
 📋 **핵심 주제들:**
-{chr(10).join(f"{i+1}. {topic}" for i, topic in enumerate(topics))}
+{combined_content}
 
 🎯 **키워드 추출 조건:**
-- 난이도: {request.difficulty.value}
-- 문제 유형: {request.question_type.value}
+- 난이도: {state["request"].difficulty.value}
+- 문제 유형: {state["request"].question_type.value}
 
 **키워드 추출 지침:**
 1. 각 주제별로 핵심 키워드 2-3개씩 추출
@@ -251,27 +213,33 @@ class QuizGeneratorAgent:
 
 **키워드 개수:** 15-25개
 """
+                chain = self.keyword_template | self.llm
+                response = await chain.ainvoke({"prompt": keyword_prompt})
+                keywords_text = response.content
+                keywords = [kw.strip() for kw in keywords_text.split(',') if kw.strip()]
+                return keywords
 
-            messages = [
-                SystemMessage(content="당신은 전문 시험 출제 전문가입니다."),
-                HumanMessage(content=keyword_prompt)
-            ]
+            # 병렬 실행
+            import asyncio
+            summary, topics, keywords = await asyncio.gather(
+                summarize_documents(),
+                extract_topics(),
+                extract_keywords()
+            )
 
-            response = await self.llm.ainvoke(messages)
-
-            # 키워드 파싱
-            keywords_text = response.content
-            keywords = [kw.strip() for kw in keywords_text.split(',') if kw.strip()]
-
+            # 상태 업데이트
+            state["summary"] = summary
+            state["core_topics"] = topics
             state["keywords"] = keywords
-            state["current_step"] = "keyword_extractor"
+            state["domain_context"] = domain_info
+            state["current_step"] = "parallel_processor"
 
-            logger.info(f"SUCCESS 키워드 추출 완료: {len(keywords)}개")
+            logger.info("SUCCESS 병렬 처리 완료")
             return state
 
         except Exception as e:
-            logger.error(f"ERROR 키워드 추출 실패: {e}")
-            state["errors"].append(f"키워드 추출 실패: {str(e)}")
+            logger.error(f"ERROR 병렬 처리 실패: {e}")
+            state["errors"].append(f"병렬 처리 실패: {str(e)}")
             return state
 
     async def _generate_questions(self, state: QuizState) -> QuizState:
@@ -284,13 +252,65 @@ class QuizGeneratorAgent:
             topics = state["core_topics"]
             keywords = state["keywords"]
 
+            # 추가 지시사항이 있는 경우 프롬프트에 추가
+            additional_guide = ""
+            if request.additional_instructions:
+                additional_guide = "\n\n📝 **추가 지시사항**:\n" + "\n".join(f"- {instruction}" for instruction in request.additional_instructions)
+
             # 🎯 1단계: PDF 기반 문제 생성
-            pdf_prompt = self.prompt_manager.generate_final_prompt(
-                summary=summary,
-                num_questions=request.num_questions,
-                difficulty=request.difficulty,
-                question_type=request.question_type
-            )
+            pdf_prompt = f"""
+당신은 전문 교육 컨텐츠 개발자입니다. 주어진 내용을 바탕으로 고품질의 문제를 생성해주세요.
+
+📚 **컨텐츠 요약**:
+{summary}
+
+🎯 **핵심 주제들**:
+{chr(10).join(f"- {topic}" for topic in topics)}
+
+🔑 **핵심 키워드들**:
+{chr(10).join(f"- {keyword}" for keyword in keywords)}
+
+📝 **문제 생성 조건**:
+- 생성할 문제 수: {request.num_questions}개
+- 난이도: {request.difficulty.value}
+- 문제 유형: {request.question_type.value}
+
+🎯 **문제 품질 요구사항**:
+1. 각 문제는 구체적인 예시나 실제 사례를 포함해야 합니다
+2. 중복되는 개념의 문제는 피하고, 다양한 관점에서 접근해야 합니다
+3. 문제는 이론적 개념과 실제 구현을 균형있게 다루어야 합니다
+4. 각 문제는 명확한 학습 목표를 가져야 합니다
+5. 문제의 난이도는 지정된 수준에 맞게 조정되어야 합니다
+6. 선택지는 명확하고 논리적으로 구성되어야 합니다
+7. 정답 해설은 상세하고 교육적으로 가치있어야 합니다
+
+{additional_guide}
+
+**출력 형식**:
+```json
+{{
+  "questions": [
+    {{
+      "id": 1,
+      "question": "문제 내용",
+      "type": "{request.question_type.value}",
+      "difficulty": "{request.difficulty.value}",
+      "options": ["선택지1", "선택지2", "선택지3", "선택지4"],
+      "correct_answer": "정답",
+      "explanation": "정답 해설",
+      "learning_objective": "학습 목표",
+      "problem_level": "basic 또는 application",
+      "keywords": ["키워드1", "키워드2"],
+      "source": "pdf_based",
+      "example": "관련 예시나 실제 사례",
+      "implementation": "실제 구현 방법 (해당되는 경우)"
+    }}
+  ]
+}}
+```
+
+정확히 {request.num_questions}개의 고품질 문제를 생성해주세요.
+"""
 
             messages = [
                 SystemMessage(content=self.prompt_manager.get_system_message()),
@@ -327,9 +347,17 @@ class QuizGeneratorAgent:
 - 추가 생성 필요 수량: {remaining_count}개
 - 난이도: {request.difficulty.value}
 - 문제 유형: {request.question_type.value}
-- 기존 문제와 중복되지 않도록 주의
-- 주제의 일반화된 이해를 측정하는 문제 생성
-- 실제 교육 현장에서 사용 가능한 수준의 문제
+
+🎯 **문제 품질 요구사항**:
+1. 각 문제는 구체적인 예시나 실제 사례를 포함해야 합니다
+2. 중복되는 개념의 문제는 피하고, 다양한 관점에서 접근해야 합니다
+3. 문제는 이론적 개념과 실제 구현을 균형있게 다루어야 합니다
+4. 각 문제는 명확한 학습 목표를 가져야 합니다
+5. 문제의 난이도는 지정된 수준에 맞게 조정되어야 합니다
+6. 선택지는 명확하고 논리적으로 구성되어야 합니다
+7. 정답 해설은 상세하고 교육적으로 가치있어야 합니다
+
+{additional_guide}
 
 **출력 형식**:
 ```json
@@ -346,13 +374,15 @@ class QuizGeneratorAgent:
       "learning_objective": "학습 목표",
       "problem_level": "basic 또는 application",
       "keywords": ["키워드1", "키워드2"],
-      "source": "ai_generated"
+      "source": "ai_generated",
+      "example": "관련 예시나 실제 사례",
+      "implementation": "실제 구현 방법 (해당되는 경우)"
     }}
   ]
 }}
 ```
 
-정확히 {remaining_count}개의 추가 문제를 생성해주세요.
+정확히 {remaining_count}개의 고품질 추가 문제를 생성해주세요.
 """
 
             messages = [
