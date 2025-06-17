@@ -1,7 +1,5 @@
 from setuptools import setup, find_packages
 
-with open("README.md", "r", encoding="utf-8") as fh:
-    long_description = fh.read()
 
 setup(
     name="lagnchain_fastapi_app",
@@ -9,9 +7,6 @@ setup(
     author="devjun",
     author_email="jyporse@naver.com",
     description="A FastAPI application for document processing and quiz generation",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    url="https://github.com/Quiz-Generation/ai-repository",
     packages=find_packages(),
     python_requires=">=3.8",
     install_requires=[
