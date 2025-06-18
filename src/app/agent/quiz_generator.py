@@ -378,9 +378,25 @@ class QuizGeneratorAgent:
                 if len(q["options"]) < 2:
                     continue
 
-                # 정답이 선택지에 포함되어 있는지 확인
-                if q["correct_answer"] not in q["options"]:
-                    continue
+                # 정답이 선택지에 포함되어 있는지 확인 (전처리된 형식 고려)
+                correct_answer = q["correct_answer"]
+                options = q["options"]
+
+                # 정답이 선택지에 직접 포함되어 있는지 확인
+                if correct_answer in options:
+                    pass
+                else:
+                    # 정답에서 번호를 제거하고 내용만 비교
+                    import re
+                    answer_content = re.sub(r'^\d+\.\s*', '', correct_answer)
+                    found = False
+                    for option in options:
+                        option_content = re.sub(r'^\d+\.\s*', '', option)
+                        if answer_content == option_content:
+                            found = True
+                            break
+                    if not found:
+                        continue
 
                 # 문제 수준 설정
                 if "problem_level" not in q:
@@ -566,11 +582,15 @@ class QuizGeneratorAgent:
                 keywords.extend([kw.strip() for kw in r["keywords"].split(',') if kw.strip()])
             logger.info(f"[전처리] 완료 (총 소요 시간: {time.time() - preprocess_start:.2f}초)")
 
-            # 2. 문제 생성: 2문제씩 5번 병렬
+            # 2. 문제 생성: 더 많은 문제를 생성하여 부족한 경우 대비
             generate_start = time.time()
-            logger.info("[문제 생성] 시작 (2문제씩 5회 병렬)")
-            batch_size = 2
-            total_batches = (request.num_questions + batch_size - 1) // batch_size
+            logger.info("[문제 생성] 시작 (더 많은 문제 생성)")
+
+            # 요청 수의 1.5배로 생성하여 품질 검사 후 필터링 대비
+            target_questions = int(request.num_questions * 1.5)
+            batch_size = 3  # 배치 크기 증가
+            total_batches = (target_questions + batch_size - 1) // batch_size
+
             async def generate_questions_batch(batch_num):
                 question_prompt = self.prompt_manager.get_prompt("question").format(
                     summary=summary,
@@ -585,16 +605,35 @@ class QuizGeneratorAgent:
                     "prompt": question_prompt
                 })
                 return self._parse_questions(response.content)
+
             tasks = [generate_questions_batch(i) for i in range(total_batches)]
             results = await asyncio.gather(*tasks)
             questions = [q for batch in results for q in batch]
+
+            # 품질 검사 후 문제 수가 부족한 경우 추가 생성
+            questions = self._basic_quality_check(questions)
+            if len(questions) < request.num_questions:
+                logger.info(f"문제 수 부족 ({len(questions)}/{request.num_questions}), 추가 생성 시작")
+
+                # 부족한 수의 2배로 추가 생성
+                additional_needed = (request.num_questions - len(questions)) * 2
+                additional_batches = (additional_needed + batch_size - 1) // batch_size
+
+                additional_tasks = [generate_questions_batch(i) for i in range(additional_batches)]
+                additional_results = await asyncio.gather(*additional_tasks)
+                additional_questions = [q for batch in additional_results for q in batch]
+                additional_questions = self._basic_quality_check(additional_questions)
+
+                questions.extend(additional_questions)
+                logger.info(f"추가 생성 완료: 총 {len(questions)}개 문제")
+
             logger.info(f"[문제 생성] 완료 (소요 시간: {time.time() - generate_start:.2f}초)")
 
-            # 3. 후처리: 중복 제거, 품질 검사, 슬라이싱, 보기 번호 부여
+            # 3. 후처리: ID 부여 및 최종 정리
             post_start = time.time()
             logger.info("[후처리] 시작")
-            questions = self._basic_quality_check(questions)
-            questions = questions[:request.num_questions]
+            # 품질 검사는 이미 문제 생성 단계에서 완료됨
+            questions = questions[:request.num_questions]  # 요청 수만큼만 반환
             for i, question in enumerate(questions, 1):
                 question["id"] = i
                 # 전처리에서 이미 선택지 번호와 correct_answer_number가 처리되었으므로 추가 처리 제거
