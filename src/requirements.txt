@@ -18,6 +18,8 @@ langchain==0.1.0
 langchain-community==0.0.10
 langchain-openai==0.0.5
 langgraph==0.0.20
+langchain-core==0.1.23
+langsmith==0.0.87
 
 # 벡터 DB 및 임베딩 관련
 transformers==4.35.0

@@ -7,7 +7,8 @@ setup(
     author="devjun",
     author_email="jyporse@naver.com",
     description="A FastAPI application for document processing and quiz generation",
-    packages=find_packages(),
+    packages=find_packages(where="src"),
+    package_dir={"": "src"},
     python_requires=">=3.8",
     install_requires=[
         # FastAPI 관련
@@ -30,6 +31,8 @@ setup(
         "langchain-community==0.0.10",
         "langchain-openai==0.0.5",
         "langgraph==0.0.20",
+        "langchain-core==0.1.23",
+        "langsmith==0.0.87",
 
         # 벡터 DB 및 임베딩 관련
         "transformers==4.35.0",
@@ -61,7 +64,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "lagnchain=app.main:main",
+            "langchain=app.main:main",
         ],
     },
 )
