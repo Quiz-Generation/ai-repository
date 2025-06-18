@@ -154,8 +154,14 @@ class QuizPromptManager:
       "question": "문제 내용",
       "type": "{question_type}",
       "difficulty": "{difficulty}",
-      "options": ["선택지1", "선택지2", "선택지3", "선택지4"],
-      "correct_answer": "정답",
+      "options": [
+        "1. 진정한 자아와의 갈등",
+        "2. 사회적 기대와의 조화",
+        "3. 경제적 불안",
+        "4. 인간관계의 복잡성"
+      ],
+      "correct_answer": "1. 진정한 자아와의 갈등",
+      "correct_answer_number": 1,
       "explanation": "정답 해설",
       "learning_objective": "학습 목표",
       "problem_level": "basic/concept/application",
@@ -168,6 +174,47 @@ class QuizPromptManager:
   ]
 }}
 ```
+
+**🚨 절대 금지 사항 (이 규칙을 위반하면 안 됩니다):**
+
+1. 선택지 작성 시 절대 금지:
+   - ❌ "1. 1. 내용" (번호 중복 금지)
+   - ❌ "1번. 내용" (번외 형식 금지)
+   - ❌ "1) 내용" (괄호 형식 금지)
+   - ❌ "A. 내용" (알파벳 형식 금지)
+
+   ✅ 올바른 형식만 사용:
+   - "1. 내용"
+   - "2. 내용"
+   - "3. 내용"
+   - "4. 내용"
+
+2. 정답 작성 시 절대 금지:
+   - ❌ correct_answer_number: null
+   - ❌ correct_answer_number: "1"
+   - ❌ correct_answer_number: 0
+
+   ✅ 올바른 형식만 사용:
+   - correct_answer_number: 1
+   - correct_answer_number: 2
+   - correct_answer_number: 3
+   - correct_answer_number: 4
+
+**🔍 생성 후 필수 검증:**
+모든 문제를 생성한 후, 다음 사항을 반드시 확인하세요:
+
+1. 선택지 검증:
+   - 모든 선택지가 "번호. 내용" 형식인가?
+   - 선택지에 번호가 중복되지 않았는가?
+   - 선택지 내용이 명확한가?
+
+2. 정답 검증:
+   - correct_answer_number가 null이 아닌가?
+   - correct_answer와 correct_answer_number가 일치하는가?
+   - 정답이 올바른 형식인가?
+
+**⚠️ 최종 경고:**
+위의 규칙을 위반하면 문제가 무효화됩니다. 반드시 지켜주세요.
 
 정확히 {num_questions}개의 고품질 문제를 생성해주세요.
 """

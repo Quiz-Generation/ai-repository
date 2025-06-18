@@ -329,21 +329,8 @@ class QuizGeneratorAgent:
             # ID 순차적으로 부여
             for i, question in enumerate(final_questions, 1):
                 question["id"] = i
-
-                # 다중선택 문제의 경우 보기 번호 추가
-                if question.get("type") == "multiple_choice" and isinstance(question.get("options"), list):
-                    numbered_options = []
-                    for idx, opt in enumerate(question["options"], 1):
-                        numbered_options.append(f"{idx}. {opt}")
-                    question["options"] = numbered_options
-
-                    # 정답도 번호로 변환
-                    if "correct_answer" in question:
-                        try:
-                            answer_idx = [opt.replace(f"{idx}. ", "") for idx, opt in enumerate(numbered_options, 1)].index(question["correct_answer"]) + 1
-                            question["correct_answer_number"] = answer_idx
-                        except Exception:
-                            question["correct_answer_number"] = None
+                # 전처리에서 이미 선택지 번호와 correct_answer_number가 처리되었으므로 추가 처리 제거
+                # 다중선택 문제의 경우 전처리에서 이미 올바른 형식으로 처리됨
 
             state["generated_questions"] = final_questions
             state["current_step"] = "question_generator"
@@ -426,12 +413,70 @@ class QuizGeneratorAgent:
                 json_content = content.strip()
 
             questions_data = json.loads(json_content)
-            return questions_data.get("questions", [])
+            questions = questions_data.get("questions", [])
+
+            # 전처리 적용
+            return self._preprocess_questions(questions)
 
         except json.JSONDecodeError as e:
             logger.error(f"ERROR JSON 파싱 실패: {e}")
             logger.error(f"LLM 응답 내용: {content[:500]}...")
             return []
+
+    def _preprocess_questions(self, questions: List[Dict]) -> List[Dict]:
+        """문제 응답 전처리 - 선택지 번호 중복 및 정답 번호 수정"""
+        processed_questions = []
+
+        for question in questions:
+            processed_question = question.copy()
+
+            # 선택지 전처리
+            if isinstance(question.get("options"), list):
+                processed_options = []
+                for option in question["options"]:
+                    # 번호 중복 제거 (예: "1. 1. 내용" -> "1. 내용")
+                    if isinstance(option, str):
+                        # 정규표현식으로 번호 중복 패턴 찾기
+                        import re
+                        # "숫자. 숫자. 내용" 패턴을 "숫자. 내용"으로 변경
+                        cleaned_option = re.sub(r'^(\d+)\.\s*\1\.\s*', r'\1. ', option)
+                        processed_options.append(cleaned_option)
+                    else:
+                        processed_options.append(option)
+
+                processed_question["options"] = processed_options
+
+                # correct_answer_number 수정
+                if "correct_answer" in question:
+                    correct_answer = question["correct_answer"]
+                    # correct_answer에서 번호 추출
+                    import re
+                    match = re.match(r'^(\d+)\.\s*(.+)', correct_answer)
+                    if match:
+                        answer_number = int(match.group(1))
+                        answer_content = match.group(2).strip()
+                        processed_question["correct_answer"] = f"{answer_number}. {answer_content}"
+                        processed_question["correct_answer_number"] = answer_number
+                    else:
+                        # correct_answer가 올바른 형식이 아닌 경우, 옵션에서 찾기
+                        for i, option in enumerate(processed_options, 1):
+                            # 옵션에서 번호 제거 후 내용만 비교
+                            option_content = re.sub(r'^\d+\.\s*', '', option)
+                            if option_content == correct_answer or option_content in correct_answer:
+                                processed_question["correct_answer"] = f"{i}. {option_content}"
+                                processed_question["correct_answer_number"] = i
+                                break
+                        else:
+                            # 찾지 못한 경우 첫 번째 옵션을 정답으로 설정
+                            if processed_options:
+                                first_option = processed_options[0]
+                                first_content = re.sub(r'^\d+\.\s*', '', first_option)
+                                processed_question["correct_answer"] = f"1. {first_content}"
+                                processed_question["correct_answer_number"] = 1
+
+            processed_questions.append(processed_question)
+
+        return processed_questions
 
     def smart_truncate(self, text, max_length=2000):
         """앞/중간/끝 샘플링 방식으로 텍스트를 자름"""
@@ -552,17 +597,8 @@ class QuizGeneratorAgent:
             questions = questions[:request.num_questions]
             for i, question in enumerate(questions, 1):
                 question["id"] = i
-                if question.get("type") == "multiple_choice" and isinstance(question.get("options"), list):
-                    numbered_options = []
-                    for idx, opt in enumerate(question["options"], 1):
-                        numbered_options.append(f"{idx}. {opt}")
-                    question["options"] = numbered_options
-                    if "correct_answer" in question:
-                        try:
-                            answer_idx = [opt.replace(f"{idx}. ", "") for idx, opt in enumerate(numbered_options, 1)].index(question["correct_answer"]) + 1
-                            question["correct_answer_number"] = answer_idx
-                        except Exception:
-                            question["correct_answer_number"] = None
+                # 전처리에서 이미 선택지 번호와 correct_answer_number가 처리되었으므로 추가 처리 제거
+                # 다중선택 문제의 경우 전처리에서 이미 올바른 형식으로 처리됨
             logger.info(f"[후처리] 완료 (소요 시간: {time.time() - post_start:.2f}초)")
 
             total_end = time.time()
