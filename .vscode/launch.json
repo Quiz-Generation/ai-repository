@@ -11,7 +11,7 @@
             "request": "launch",
             "module": "uvicorn",
             "args": [
-                "lagnchain_fastapi_app.app.main:app",
+                "src.app.main:app",
                 "--reload",
                 "--port",
                 "7000"

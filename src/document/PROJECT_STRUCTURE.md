@@ -14,7 +14,7 @@ ai-repository/
 ├── 📁 .venv/                              # Python 가상환경
 ├── 📁 .pytest_cache/                      # Pytest 캐시 파일들
 ├── 📁 data/                               # 전역 데이터 저장소
-└── 📁 lagnchain_fastapi_app/              # 🎯 메인 애플리케이션 폴더
+└── 📁 src/              # 🎯 메인 애플리케이션 폴더
     ├── 📄 requirements.txt                # 앱별 Python 의존성
     ├── 📄 Dockerfile                      # Docker 컨테이너 설정
     ├── 📄 docker-compose.yml             # Multi-container 설정 (Milvus)
@@ -156,7 +156,7 @@ PDF 업로드 → 자동 분석 → 최적 로더 → 텍스트 추출 → 자�
 source .venv/bin/activate
 
 # 2. 의존성 설치
-cd lagnchain_fastapi_app
+cd src
 pip install -r requirements.txt
 
 # 3. 서버 실행
@@ -167,7 +167,7 @@ python app/main.py
 ### **Docker 실행 (Milvus 포함)**
 ```bash
 # 1. Docker 컨테이너 실행
-cd lagnchain_fastapi_app
+cd src
 docker compose up -d
 
 # 2. API 접속

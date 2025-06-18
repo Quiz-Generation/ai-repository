@@ -73,25 +73,38 @@ class QuizService:
                     "valid_question_types": [q.value for q in QuestionType]
                 }
 
+            # 3. 문제 생성 요청 구성
             quiz_request = QuizRequest(
-                file_ids=[file_id],  # 내부적으로는 리스트로 처리
+                file_ids=[file_id],
                 num_questions=num_questions,
                 difficulty=difficulty_enum,
                 question_type=question_type_enum,
-                custom_topic=custom_topic
+                custom_topic=custom_topic,
+                additional_instructions=[
+                    "각 문제는 구체적인 예시나 실제 응용 사례를 포함해야 합니다.",
+                    "문제는 서로 중복되지 않아야 하며, 각각 독립적인 개념을 다뤄야 합니다.",
+                    "선택지의 경우, 명확한 정답과 그럴듯한 오답을 포함해야 합니다.",
+                    "문제의 난이도는 일관성을 유지해야 합니다.",
+                    "문제는 실제 학습 목표와 연관되어야 합니다."
+                ]
             )
 
-            # 3. AI 에이전트로 문제 생성
+            # 4. AI 에이전트로 문제 생성
             logger.info("STEP_AGENT AI 에이전트 문제 생성 시작")
             result = await self.quiz_agent.generate_quiz(quiz_request, [document_data])
 
-            # 4. 결과 후처리
+            # 5. 결과 후처리
             if result["success"]:
                 # 메타데이터 추가
                 result["meta"]["generation_timestamp"] = datetime.now().isoformat()
                 result["meta"]["service_version"] = "1.0.0"
                 result["meta"]["source_file"] = document_data.get("filename")
                 result["meta"]["file_id"] = file_id
+                result["meta"]["quality_metrics"] = {
+                    "difficulty_consistency": self._calculate_difficulty_consistency(result["questions"]),
+                    "question_uniqueness": self._calculate_question_uniqueness(result["questions"]),
+                    "example_coverage": self._calculate_example_coverage(result["questions"])
+                }
 
                 logger.info(f"🎉 SUCCESS 문제 생성 완료: {result['meta']['generated_count']}개 문제")
             else:
@@ -107,6 +120,49 @@ class QuizService:
                 "file_id": file_id,
                 "timestamp": datetime.now().isoformat()
             }
+
+    def _calculate_difficulty_consistency(self, questions: List[Dict[str, Any]]) -> float:
+        """문제 난이도 일관성 계산"""
+        if not questions:
+            return 0.0
+
+        # 난이도 분포 계산
+        difficulty_counts = {}
+        for q in questions:
+            diff = q.get("difficulty", "medium")
+            difficulty_counts[diff] = difficulty_counts.get(diff, 0) + 1
+
+        # 가장 많은 난이도의 비율 계산
+        max_count = max(difficulty_counts.values())
+        return max_count / len(questions)
+
+    def _calculate_question_uniqueness(self, questions: List[Dict[str, Any]]) -> float:
+        """문제 중복성 계산"""
+        if not questions:
+            return 0.0
+
+        # 문제 내용의 유사도 계산
+        unique_questions = set()
+        for q in questions:
+            # 문제 내용을 정규화하여 저장
+            normalized = q.get("question", "").lower().strip()
+            unique_questions.add(normalized)
+
+        return len(unique_questions) / len(questions)
+
+    def _calculate_example_coverage(self, questions: List[Dict[str, Any]]) -> float:
+        """예시 포함 비율 계산"""
+        if not questions:
+            return 0.0
+
+        example_count = 0
+        for q in questions:
+            # 예시나 실제 사례가 포함된 문제 수 계산
+            question_text = q.get("question", "").lower()
+            if any(keyword in question_text for keyword in ["예를 들어", "예시", "사례", "for example", "such as"]):
+                example_count += 1
+
+        return example_count / len(questions)
 
     async def _get_document_by_file_id(self, file_id: str) -> Optional[Dict[str, Any]]:
         """단일 파일 ID로 문서 내용 조회"""

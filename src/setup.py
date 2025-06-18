@@ -1,17 +1,12 @@
 from setuptools import setup, find_packages
 
-with open("README.md", "r", encoding="utf-8") as fh:
-    long_description = fh.read()
 
 setup(
-    name="lagnchain_fastapi_app",
+    name="src",
     version="0.1.0",
     author="devjun",
     author_email="jyporse@naver.com",
     description="A FastAPI application for document processing and quiz generation",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    url="https://github.com/Quiz-Generation/ai-repository",
     packages=find_packages(),
     python_requires=">=3.8",
     install_requires=[
@@ -33,14 +28,15 @@ setup(
         "sentence-transformers==2.2.2",
         "langchain==0.1.0",
         "langchain-community==0.0.10",
+        "langchain-openai==0.0.5",
+        "langgraph==0.0.20",
 
         # 벡터 DB 및 임베딩 관련
         "transformers==4.35.0",
-        "torch==2.1.0",
-        "numpy==1.24.3",
+        "torch==2.2.0",
+        "numpy==1.26.4",
 
         # 벡터 데이터베이스 클라이언트
-        "faiss-cpu==1.7.4",
         "pymilvus[model]==2.3.4",
 
         # 기타 유틸리티

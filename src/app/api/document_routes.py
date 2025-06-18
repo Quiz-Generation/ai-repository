@@ -104,6 +104,18 @@ async def upload_pdf_to_vector_db(
                 "chunk_overlap": auto_chunk_overlap,
                 "pdf_loader": extraction_result["loader_used"],
                 "language": analysis_result.language
+            },
+            "question_analysis": {
+                "recommended_questions": await doc_service.calculate_optimal_question_count(
+                    content=extraction_result["content"],
+                    metadata=metadata
+                ),
+                "content_analysis": {
+                    "total_sentences": extraction_result.get("total_sentences", 0),
+                    "total_paragraphs": extraction_result.get("total_paragraphs", 0),
+                    "key_concepts": extraction_result.get("key_concepts", []),
+                    "complexity_score": extraction_result.get("complexity_score", 0)
+                }
             }
         }
 
