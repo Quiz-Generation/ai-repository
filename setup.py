@@ -1,6 +1,5 @@
 from setuptools import setup, find_packages
 
-
 setup(
     name="src",
     version="0.1.0",
@@ -12,13 +11,13 @@ setup(
     python_requires=">=3.8",
     install_requires=[
         # FastAPI 관련
-        "fastapi==0.104.1",
+        "fastapi==0.115.9",
         "uvicorn[standard]==0.24.0",
-        "python-multipart==0.0.6",
+        "python-multipart==0.0.20",
 
         # PDF 처리 라이브러리들
-        "PyMuPDF==1.23.8",
-        "pdfplumber==0.10.3",
+        "PyMuPDF==1.26.0",
+        "pdfplumber==0.10.0",
         "PyPDF2==3.0.1",
         "pdfminer.six==20221105",
 
@@ -26,31 +25,31 @@ setup(
         "langdetect==1.0.9",
 
         # 임베딩 및 텍스트 처리
-        "sentence-transformers==2.2.2",
-        "langchain==0.1.0",
-        "langchain-community==0.0.10",
-        "langchain-openai==0.0.5",
-        "langgraph==0.0.20",
-        "langchain-core==0.1.23",
-        "langsmith==0.0.87",
+        "sentence-transformers==4.1.0",
+        "langchain==0.3.25",
+        "langchain-community==0.3.24",
+        "langchain-openai==0.3.19",
+        "langgraph==0.4.8",
+        "langchain-core==0.3.63",
+        "langsmith==0.3.43",
 
         # 벡터 DB 및 임베딩 관련
-        "transformers==4.35.0",
-        "torch==2.2.0",
-        "numpy==1.26.4",
+        "transformers==4.52.4",
+        "torch==2.7.0",
+        "numpy==2.2.6",
 
         # 벡터 데이터베이스 클라이언트
-        "pymilvus[model]==2.3.4",
+        "pymilvus[model]==2.5.11",
 
         # 기타 유틸리티
-        "python-dotenv==1.0.0",
-        "pydantic==2.5.0",
-        "pydantic-settings==2.1.0",
+        "python-dotenv==1.1.0",
+        "pydantic==2.11.5",
+        "pydantic-settings==2.9.1",
         "python-jose[cryptography]==3.3.0",
         "passlib[bcrypt]==1.7.4",
 
         # Additional utilities
-        "requests==2.31.0",
+        "requests==2.32.3",
     ],
     extras_require={
         "dev": [
