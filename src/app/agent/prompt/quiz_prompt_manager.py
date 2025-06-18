@@ -1,97 +1,149 @@
 """
-🎯 Quiz Generation Prompt Manager
-프롬프트 템플릿과 가이드를 체계적으로 관리하는 모듈
+🎯 퀴즈 프롬프트 관리자
 """
-
-from typing import Dict, Any
 from enum import Enum
-
+from typing import List, Dict, Any
 
 class DifficultyLevel(Enum):
-    """문제 난이도 레벨"""
+    """난이도 레벨"""
     EASY = "easy"
     MEDIUM = "medium"
     HARD = "hard"
 
-
 class QuestionType(Enum):
-    """문제 타입"""
+    """문제 유형"""
     MULTIPLE_CHOICE = "multiple_choice"
-    TRUE_FALSE = "true_false"
     SHORT_ANSWER = "short_answer"
-    ESSAY = "essay"
-    FILL_BLANK = "fill_blank"
-
+    TRUE_FALSE = "true_false"
 
 class QuizPromptManager:
-    """퀴즈 생성을 위한 프롬프트 관리자"""
+    """퀴즈 프롬프트 관리자"""
 
-    @staticmethod
-    def get_base_prompt_template() -> str:
-        """기본 프롬프트 템플릿"""
+    def __init__(self):
+        """초기화"""
+        self.prompts = {
+            "summary": self._get_summary_prompt(),
+            "topic": self._get_topic_prompt(),
+            "keyword": self._get_keyword_prompt(),
+            "question": self._get_question_prompt(),
+            "validation": self._get_validation_prompt()
+        }
+
+    def get_prompt(self, prompt_type: str) -> str:
+        """프롬프트 조회"""
+        return self.prompts.get(prompt_type, "")
+
+    def _get_summary_prompt(self) -> str:
         return """
-당신은 명문대학교의 베테랑 교수이자 교육 전문가입니다.
-학생들의 심층적 이해와 창의적 사고를 돕는 고품질 문제를 출제하는 것이 목표입니다.
+당신은 전문 교육 컨텐츠 분석가입니다. 주어진 문서들을 분석하여 종합적인 요약을 작성해주세요.
 
-📚 **강의 내용**: {summary}
+📋 **분석 대상 문서들:**
+{content}
 
-🎯 **출제 기준**:
-- 문제 수: {num_questions}개
+🎯 **요약 지침:**
+1. 각 문서의 핵심 내용을 파악하고 주요 개념을 추출하세요
+2. 서로 다른 도메인의 문서라면 각각의 특성을 반영하세요
+3. 교육/학습 목적에 적합한 핵심 지식을 중심으로 요약하세요
+4. 문제 출제가 가능한 구체적인 사실, 개념, 절차를 포함하세요
+
+**요약 길이:** 500-800자
+**출력 형식:** 각 문서별로 구분하여 요약한 후 전체 종합 요약
+"""
+
+    def _get_topic_prompt(self) -> str:
+        return """
+문서 요약을 바탕으로 핵심 주제들을 추출해주세요.
+
+📋 **문서 요약:**
+{content}
+
+🎯 **추출 조건:**
+- 난이도: {difficulty}
+- 목표 문제 수: {num_questions}개
+- 문제 유형: {question_type}
+
+**주제 추출 지침:**
+1. 교육적 가치가 높은 핵심 개념들을 선별하세요
+2. 선택된 난이도에 적합한 주제들을 우선순위로 하세요
+3. 각 도메인별 특성을 고려하여 다양성을 확보하세요
+4. 문제 출제가 가능한 구체적인 주제를 포함하세요
+
+**출력 형식:**
+- 주제1: [주제명] - [간단한 설명]
+- 주제2: [주제명] - [간단한 설명]
+...
+
+**주제 개수:** {num_topics}개 (문제 수보다 많게)
+"""
+
+    def _get_keyword_prompt(self) -> str:
+        return """
+추출된 핵심 주제들을 바탕으로 문제 출제용 키워드들을 추출해주세요.
+
+📋 **핵심 주제들:**
+{content}
+
+🎯 **키워드 추출 조건:**
 - 난이도: {difficulty}
 - 문제 유형: {question_type}
 
-{difficulty_guide}
+**키워드 추출 지침:**
+1. 각 주제별로 핵심 키워드 2-3개씩 추출
+2. 난이도별 특성:
+   - EASY: 기본 용어, 정의, 단순 사실
+   - MEDIUM: 개념 관계, 원리, 절차
+   - HARD: 응용 상황, 복합 개념, 분석 요소
+3. 문제 출제가 직접적으로 가능한 구체적 키워드
+4. 도메인별 전문 용어와 일반 개념의 균형
 
-{question_type_guide}
+**출력 형식:**
+키워드1, 키워드2, 키워드3, ...
 
-{distribution_guide}
+**키워드 개수:** {num_keywords}개
+"""
 
-**문제 품질 가이드**:
-1. **다양성 확보**
-   - 기본 개념 (15%)
-   - 원리 이해 (25%)
-   - 실제 응용 (35%)
-   - 심화 분석 (25%)
+    def _get_question_prompt(self) -> str:
+        return """
+당신은 전문 교육 컨텐츠 개발자입니다. 주어진 내용을 바탕으로 고품질의 문제를 생성해주세요.
 
-2. **선택지 구성**
-   - 정답: 깊은 이해와 분석이 필요한 답
-   - 오답1: 부분적으로 맞지만 불완전한 답
-   - 오답2: 흔한 오개념이나 실수
-   - 오답3: 관련은 있지만 명백히 틀린 답
+📚 **컨텐츠 요약**:
+{summary}
 
-3. **해설 품질**
-   - 정답의 근거 설명
-   - 오답이 틀린 이유
-   - 관련 개념 연결
-   - 실제 적용 예시
-   - 추가 학습 포인트
-   - 실무 적용 방안
-   - 창의적 해결방안
+🎯 **핵심 주제들**:
+{topics}
 
-4. **문제 구성**
-   - 명확한 문제 상황
-   - 구체적인 조건
-   - 실무/실생활 연계
-   - 심층적 사고 유도
-   - 창의적 해결방안 요구
-   - 실제 프로젝트 사례
-   - 다양한 해결방안 제시
+🔑 **핵심 키워드들**:
+{keywords}
 
-5. **실무 연계**
-   - 실제 프로젝트 기반
-   - 구체적인 시나리오
-   - 실무적 제약조건
-   - 현실적 고려사항
-   - 실용적 해결방안
-   - 성능 최적화 방안
+📝 **문제 생성 조건**:
+- 생성할 문제 수: {num_questions}개
+- 난이도: {difficulty}
+- 문제 유형: {question_type}
 
-6. **창의적 사고 유도**
-   - 개방형 문제
-   - 다양한 해결방안
-   - 실무 적용 사례
-   - 최적화 방안
-   - 확장 가능성
-   - 혁신적 접근
+🎯 **문제 품질 요구사항**:
+1. 각 문제는 구체적인 예시나 실제 사례를 포함해야 합니다
+2. 중복되는 개념의 문제는 피하고, 다양한 관점에서 접근해야 합니다
+3. 문제는 이론적 개념과 실제 구현을 균형있게 다루어야 합니다
+4. 각 문제는 명확한 학습 목표를 가져야 합니다
+5. 문제의 난이도는 지정된 수준에 맞게 조정되어야 합니다
+6. 선택지는 명확하고 논리적으로 구성되어야 합니다
+7. 정답 해설은 상세하고 교육적으로 가치있어야 합니다
+
+**문제 유형별 특성:**
+1. 기본 개념 문제 (30%):
+   - 핵심 용어와 정의
+   - 기본 원리와 개념
+   - 단순 사실 확인
+
+2. 개념 연계 문제 (40%):
+   - 여러 개념 간의 관계
+   - 원리와 절차의 이해
+   - 이론적 적용
+
+3. 응용 문제 (30%):
+   - 실제 사례 분석
+   - 복합적 문제 해결
+   - 고급 개념 적용
 
 **출력 형식**:
 ```json
@@ -106,296 +158,83 @@ class QuizPromptManager:
       "correct_answer": "정답",
       "explanation": "정답 해설",
       "learning_objective": "학습 목표",
-      "problem_level": "basic/application/analysis/creation/optimization/scalability",
+      "problem_level": "basic/concept/application",
       "keywords": ["키워드1", "키워드2"],
-      "concept_depth": "basic/understanding/application/analysis/creation/optimization/scalability",
-      "real_world_connection": "실무/실생활 연계 설명",
-      "critical_thinking": "비판적 사고 요구사항",
-      "creative_thinking": "창의적 사고 요구사항",
-      "practical_application": "실무 적용 방안",
-      "optimization_strategy": "최적화 전략",
-      "alternative_solutions": "대체 해결방안",
-      "project_scenario": "프로젝트 시나리오",
-      "performance_considerations": "성능 고려사항",
-      "scalability_analysis": "확장성 분석"
+      "source": "pdf_based/ai_generated",
+      "example": "관련 예시나 실제 사례",
+      "implementation": "실제 구현 방법 (해당되는 경우)",
+      "related_concepts": ["관련 개념1", "관련 개념2"]
     }}
   ]
 }}
 ```
 
-정확히 {num_questions}개의 문제를 생성해주세요.
-각 문제는 위의 품질 가이드를 철저히 준수해야 합니다.
+정확히 {num_questions}개의 고품질 문제를 생성해주세요.
 """
 
-    @staticmethod
-    def get_difficulty_guide(difficulty: DifficultyLevel) -> str:
-        """난이도별 가이드 (자연스러운 수준)"""
-        guides = {
-            DifficultyLevel.EASY: """
-🟢 **EASY 난이도 가이드**:
-- **핵심**: 기본 개념과 정의를 정확히 이해하고 있는지 확인
-- **문제 스타일**:
-  * 핵심 용어의 정확한 의미
-  * 기본 특징 구별
-  * 간단한 예시 적용
-  * 실생활 연계
-  * 기본적인 실무 적용
-- **학생 반응**: "아, 이 정도는 기본이니까 맞춰야지"
-- **난이도 느낌**: 공부했으면 확실히 맞출 수 있는 수준
-- **문제 구성**:
-  * 명확한 상황 설명
-  * 직관적인 선택지
-  * 구체적인 예시 포함
-  * 실생활 연계
-  * 기본적인 실무 사례
-""",
-            DifficultyLevel.MEDIUM: """
-🟡 **MEDIUM 난이도 가이드**:
-- **핵심**: 개념을 이해하고 상황에 맞게 적용할 수 있는지 평가
-- **문제 스타일**:
-  * 개념 간 비교 분석
-  * 조건부 적용
-  * 단계적 해결 과정
-  * 실무 사례 적용
-  * 성능 최적화 고려
-- **학생 반응**: "음... 좀 생각해봐야겠네, 하지만 풀 만해"
-- **난이도 느낌**: 조금 고민하면 답을 찾을 수 있는 수준
-- **문제 구성**:
-  * 실제 상황 기반
-  * 여러 개념 연계
-  * 선택지 간 미묘한 차이
-  * 구체적인 적용 사례
-  * 실무적 고려사항
-  * 성능 최적화 방안
-""",
-            DifficultyLevel.HARD: """
-🔴 **HARD 난이도 가이드**:
-- **핵심**: 여러 개념을 종합하고 창의적으로 문제를 해결할 수 있는지 측정
-- **문제 스타일**:
-  * 복합 개념 융합
-  * 제약 조건 하 최적화
-  * 심화 원리 이해
-  * 창의적 해결방안
-  * 실무 프로젝트 적용
-  * 성능 최적화 전략
-  * 확장성 고려
-- **학생 반응**: "어렵네... 하지만 차근차근 분석하면 풀 수 있을 것 같아"
-- **난이도 느낌**: 상위권 학생들도 고민이 필요한 수준
-- **문제 구성**:
-  * 복잡한 상황 설정
-  * 여러 제약 조건
-  * 최적화 요구
-  * 실무적 고려사항
-  * 창의적 사고 요구
-  * 성능 최적화 방안
-  * 확장성 분석
+    def _get_validation_prompt(self) -> str:
+        return """
+당신은 전문 교육 컨텐츠 품질 검증 전문가입니다. 주어진 문제들을 검토하고 개선해주세요.
+
+📋 **검증 대상 문제들**:
+{questions}
+
+🎯 **검증 기준**:
+1. 중복성 검사:
+   - 유사한 개념이나 내용을 다루는 문제가 있는지 확인
+   - 동일한 학습 목표를 가진 문제가 있는지 확인
+   - 비슷한 예시나 사례를 사용하는 문제가 있는지 확인
+
+2. 품질 검증:
+   - 각 문제가 명확한 학습 목표를 가지고 있는지 확인
+   - 문제의 난이도가 지정된 수준에 맞는지 확인
+   - 선택지가 논리적으로 구성되어 있는지 확인
+   - 정답 해설이 충분히 상세하고 교육적인지 확인
+   - 실제 사례나 예시가 포함되어 있는지 확인
+
+3. 다양성 검증:
+   - 다양한 관점에서 접근하는 문제들이 있는지 확인
+   - 이론과 실무가 균형있게 다루어지고 있는지 확인
+   - 기본 개념과 응용 문제가 적절히 분포되어 있는지 확인
+
+**개선 지침**:
+1. 중복되는 문제가 있다면 하나를 제거하고 새로운 문제로 대체
+2. 품질이 낮은 문제는 개선하거나 제거
+3. 다양성이 부족한 경우 새로운 관점의 문제 추가
+4. 각 문제는 고유한 학습 목표를 가져야 함
+
+**출력 형식**:
+```json
+{{
+  "questions": [
+    {{
+      "id": 1,
+      "question": "문제 내용",
+      "type": "{question_type}",
+      "difficulty": "{difficulty}",
+      "options": ["선택지1", "선택지2", "선택지3", "선택지4"],
+      "correct_answer": "정답",
+      "explanation": "정답 해설",
+      "learning_objective": "학습 목표",
+      "problem_level": "basic/concept/application",
+      "keywords": ["키워드1", "키워드2"],
+      "source": "validated",
+      "example": "관련 예시나 실제 사례",
+      "implementation": "실제 구현 방법 (해당되는 경우)",
+      "related_concepts": ["관련 개념1", "관련 개념2"],
+      "uniqueness_score": 0.95,  # 0-1 사이의 값, 1이 가장 고유함
+      "quality_score": 0.9      # 0-1 사이의 값, 1이 가장 높은 품질
+    }}
+  ],
+  "validation_metrics": {{
+    "uniqueness": 0.9,          # 전체 문제의 고유성 평균
+    "quality": 0.85,            # 전체 문제의 품질 평균
+    "diversity": 0.8,           # 문제의 다양성 점수
+    "removed_questions": 2,      # 제거된 문제 수
+    "added_questions": 2         # 추가된 문제 수
+  }}
+}}
+```
+
+정확히 {num_questions}개의 고품질 문제를 생성해주세요.
 """
-        }
-        return guides.get(difficulty, "")
-
-    @staticmethod
-    def get_question_type_guide(question_type: QuestionType) -> str:
-        """문제 유형별 가이드"""
-        guides = {
-            QuestionType.MULTIPLE_CHOICE: """
-📝 **객관식 4지선다 가이드**:
-- **정답**: 깊은 이해와 분석이 필요한 답
-- **오답1**: 부분적으로 맞는 답
-- **오답2**: 흔한 오개념
-- **오답3**: 관련은 있지만 틀린 답
-
-**선택지 구성 원칙**:
-1. 모든 선택지가 문법적으로 일관성 있게
-2. 선택지 길이를 비슷하게
-3. "모두 다르다", "모두 같다" 같은 함정 지양
-4. 각 선택지가 독립적이고 명확하게
-5. 실무/실생활 연계된 선택지 포함
-6. 창의적 사고를 요구하는 선택지 포함
-7. 성능 최적화 관련 선택지 포함
-8. 확장성 고려한 선택지 포함
-""",
-            QuestionType.TRUE_FALSE: """
-⭕ **참/거짓 문제 가이드**:
-- **명확한 진술**:
-  * 이론적 근거가 있는 진술
-  * "항상", "절대" 등의 절대적 표현 신중 사용
-  * 핵심 개념의 정확한 이해 여부 확인
-  * 실무 적용 가능성 검토
-  * 창의적 해결방안 고려
-  * 성능 최적화 방안 검토
-  * 확장성 분석
-
-**문제 구성 원칙**:
-1. 각 진술이 독립적이고 명확하게
-2. 모호한 표현 지양
-3. 부분적 진실 회피
-4. 명확한 판단 기준 제시
-5. 실무/실생활 연계
-6. 창의적 사고 유도
-7. 성능 최적화 고려
-8. 확장성 분석
-""",
-            QuestionType.SHORT_ANSWER: """
-✏️ **단답형 문제 가이드**:
-- **핵심 용어**:
-  * 정확한 표현
-  * 간결하고 명확한 답변
-  * 주관적 해석 여지가 적은 객관적 답안
-  * 실무 적용 가능성
-  * 창의적 해결방안
-  * 성능 최적화 방안
-  * 확장성 고려
-
-**문제 구성 원칙**:
-1. 명확한 답변 범위 제시
-2. 모호한 표현 지양
-3. 구체적인 답변 요구
-4. 채점 기준 명시
-5. 실무/실생활 연계
-6. 창의적 사고 유도
-7. 성능 최적화 방안
-8. 확장성 분석
-""",
-            QuestionType.ESSAY: """
-📝 **서술형 문제 가이드**:
-- **논리적 사고**:
-  * 사고 과정 평가
-  * 여러 개념 종합
-  * 명확한 채점 기준
-  * 실무 적용 가능성
-  * 창의적 해결방안
-  * 성능 최적화 전략
-  * 확장성 분석
-
-**문제 구성 원칙**:
-1. 명확한 문제 상황
-2. 구체적인 답변 요구사항
-3. 평가 기준 제시
-4. 충분한 답변 시간 고려
-5. 실무/실생활 연계
-6. 창의적 사고 유도
-7. 성능 최적화 방안
-8. 확장성 분석
-""",
-            QuestionType.FILL_BLANK: """
-✏️ **빈칸 채우기 가이드**:
-- **핵심 개념**:
-  * 문맥상 핵심 용어
-  * 논리적 흐름 완성
-  * 전문 용어 사용
-  * 실무 적용 가능성
-  * 창의적 해결방안
-  * 성능 최적화 방안
-  * 확장성 고려
-
-**문제 구성 원칙**:
-1. 명확한 문맥 제공
-2. 빈칸의 역할 명시
-3. 답변 범위 제시
-4. 채점 기준 명시
-5. 실무/실생활 연계
-6. 창의적 사고 유도
-7. 성능 최적화 방안
-8. 확장성 분석
-"""
-        }
-        return guides.get(question_type, "")
-
-    @staticmethod
-    def get_distribution_guide(num_questions: int) -> str:
-        """문제 분포 가이드 (90% 일반 + 10% 응용)"""
-        application_count = max(1, int(num_questions * 0.1))  # 최소 1개
-        basic_count = num_questions - application_count
-
-        return f"""
-📊 **문제 구성 분포**:
-- **일반 문제 {basic_count}개 (90%)**: 해당 난이도에 맞는 표준적인 문제
-  * 교과서/강의 내용 기반
-  * 학생들이 "적당하네, 공부한 보람이 있어"라고 느낄 수준
-  * 개념 이해 → 기본 적용 중심
-  * 실제 교육 현장에서 사용 가능한 수준
-  * 실무/실생활 연계
-  * 창의적 사고 유도
-  * 성능 최적화 고려
-  * 확장성 분석
-
-- **응용 문제 {application_count}개 (10%)**: 실무/심화 응용 문제
-  * 실제 상황 적용
-  * 여러 개념 융합
-  * 창의적 사고 요구
-  * 실무/실생활 연계
-  * 복잡한 문제 해결
-  * 최적화 요구
-  * 성능 최적화 전략
-  * 확장성 분석
-
-**문제 품질 기준**:
-1. **개념 깊이**
-   - Basic: 기본 개념 이해
-   - Understanding: 원리 이해
-   - Application: 실제 적용
-   - Analysis: 심층 분석
-   - Creation: 창의적 해결
-   - Optimization: 성능 최적화
-   - Scalability: 확장성 분석
-
-2. **실무 연계**
-   - 실제 사례 기반
-   - 실무적 고려사항
-   - 현실적 제약조건
-   - 실용적 해결방안
-   - 창의적 접근
-   - 성능 최적화
-   - 확장성 고려
-
-3. **교육적 가치**
-   - 명확한 학습 목표
-   - 단계적 이해 촉진
-   - 실력 향상 기여
-   - 자기주도학습 유도
-   - 창의적 사고 개발
-   - 성능 최적화 능력
-   - 확장성 사고
-
-**중요**: 각 문제마다 다음을 명시해주세요:
-- problem_level: "basic/application/analysis/creation/optimization/scalability"
-- concept_depth: "basic/understanding/application/analysis/creation/optimization/scalability"
-- real_world_connection: 실무/실생활 연계 설명
-- critical_thinking: 비판적 사고 요구사항
-- creative_thinking: 창의적 사고 요구사항
-- practical_application: 실무 적용 방안
-- optimization_strategy: 최적화 전략
-- alternative_solutions: 대체 해결방안
-- project_scenario: 프로젝트 시나리오
-- performance_considerations: 성능 고려사항
-- scalability_analysis: 확장성 분석
-"""
-
-    @classmethod
-    def generate_final_prompt(
-        cls,
-        summary: str,
-        num_questions: int,
-        difficulty: DifficultyLevel,
-        question_type: QuestionType
-    ) -> str:
-        """최종 프롬프트 생성"""
-        base_template = cls.get_base_prompt_template()
-        difficulty_guide = cls.get_difficulty_guide(difficulty)
-        question_type_guide = cls.get_question_type_guide(question_type)
-        distribution_guide = cls.get_distribution_guide(num_questions)
-
-        return base_template.format(
-            summary=summary[:1000],
-            num_questions=num_questions,
-            difficulty=difficulty.value,
-            question_type=question_type.value,
-            difficulty_guide=difficulty_guide,
-            question_type_guide=question_type_guide,
-            distribution_guide=distribution_guide
-        )
-
-    @staticmethod
-    def get_system_message() -> str:
-        """시스템 메시지"""
-        return "당신은 학생들의 심층적 이해와 창의적 사고를 돕는 베테랑 교수입니다."
