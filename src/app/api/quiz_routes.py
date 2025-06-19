@@ -129,44 +129,7 @@ async def generate_quiz(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# 🤖 3. AI 문제 생성 (간단한 GET 방식)
-@router.get("/generate-simple")
-async def generate_quiz_simple(
-    file_id: str = Query(..., description="파일 ID (단일 파일)"),
-    num_questions: int = Query(10, description="생성할 문제 수 (1-50개)"),
-    difficulty: str = Query("medium", description="난이도 (easy/medium/hard)"),
-    question_type: str = Query("multiple_choice", description="문제 유형"),
-    custom_topic: Optional[str] = Query(None, description="특정 주제 (선택사항)"),
-    quiz_service: QuizService = Depends(get_quiz_service)
-) -> JSONResponse:
-    """
-    🤖 AI 기반 문제 생성 (간단한 GET 방식)
-    - 단일 파일 ID로 간단하게 문제 생성
-    - 대학생 + 자격증 준비생 맞춤형
-    """
-    try:
-        logger.info("🚀 AI 문제 생성 API (간단 버전) 시작")
-
-        # QuizGenerationRequest 객체 생성
-        request = QuizGenerationRequest(
-            file_id=file_id,
-            num_questions=num_questions,
-            difficulty=difficulty,
-            question_type=question_type,
-            custom_topic=custom_topic
-        )
-
-        # 기존 generate_quiz 함수 재사용
-        return await generate_quiz(request, quiz_service)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"ERROR AI 문제 생성 간단 API 실패: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# 📊 4. 문제 생성 옵션 조회
+# 📊 3. 문제 생성 옵션 조회
 @router.get("/options")
 async def get_quiz_options() -> JSONResponse:
     """
