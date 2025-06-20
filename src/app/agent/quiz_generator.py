@@ -3,14 +3,21 @@
 """
 import logging
 import os
+import asyncio
 from typing import Dict, List, Any, Optional, TypedDict
 from dataclasses import dataclass
 from enum import Enum
+import json
+import time
+
+# tokenizers 병렬 처리 설정
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
+from langchain.prompts import ChatPromptTemplate
 
 # 🔥 프롬프트 관리자 임포트
 from .prompt import QuizPromptManager
@@ -27,6 +34,7 @@ class QuizRequest:
     difficulty: DifficultyLevel = DifficultyLevel.MEDIUM
     question_type: QuestionType = QuestionType.MULTIPLE_CHOICE
     custom_topic: Optional[str] = None  # 특정 주제 지정
+    additional_instructions: Optional[List[str]] = None  # 추가 지시사항
 
 
 class QuizState(TypedDict):
@@ -64,7 +72,7 @@ class QuizGeneratorAgent:
         self.llm = ChatOpenAI(
             model="gpt-4o-mini",  # 비용 효율적인 모델
             temperature=0.7,      # 창의성과 일관성의 균형
-            api_key=self.openai_api_key
+            api_key=self.openai_api_key if self.openai_api_key else None
         )
 
         # LangGraph 워크플로우 구성
@@ -73,330 +81,633 @@ class QuizGeneratorAgent:
         # 🎯 프롬프트 관리자 초기화
         self.prompt_manager = QuizPromptManager()
 
-    def _create_workflow(self) -> StateGraph:
-        """LangGraph 워크플로우 생성"""
+        # 프롬프트 템플릿 초기화
+        self.summary_template = ChatPromptTemplate.from_messages([
+            ("system", "당신은 전문 교육 컨텐츠 분석가입니다."),
+            ("human", "{prompt}")
+        ])
 
-        # 워크플로우 그래프 생성
+        self.topic_template = ChatPromptTemplate.from_messages([
+            ("system", "당신은 전문 교육과정 설계자입니다."),
+            ("human", "{prompt}")
+        ])
+
+        self.keyword_template = ChatPromptTemplate.from_messages([
+            ("system", "당신은 전문 시험 출제 전문가입니다."),
+            ("human", "{prompt}")
+        ])
+
+        self.question_template = ChatPromptTemplate.from_messages([
+            ("system", "{system_message}"),
+            ("human", "{prompt}")
+        ])
+
+        self.validation_template = ChatPromptTemplate.from_messages([
+            ("system", "당신은 전문 교육 컨텐츠 품질 검증 전문가입니다."),
+            ("human", "{prompt}")
+        ])
+
+        # 체인 초기화
+        self.summary_chain = self.summary_template | self.llm
+        self.topic_chain = self.topic_template | self.llm
+        self.keyword_chain = self.keyword_template | self.llm
+        self.question_chain = self.question_template | self.llm
+        self.validation_chain = self.validation_template | self.llm
+
+    def _create_workflow(self):
+        """LangGraph 워크플로우 생성"""
         workflow = StateGraph(QuizState)
 
-        # 노드 추가
-        workflow.add_node("document_summarizer", self._summarize_documents)
-        workflow.add_node("topic_extractor", self._extract_core_topics)
-        workflow.add_node("keyword_extractor", self._extract_keywords)
+        # 병렬 처리 노드 추가
+        workflow.add_node("parallel_processor", self._parallel_process)
         workflow.add_node("question_generator", self._generate_questions)
-        workflow.add_node("quality_validator", self._validate_questions)
 
         # 워크플로우 순서 정의
-        workflow.set_entry_point("document_summarizer")
-        workflow.add_edge("document_summarizer", "topic_extractor")
-        workflow.add_edge("topic_extractor", "keyword_extractor")
-        workflow.add_edge("keyword_extractor", "question_generator")
-        workflow.add_edge("question_generator", "quality_validator")
-        workflow.add_edge("quality_validator", END)
+        workflow.set_entry_point("parallel_processor")
+        workflow.add_edge("parallel_processor", "question_generator")
+        workflow.add_edge("question_generator", END)
 
         return workflow.compile()
 
-    async def _summarize_documents(self, state: QuizState) -> QuizState:
-        """📄 1단계: 문서 요약"""
+    async def _parallel_process(self, state: QuizState) -> QuizState:
+        """📄 병렬 처리: 문서 요약, 핵심 주제 추출, 키워드 추출"""
         try:
-            logger.info("STEP1 문서 요약 시작")
+            parallel_start = time.time()
+            logger.info("병렬 처리 시작")
 
-            # 문서 내용 결합
+            # 문서 내용 결합 및 전처리
             combined_content = ""
             domain_info = {}
+            total_sentences = 0
+            total_paragraphs = 0
 
             for doc in state["documents"]:
                 filename = doc.get("filename", "Unknown")
                 content = doc.get("content", "")
 
-                combined_content += f"\n\n=== {filename} ===\n{content[:2000]}"  # 첫 2000자만
+                # 문장과 단락 수 계산
+                sentences = [s.strip() for s in content.split('.') if s.strip()]
+                paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
+                total_sentences += len(sentences)
+                total_paragraphs += len(paragraphs)
 
-                # 도메인 정보 수집
+                combined_content += f"\n\n=== {filename} ===\n{content}"
                 domain_info[filename] = {
                     "language": doc.get("language", "unknown"),
                     "file_size": doc.get("file_size", 0),
-                    "chunk_count": doc.get("total_chunks", 0)
+                    "chunk_count": doc.get("total_chunks", 0),
+                    "sentence_count": len(sentences),
+                    "paragraph_count": len(paragraphs)
                 }
 
-            # 🔥 다중 도메인 대응 요약 프롬프트
-            summary_prompt = f"""
-당신은 전문 교육 컨텐츠 분석가입니다. 주어진 문서들을 분석하여 종합적인 요약을 작성해주세요.
+            # 문제 수 재계산
+            base_questions = max(3, total_sentences // 4)  # 4문장당 1문제
+            complexity_factor = min(1.5, 1 + (total_paragraphs / total_sentences))
+            concept_factor = min(0.5, len(domain_info) * 0.1)
 
-📋 **분석 대상 문서들:**
-{combined_content}
+            recommended_questions = int(base_questions * complexity_factor * (1 + concept_factor))
+            recommended_questions = min(max(5, recommended_questions), 20)  # 5-20개 사이로 제한
 
-🎯 **요약 지침:**
-1. 각 문서의 핵심 내용을 파악하고 주요 개념을 추출하세요
-2. 서로 다른 도메인(기술, 학문, 실무 등)의 문서라면 각각의 특성을 반영하세요
-3. 교육/학습 목적에 적합한 핵심 지식을 중심으로 요약하세요
-4. 문제 출제가 가능한 구체적인 사실, 개념, 절차를 포함하세요
+            # 문제 수 업데이트
+            state["request"].num_questions = recommended_questions
 
-**요약 길이:** 500-800자
-**출력 형식:** 각 문서별로 구분하여 요약한 후 전체 종합 요약
-"""
+            # 병렬 처리 태스크 정의
+            async def summarize_documents():
+                summary_prompt = self.prompt_manager.get_prompt("summary").format(
+                    content=combined_content
+                )
+                return await self.summary_chain.ainvoke({"prompt": summary_prompt})
 
-            # LLM 호출
-            messages = [
-                SystemMessage(content="당신은 전문 교육 컨텐츠 분석가입니다."),
-                HumanMessage(content=summary_prompt)
-            ]
+            async def extract_topics():
+                topic_prompt = self.prompt_manager.get_prompt("topic").format(
+                    content=combined_content,
+                    difficulty=state["request"].difficulty.value,
+                    num_questions=recommended_questions,
+                    question_type=state["request"].question_type.value,
+                    num_topics=recommended_questions + 3
+                )
+                return await self.topic_chain.ainvoke({"prompt": topic_prompt})
 
-            response = await self.llm.ainvoke(messages)
-            summary = response.content
+            async def extract_keywords():
+                keyword_prompt = self.prompt_manager.get_prompt("keyword").format(
+                    content=combined_content,
+                    difficulty=state["request"].difficulty.value,
+                    question_type=state["request"].question_type.value,
+                    num_keywords=recommended_questions * 3
+                )
+                return await self.keyword_chain.ainvoke({"prompt": keyword_prompt})
+
+            # 병렬 실행
+            topics_response, summary_response, keywords_response = await asyncio.gather(
+                extract_topics(), summarize_documents(), extract_keywords()
+            )
+            logger.info(f"[전처리] 병렬 전체 소요 시간: {time.time() - parallel_start:.2f}초")
+            summary = summary_response.content
+            topics = [line.strip().lstrip('- •').strip() for line in topics_response.content.split('\n') if line.strip().startswith(('-', '•'))]
+            keywords = [kw.strip() for kw in keywords_response.content.split(',') if kw.strip()]
+            logger.info(f"[전처리] 완료 (총 소요 시간: {time.time() - parallel_start:.2f}초)")
 
             # 상태 업데이트
             state["summary"] = summary
-            state["domain_context"] = domain_info
-            state["current_step"] = "document_summarizer"
-
-            logger.info("SUCCESS 문서 요약 완료")
-            return state
-
-        except Exception as e:
-            logger.error(f"ERROR 문서 요약 실패: {e}")
-            state["errors"].append(f"문서 요약 실패: {str(e)}")
-            return state
-
-    async def _extract_core_topics(self, state: QuizState) -> QuizState:
-        """🎯 2단계: 핵심 주제 추출"""
-        try:
-            logger.info("STEP2 핵심 주제 추출 시작")
-
-            summary = state["summary"]
-            request = state["request"]
-
-            # 🔥 주제 추출 프롬프트 (일반화된)
-            topic_prompt = f"""
-문서 요약을 바탕으로 핵심 주제들을 추출해주세요.
-
-📋 **문서 요약:**
-{summary}
-
-🎯 **추출 조건:**
-- 난이도: {request.difficulty.value}
-- 목표 문제 수: {request.num_questions}개
-- 문제 유형: {request.question_type.value}
-
-**주제 추출 지침:**
-1. 교육적 가치가 높은 핵심 개념들을 선별하세요
-2. 선택된 난이도에 적합한 주제들을 우선순위로 하세요
-3. 각 도메인별 특성을 고려하여 다양성을 확보하세요
-4. 문제 출제가 가능한 구체적인 주제를 포함하세요
-
-**출력 형식:**
-- 주제1: [주제명] - [간단한 설명]
-- 주제2: [주제명] - [간단한 설명]
-...
-
-**주제 개수:** 5-8개 (문제 수보다 많게)
-"""
-
-            messages = [
-                SystemMessage(content="당신은 전문 교육과정 설계자입니다."),
-                HumanMessage(content=topic_prompt)
-            ]
-
-            response = await self.llm.ainvoke(messages)
-
-            # 주제 파싱 (간단한 파싱)
-            topics_text = response.content
-            topics = []
-            for line in topics_text.split('\n'):
-                if line.strip().startswith('-') or line.strip().startswith('•'):
-                    topic = line.strip().lstrip('- •').strip()
-                    if topic:
-                        topics.append(topic)
-
             state["core_topics"] = topics
-            state["current_step"] = "topic_extractor"
-
-            logger.info(f"SUCCESS 핵심 주제 추출 완료: {len(topics)}개")
-            return state
-
-        except Exception as e:
-            logger.error(f"ERROR 핵심 주제 추출 실패: {e}")
-            state["errors"].append(f"주제 추출 실패: {str(e)}")
-            return state
-
-    async def _extract_keywords(self, state: QuizState) -> QuizState:
-        """🔑 3단계: 핵심 키워드 추출"""
-        try:
-            logger.info("STEP3 키워드 추출 시작")
-
-            topics = state["core_topics"]
-            request = state["request"]
-
-            # 🔥 키워드 추출 프롬프트
-            keyword_prompt = f"""
-추출된 핵심 주제들을 바탕으로 문제 출제용 키워드들을 추출해주세요.
-
-📋 **핵심 주제들:**
-{chr(10).join(f"{i+1}. {topic}" for i, topic in enumerate(topics))}
-
-🎯 **키워드 추출 조건:**
-- 난이도: {request.difficulty.value}
-- 문제 유형: {request.question_type.value}
-
-**키워드 추출 지침:**
-1. 각 주제별로 핵심 키워드 2-3개씩 추출
-2. 난이도별 특성:
-   - EASY: 기본 용어, 정의, 단순 사실
-   - MEDIUM: 개념 관계, 원리, 절차
-   - HARD: 응용 상황, 복합 개념, 분석 요소
-3. 문제 출제가 직접적으로 가능한 구체적 키워드
-4. 도메인별 전문 용어와 일반 개념의 균형
-
-**출력 형식:**
-키워드1, 키워드2, 키워드3, ...
-
-**키워드 개수:** 15-25개
-"""
-
-            messages = [
-                SystemMessage(content="당신은 전문 시험 출제 전문가입니다."),
-                HumanMessage(content=keyword_prompt)
-            ]
-
-            response = await self.llm.ainvoke(messages)
-
-            # 키워드 파싱
-            keywords_text = response.content
-            keywords = [kw.strip() for kw in keywords_text.split(',') if kw.strip()]
-
             state["keywords"] = keywords
-            state["current_step"] = "keyword_extractor"
+            state["domain_context"] = {
+                **domain_info,
+                "total_sentences": total_sentences,
+                "total_paragraphs": total_paragraphs,
+                "recommended_questions": recommended_questions
+            }
+            state["current_step"] = "parallel_processor"
 
-            logger.info(f"SUCCESS 키워드 추출 완료: {len(keywords)}개")
+            logger.info(f"SUCCESS 병렬 처리 완료: {recommended_questions}개 문제 추천")
             return state
 
         except Exception as e:
-            logger.error(f"ERROR 키워드 추출 실패: {e}")
-            state["errors"].append(f"키워드 추출 실패: {str(e)}")
+            logger.error(f"ERROR 병렬 처리 실패: {e}")
+            state["errors"].append(f"병렬 처리 실패: {str(e)}")
             return state
 
     async def _generate_questions(self, state: QuizState) -> QuizState:
-        """❓ 4단계: 균형 잡힌 문제 생성 (90% 일반 + 10% 응용)"""
+        """❓ 4단계: 다양성과 품질을 고려한 최적화된 병렬 배치 문제 생성"""
         try:
-            logger.info("STEP4 균형 잡힌 문제 생성 시작")
+            generate_start = time.time()
+            logger.info("STEP4 다양성과 품질을 고려한 최적화된 병렬 배치 문제 생성 시작")
 
             request = state["request"]
             summary = state["summary"]
             topics = state["core_topics"]
             keywords = state["keywords"]
 
-            # 🎯 1단계: PDF 기반 문제 생성
-            pdf_prompt = self.prompt_manager.generate_final_prompt(
-                summary=summary,
-                num_questions=request.num_questions,
-                difficulty=request.difficulty,
-                question_type=request.question_type
-            )
+            # 추가 지시사항이 있는 경우 프롬프트에 추가
+            additional_guide = ""
+            if request.additional_instructions:
+                additional_guide = "\n\n📝 **추가 지시사항**:\n" + "\n".join(f"- {instruction}" for instruction in request.additional_instructions)
 
-            messages = [
-                SystemMessage(content=self.prompt_manager.get_system_message()),
-                HumanMessage(content=pdf_prompt)
-            ]
+            # 🎯 최적화된 배치 크기 계산 (더 작은 배치로 다양성 확보)
+            target_questions = request.num_questions
+            batch_size = min(2, max(1, target_questions // 3))  # 1-2개씩 배치로 다양성 확보
+            num_batches = (target_questions + batch_size - 1) // batch_size
 
-            response = await self.llm.ainvoke(messages)
-            pdf_questions = self._parse_questions(response.content)
+            logger.info(f"배치 처리 설정: {num_batches}개 배치, 배치당 {batch_size}개 문제")
 
-            # 📊 PDF 기반 문제 수 확인
-            if len(pdf_questions) >= request.num_questions:
-                state["generated_questions"] = pdf_questions[:request.num_questions]
-                logger.info(f"SUCCESS PDF 기반 문제 생성 완료: {len(pdf_questions)}개")
-                return state
+            # 🎯 키워드 분산 전략
+            keyword_groups = self._distribute_keywords(keywords, num_batches)
+            topic_groups = self._distribute_topics(topics, num_batches)
 
-            # 🎯 2단계: AI 기반 추가 문제 생성
-            remaining_count = request.num_questions - len(pdf_questions)
-            logger.info(f"PDF 기반 문제 부족: {remaining_count}개 추가 생성 필요")
+            # 🚀 병렬 배치 생성 함수
+            async def generate_batch(batch_num: int, batch_size: int, is_final_batch: bool = False) -> List[Dict]:
+                """단일 배치 문제 생성 (다양성 고려)"""
+                try:
+                    # 마지막 배치는 남은 문제 수만큼만 생성
+                    actual_batch_size = batch_size
+                    if is_final_batch:
+                        remaining = target_questions - (batch_num * batch_size)
+                        actual_batch_size = max(1, remaining)
 
-            # AI 기반 문제 생성을 위한 프롬프트
-            ai_prompt = f"""
-당신은 전문 교육 컨텐츠 개발자입니다. 주어진 주제와 키워드를 바탕으로 추가 문제를 생성해주세요.
+                    # 배치별 키워드와 주제 할당
+                    batch_keywords = keyword_groups[batch_num % len(keyword_groups)]
+                    batch_topics = topic_groups[batch_num % len(topic_groups)]
 
-📚 **기존 컨텐츠 요약**:
-{summary}
+                    # 배치별 다양한 접근 방식으로 문제 생성
+                    batch_prompts = []
 
-🎯 **핵심 주제들**:
-{chr(10).join(f"- {topic}" for topic in topics)}
+                    # 난이도별 문제 생성 전략
+                    if batch_num < num_batches * 0.4:  # 40% 기본 개념
+                        batch_prompts.append({
+                            "type": "basic_concept",
+                            "prompt": self._create_diversity_prompt(
+                                summary, batch_topics, batch_keywords,
+                                actual_batch_size, request, "basic"
+                            ),
+                            "system": "당신은 기본 개념 문제 전문가입니다. 핵심 개념을 명확하게 묻는 문제를 생성하세요. 중복을 피하고 다양한 관점에서 접근하세요."
+                        })
+                    elif batch_num < num_batches * 0.7:  # 30% 개념 연계
+                        batch_prompts.append({
+                            "type": "concept_integration",
+                            "prompt": self._create_diversity_prompt(
+                                summary, batch_topics, batch_keywords,
+                                actual_batch_size, request, "concept"
+                            ),
+                            "system": "당신은 개념 연계 문제 전문가입니다. 여러 개념을 연결하는 문제를 생성하세요. 다양한 예시와 응용을 포함하세요."
+                        })
+                    else:  # 30% 응용 문제
+                        batch_prompts.append({
+                            "type": "application",
+                            "prompt": self._create_diversity_prompt(
+                                summary, batch_topics, batch_keywords,
+                                actual_batch_size, request, "application"
+                            ),
+                            "system": "당신은 응용 문제 전문가입니다. 실제 상황에 적용하는 문제를 생성하세요. 구체적인 사례와 분석을 포함하세요."
+                        })
 
-🔑 **핵심 키워드들**:
-{chr(10).join(f"- {keyword}" for keyword in keywords)}
+                    # 배치 내에서도 병렬 처리 (여러 접근 방식)
+                    batch_tasks = []
+                    for prompt_info in batch_prompts:
+                        task = self.question_chain.ainvoke({
+                            "system_message": prompt_info["system"],
+                            "prompt": prompt_info["prompt"]
+                        })
+                        batch_tasks.append(task)
 
-📝 **문제 생성 조건**:
-- 추가 생성 필요 수량: {remaining_count}개
-- 난이도: {request.difficulty.value}
-- 문제 유형: {request.question_type.value}
-- 기존 문제와 중복되지 않도록 주의
-- 주제의 일반화된 이해를 측정하는 문제 생성
-- 실제 교육 현장에서 사용 가능한 수준의 문제
+                    # 배치 병렬 실행
+                    batch_responses = await asyncio.gather(*batch_tasks, return_exceptions=True)
 
-**출력 형식**:
-```json
-{{
-  "questions": [
-    {{
-      "id": 1,
-      "question": "문제 내용",
-      "type": "{request.question_type.value}",
-      "difficulty": "{request.difficulty.value}",
-      "options": ["선택지1", "선택지2", "선택지3", "선택지4"],
-      "correct_answer": "정답",
-      "explanation": "정답 해설",
-      "learning_objective": "학습 목표",
-      "problem_level": "basic 또는 application",
-      "keywords": ["키워드1", "키워드2"],
-      "source": "ai_generated"
-    }}
-  ]
-}}
-```
+                    # 응답 처리 및 파싱
+                    batch_questions = []
+                    for i, response in enumerate(batch_responses):
+                        if isinstance(response, Exception):
+                            logger.warning(f"배치 {batch_num} 응답 {i} 실패: {response}")
+                            continue
 
-정확히 {remaining_count}개의 추가 문제를 생성해주세요.
-"""
+                        try:
+                            if hasattr(response, 'content') and isinstance(response.content, str):
+                                questions = self._parse_questions(response.content)
+                                # 배치별 메타데이터 추가
+                                for q in questions:
+                                    q["batch_num"] = batch_num
+                                    q["difficulty_level"] = batch_prompts[i]["type"]
+                                batch_questions.extend(questions)
+                        except Exception as e:
+                            logger.warning(f"배치 {batch_num} 파싱 실패: {e}")
+                            continue
 
-            messages = [
-                SystemMessage(content="당신은 전문 교육 컨텐츠 개발자입니다."),
-                HumanMessage(content=ai_prompt)
-            ]
+                    logger.info(f"배치 {batch_num} 완료: {len(batch_questions)}개 문제 생성")
+                    return batch_questions
 
-            response = await self.llm.ainvoke(messages)
-            ai_questions = self._parse_questions(response.content)
+                except Exception as e:
+                    logger.error(f"배치 {batch_num} 생성 실패: {e}")
+                    return []
 
-            # 📊 최종 문제 목록 생성
-            final_questions = pdf_questions + ai_questions[:remaining_count]
+            # 🚀 모든 배치를 병렬로 실행
+            batch_tasks = []
+            for i in range(num_batches):
+                is_final = (i == num_batches - 1)
+                task = generate_batch(i, batch_size, is_final)
+                batch_tasks.append(task)
 
-            # 🔄 문제 순서 섞기
-            import random
-            random.shuffle(final_questions)
+            # 병렬 실행
+            all_batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+
+            # 📊 모든 배치 결과 통합
+            all_questions = []
+            for i, batch_result in enumerate(all_batch_results):
+                if isinstance(batch_result, Exception):
+                    logger.error(f"배치 {i} 전체 실패: {batch_result}")
+                    continue
+                if isinstance(batch_result, list):
+                    all_questions.extend(batch_result)
+
+            logger.info(f"모든 배치 완료: 총 {len(all_questions)}개 문제 생성")
+
+            # 🔄 고급 중복 제거 및 품질 검사 (더 엄격한 기준)
+            final_questions = self._advanced_quality_check_with_diversity(all_questions, target_questions)
+
+            # 문제 수가 부족한 경우 빠른 보충 생성 (다양성 고려)
+            if len(final_questions) < target_questions:
+                logger.info(f"문제 수 부족 ({len(final_questions)}/{target_questions}), 다양성 고려한 보충 생성")
+
+                # 사용되지 않은 키워드와 주제로 보충 생성
+                used_keywords = set()
+                used_topics = set()
+                for q in final_questions:
+                    question_text = q.get("question", "").lower()
+                    for keyword in keywords:
+                        if keyword.lower() in question_text:
+                            used_keywords.add(keyword)
+                    for topic in topics:
+                        if topic.lower() in question_text:
+                            used_topics.add(topic)
+
+                unused_keywords = [k for k in keywords if k not in used_keywords]
+                unused_topics = [t for t in topics if t not in used_topics]
+
+                supplement_prompt = self._create_diversity_prompt(
+                    summary, unused_topics[:3], unused_keywords[:5],
+                    target_questions - len(final_questions), request, "mixed"
+                )
+
+                try:
+                    supplement_response = await self.question_chain.ainvoke({
+                        "system_message": "다양성과 품질을 중시하는 문제 생성 전문가입니다. 중복을 피하고 새로운 관점에서 문제를 생성하세요.",
+                        "prompt": supplement_prompt
+                    })
+
+                    supplement_questions = self._parse_questions(supplement_response.content)
+                    supplement_questions = self._basic_quality_check(supplement_questions)
+
+                    final_questions.extend(supplement_questions)
+                    logger.info(f"보충 생성 완료: {len(supplement_questions)}개 추가")
+
+                except Exception as e:
+                    logger.warning(f"보충 생성 실패: {e}")
+
+            # 최종 중복 제거 및 품질 검사
+            final_questions = self._advanced_quality_check_with_diversity(final_questions, target_questions)
+
+            # 정확히 요청된 수만큼만 반환
+            final_questions = final_questions[:target_questions]
+
+            # ID 순차적으로 부여
+            for i, question in enumerate(final_questions, 1):
+                question["id"] = i
 
             state["generated_questions"] = final_questions
             state["current_step"] = "question_generator"
 
             # 📊 분포 확인 로깅
-            basic_count = sum(1 for q in final_questions if q.get("problem_level") == "basic")
-            app_count = sum(1 for q in final_questions if q.get("problem_level") == "application")
-            pdf_count = sum(1 for q in final_questions if q.get("source") != "ai_generated")
-            ai_count = sum(1 for q in final_questions if q.get("source") == "ai_generated")
+            basic_count = sum(1 for q in final_questions if q.get("difficulty_level") == "basic_concept")
+            concept_count = sum(1 for q in final_questions if q.get("difficulty_level") == "concept_integration")
+            app_count = sum(1 for q in final_questions if q.get("difficulty_level") == "application")
 
-            logger.info(f"SUCCESS 문제 생성 완료: 총 {len(final_questions)}개")
-            logger.info(f"- PDF 기반: {pdf_count}개")
-            logger.info(f"- AI 기반: {ai_count}개")
-            logger.info(f"- 일반 문제: {basic_count}개")
+            logger.info(f"SUCCESS 다양성과 품질을 고려한 문제 생성 완료: 총 {len(final_questions)}개")
+            logger.info(f"- 기본 개념: {basic_count}개")
+            logger.info(f"- 개념 연계: {concept_count}개")
             logger.info(f"- 응용 문제: {app_count}개")
+            logger.info(f"[실행시간] 최적화된 문제 생성 소요 시간: {time.time() - generate_start:.2f}초")
 
             return state
 
         except Exception as e:
-            logger.error(f"ERROR 문제 생성 실패: {e}")
+            logger.error(f"ERROR 최적화된 문제 생성 실패: {e}")
             state["errors"].append(f"문제 생성 실패: {str(e)}")
             return state
+
+    def _distribute_keywords(self, keywords: List[str], num_batches: int) -> List[List[str]]:
+        """키워드를 배치별로 분산 배치"""
+        if not keywords:
+            return [[] for _ in range(num_batches)]
+
+        # 키워드를 그룹별로 분산
+        keyword_groups = []
+        for i in range(num_batches):
+            start_idx = (i * len(keywords)) // num_batches
+            end_idx = ((i + 1) * len(keywords)) // num_batches
+            group = keywords[start_idx:end_idx]
+            if not group and keywords:  # 빈 그룹인 경우 전체 키워드 사용
+                group = keywords
+            keyword_groups.append(group)
+
+        return keyword_groups
+
+    def _distribute_topics(self, topics: List[str], num_batches: int) -> List[List[str]]:
+        """주제를 배치별로 분산 배치"""
+        if not topics:
+            return [[] for _ in range(num_batches)]
+
+        # 주제를 그룹별로 분산
+        topic_groups = []
+        for i in range(num_batches):
+            start_idx = (i * len(topics)) // num_batches
+            end_idx = ((i + 1) * len(topics)) // num_batches
+            group = topics[start_idx:end_idx]
+            if not group and topics:  # 빈 그룹인 경우 전체 주제 사용
+                group = topics
+            topic_groups.append(group)
+
+        return topic_groups
+
+    def _create_diversity_prompt(self, summary: str, topics: List[str], keywords: List[str],
+                                num_questions: int, request: QuizRequest, difficulty_type: str) -> str:
+        """다양성을 고려한 프롬프트 생성"""
+
+        # 난이도별 특화 지시사항
+        difficulty_instructions = {
+            "basic": "기본 개념을 명확하게 묻는 문제를 생성하세요. 핵심 용어와 정의에 집중하세요.",
+            "concept": "여러 개념을 연결하는 문제를 생성하세요. 개념 간의 관계와 비교를 포함하세요.",
+            "application": "실제 상황에 적용하는 문제를 생성하세요. 구체적인 사례와 분석을 포함하세요.",
+            "mixed": "다양한 난이도의 문제를 균형있게 생성하세요."
+        }
+
+        # 중복 방지 지시사항
+        diversity_instruction = """
+⚠️ **중복 방지 지침**:
+- 같은 키워드나 주제를 반복해서 사용하지 마세요
+- 비슷한 질문 형식을 피하세요
+- 다양한 관점과 접근 방식을 사용하세요
+- 각 문제는 독립적이고 고유해야 합니다
+"""
+
+        return self.prompt_manager.get_prompt("question").format(
+            summary=summary,
+            topics="\n".join(f"- {topic}" for topic in topics),
+            keywords="\n".join(f"- {keyword}" for keyword in keywords),
+            num_questions=num_questions,
+            difficulty=request.difficulty.value,
+            question_type=request.question_type.value
+        ) + f"\n\n{difficulty_instructions.get(difficulty_type, '')}\n{diversity_instruction}"
+
+    def _advanced_quality_check_with_diversity(self, questions: List[Dict], target_count: int) -> List[Dict]:
+        """다양성을 고려한 고급 품질 검사 및 중복 제거"""
+        if not questions:
+            return []
+
+        # 1단계: 기본 품질 검사
+        valid_questions = self._basic_quality_check(questions)
+
+        if len(valid_questions) <= target_count:
+            return valid_questions
+
+        # 2단계: 고급 중복 제거 (더 엄격한 기준)
+        unique_questions = []
+        seen_questions = set()
+        keyword_usage = {}  # 키워드 사용 빈도 추적
+
+        for q in valid_questions:
+            question_text = q["question"].lower().strip()
+
+            # 더 엄격한 중복 검사 (유사도 기준 상향)
+            is_duplicate = False
+            for seen in seen_questions:
+                if self._calculate_similarity(question_text, seen) > 0.8:  # 더 엄격한 기준
+                    is_duplicate = True
+                    break
+
+            # 키워드 중복 검사
+            if not is_duplicate:
+                question_keywords = self._extract_keywords_from_question(question_text)
+                keyword_overlap = 0
+                for keyword in question_keywords:
+                    if keyword_usage.get(keyword, 0) >= 2:  # 같은 키워드가 2번 이상 사용된 경우
+                        keyword_overlap += 1
+
+                # 키워드 중복이 너무 많은 경우 제외
+                if keyword_overlap > len(question_keywords) * 0.5:  # 50% 이상 중복
+                    continue
+
+            if not is_duplicate:
+                unique_questions.append(q)
+                seen_questions.add(question_text)
+
+                # 키워드 사용 빈도 업데이트
+                for keyword in self._extract_keywords_from_question(question_text):
+                    keyword_usage[keyword] = keyword_usage.get(keyword, 0) + 1
+
+                # 목표 수에 도달하면 중단
+                if len(unique_questions) >= target_count:
+                    break
+
+        # 3단계: 품질 점수 기반 정렬 (다양성 가중치 추가)
+        scored_questions = []
+        for q in unique_questions:
+            score = self._calculate_question_score_with_diversity(q, keyword_usage)
+            scored_questions.append((score, q))
+
+        # 점수 높은 순으로 정렬
+        scored_questions.sort(key=lambda x: x[0], reverse=True)
+
+        # 상위 문제들만 반환
+        final_questions = [q for _, q in scored_questions[:target_count]]
+
+        logger.info(f"다양성을 고려한 고급 품질 검사 완료: {len(questions)}개 → {len(final_questions)}개")
+
+        return final_questions
+
+    def _extract_keywords_from_question(self, question_text: str) -> List[str]:
+        """문제에서 키워드 추출"""
+        # 간단한 키워드 추출 (실제로는 더 정교한 NLP 사용 가능)
+        words = question_text.split()
+        # 3글자 이상의 단어만 키워드로 간주
+        keywords = [word for word in words if len(word) >= 3]
+        return keywords[:5]  # 상위 5개만 반환
+
+    def _calculate_question_score_with_diversity(self, question: Dict, keyword_usage: Dict[str, int]) -> float:
+        """다양성을 고려한 문제 품질 점수 계산"""
+        score = self._calculate_question_score(question)
+
+        # 다양성 보너스
+        question_text = question.get("question", "").lower()
+        question_keywords = self._extract_keywords_from_question(question_text)
+
+        # 사용 빈도가 낮은 키워드에 보너스
+        diversity_bonus = 0
+        for keyword in question_keywords:
+            usage_count = keyword_usage.get(keyword, 0)
+            if usage_count == 0:
+                diversity_bonus += 0.3  # 새로운 키워드
+            elif usage_count == 1:
+                diversity_bonus += 0.1  # 한 번만 사용된 키워드
+
+        score += diversity_bonus
+
+        return score
+
+    def _calculate_similarity(self, text1: str, text2: str) -> float:
+        """텍스트 유사도 계산 (개선된 버전)"""
+        from difflib import SequenceMatcher
+
+        # 기본 유사도
+        basic_similarity = SequenceMatcher(None, text1, text2).ratio()
+
+        # 키워드 기반 유사도
+        words1 = set(text1.split())
+        words2 = set(text2.split())
+
+        if not words1 or not words2:
+            return basic_similarity
+
+        # Jaccard 유사도
+        intersection = len(words1.intersection(words2))
+        union = len(words1.union(words2))
+        jaccard_similarity = intersection / union if union > 0 else 0
+
+        # 가중 평균
+        return (basic_similarity * 0.7) + (jaccard_similarity * 0.3)
+
+    def _calculate_question_score(self, question: Dict) -> float:
+        """문제 품질 점수 계산"""
+        score = 0.0
+
+        # 기본 점수
+        score += 1.0
+
+        # 문제 길이 점수 (적절한 길이)
+        question_length = len(question.get("question", ""))
+        if 50 <= question_length <= 200:
+            score += 0.5
+        elif 30 <= question_length <= 300:
+            score += 0.3
+
+        # 선택지 개수 점수
+        options_count = len(question.get("options", []))
+        if options_count == 4:
+            score += 0.3
+        elif options_count >= 3:
+            score += 0.2
+
+        # 설명 길이 점수
+        explanation_length = len(question.get("explanation", ""))
+        if 20 <= explanation_length <= 150:
+            score += 0.2
+
+        # 문제 수준 점수
+        level = question.get("problem_level", "basic")
+        if level == "application":
+            score += 0.3
+        elif level == "concept":
+            score += 0.2
+
+        return score
+
+    def _basic_quality_check(self, questions: List[Dict]) -> List[Dict]:
+        """기본적인 품질 검사 수행"""
+        valid_questions = []
+        seen_questions = set()
+
+        for q in questions:
+            try:
+                # 필수 필드 확인
+                if not all(k in q for k in ["question", "options", "correct_answer", "explanation"]):
+                    continue
+
+                # 중복 문제 제거 (유사도 기반, 기준 완화)
+                question_text = q["question"].lower().strip()
+                if any(self._is_similar(question_text, seen, threshold=0.9) for seen in seen_questions):  # 유사도 기준 상향
+                    continue
+                seen_questions.add(question_text)
+
+                # 선택지 검증 (최소 2개 이상)
+                if len(q["options"]) < 2:
+                    continue
+
+                # 정답이 선택지에 포함되어 있는지 확인 (전처리된 형식 고려)
+                correct_answer = q["correct_answer"]
+                options = q["options"]
+
+                # 정답이 선택지에 직접 포함되어 있는지 확인
+                if correct_answer in options:
+                    pass
+                else:
+                    # 정답에서 번호를 제거하고 내용만 비교
+                    import re
+                    answer_content = re.sub(r'^\d+\.\s*', '', correct_answer)
+                    found = False
+                    for option in options:
+                        option_content = re.sub(r'^\d+\.\s*', '', option)
+                        if answer_content == option_content:
+                            found = True
+                            break
+                    if not found:
+                        continue
+
+                # 문제 수준 설정
+                if "problem_level" not in q:
+                    q["problem_level"] = "basic"
+
+                valid_questions.append(q)
+            except Exception as e:
+                logger.warning(f"문제 품질 검사 중 오류 발생: {e}")
+                continue
+
+        return valid_questions
+
+    def _is_similar(self, text1: str, text2: str, threshold: float = 0.9) -> bool:
+        """두 텍스트의 유사도 검사 (기준 상향)"""
+        from difflib import SequenceMatcher
+        return SequenceMatcher(None, text1, text2).ratio() > threshold
 
     def _parse_questions(self, content: str) -> List[Dict]:
         """JSON 응답 파싱"""
         try:
-            import json
-
             if "```json" in content:
                 json_start = content.find("```json") + 7
                 json_end = content.find("```", json_start)
@@ -409,78 +720,221 @@ class QuizGeneratorAgent:
                 json_content = content.strip()
 
             questions_data = json.loads(json_content)
-            return questions_data.get("questions", [])
+            questions = questions_data.get("questions", [])
+
+            # 전처리 적용
+            return self._preprocess_questions(questions)
 
         except json.JSONDecodeError as e:
             logger.error(f"ERROR JSON 파싱 실패: {e}")
             logger.error(f"LLM 응답 내용: {content[:500]}...")
             return []
 
-    async def _validate_questions(self, state: QuizState) -> QuizState:
-        """✅ 5단계: 문제 품질 검증"""
-        try:
-            logger.info("STEP5 문제 검증 시작")
+    def _preprocess_questions(self, questions: List[Dict]) -> List[Dict]:
+        """문제 응답 전처리 - 선택지 번호 중복 및 정답 번호 수정"""
+        processed_questions = []
 
-            questions = state["generated_questions"]
-            request = state["request"]
+        for question in questions:
+            processed_question = question.copy()
 
-            # 기본 검증
-            validated_questions = []
-
-            for i, q in enumerate(questions):
-                if isinstance(q, dict) and "question" in q:
-                    # 필수 필드 검증
-                    if q.get("question") and q.get("correct_answer"):
-                        validated_questions.append(q)
+            # 선택지 전처리
+            if isinstance(question.get("options"), list):
+                processed_options = []
+                for option in question["options"]:
+                    # 번호 중복 제거 (예: "1. 1. 내용" -> "1. 내용")
+                    if isinstance(option, str):
+                        # 정규표현식으로 번호 중복 패턴 찾기
+                        import re
+                        # "숫자. 숫자. 내용" 패턴을 "숫자. 내용"으로 변경
+                        cleaned_option = re.sub(r'^(\d+)\.\s*\1\.\s*', r'\1. ', option)
+                        processed_options.append(cleaned_option)
                     else:
-                        logger.warning(f"WARNING 문제 {i+1} 필수 필드 누락")
-                else:
-                    logger.warning(f"WARNING 문제 {i+1} 형식 오류")
+                        processed_options.append(option)
 
-            # 최종 상태 업데이트
-            state["generated_questions"] = validated_questions
-            state["current_step"] = "quality_validator"
+                processed_question["options"] = processed_options
 
-            logger.info(f"SUCCESS 문제 검증 완료: {len(validated_questions)}개 문제 확정")
-            return state
+                # correct_answer_number 수정
+                if "correct_answer" in question:
+                    correct_answer = question["correct_answer"]
+                    # correct_answer에서 번호 추출
+                    import re
+                    match = re.match(r'^(\d+)\.\s*(.+)', correct_answer)
+                    if match:
+                        answer_number = int(match.group(1))
+                        answer_content = match.group(2).strip()
+                        processed_question["correct_answer"] = f"{answer_number}. {answer_content}"
+                        processed_question["correct_answer_number"] = answer_number
+                    else:
+                        # correct_answer가 올바른 형식이 아닌 경우, 옵션에서 찾기
+                        for i, option in enumerate(processed_options, 1):
+                            # 옵션에서 번호 제거 후 내용만 비교
+                            option_content = re.sub(r'^\d+\.\s*', '', option)
+                            if option_content == correct_answer or option_content in correct_answer:
+                                processed_question["correct_answer"] = f"{i}. {option_content}"
+                                processed_question["correct_answer_number"] = i
+                                break
+                        else:
+                            # 찾지 못한 경우 첫 번째 옵션을 정답으로 설정
+                            if processed_options:
+                                first_option = processed_options[0]
+                                first_content = re.sub(r'^\d+\.\s*', '', first_option)
+                                processed_question["correct_answer"] = f"1. {first_content}"
+                                processed_question["correct_answer_number"] = 1
 
-        except Exception as e:
-            logger.error(f"ERROR 문제 검증 실패: {e}")
-            state["errors"].append(f"문제 검증 실패: {str(e)}")
-            return state
+            processed_questions.append(processed_question)
 
-    async def generate_quiz(self, request: QuizRequest, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
+        return processed_questions
+
+    def smart_truncate(self, text, max_length=2000):
+        """앞/중간/끝 샘플링 방식으로 텍스트를 자름"""
+        if len(text) <= max_length:
+            return text
+        part = max_length // 3
+        return text[:part] + text[len(text)//2:len(text)//2+part] + text[-part:]
+
+    async def generate_quiz(self, request: QuizRequest, documents: List[Dict[str, Any]], use_combined_prompt: bool = False, use_sampling: bool = False) -> Dict[str, Any]:
         """
-        문제 생성 메인 메서드
-
-        Args:
-            request: 문제 생성 요청
-            documents: 대상 문서들
-
-        Returns:
-            생성된 문제 데이터
+        문제 생성 메인 메서드 (문서별 전처리까지 완전 비동기 + 문제 생성 2문제씩 병렬)
+        use_combined_prompt: 무시(항상 분리 방식)
+        use_sampling: True면 샘플링(앞/중간/끝), False면 전체 결합
         """
+        import time
         try:
-            logger.info("🚀 문제 생성 AI 에이전트 시작")
+            total_start = time.time()
+            logger.info(f"🚀 문제 생성 AI 에이전트 시작 (문서별 전처리 완전 비동기, 문제 생성 병렬 2문제씩, use_sampling={use_sampling})")
 
-            # 초기 상태 설정
-            initial_state: QuizState = {
-                "request": request,
-                "documents": documents,
-                "summary": "",
-                "core_topics": [],
-                "keywords": [],
-                "generated_questions": [],
-                "current_step": "init",
-                "errors": [],
-                "domain_context": {}
-            }
+            # 난이도 값 검증
+            if not isinstance(request.difficulty, DifficultyLevel):
+                try:
+                    request.difficulty = DifficultyLevel(request.difficulty)
+                except ValueError:
+                    return {
+                        "success": False,
+                        "error": f"잘못된 파라미터: '{request.difficulty}' is not a valid DifficultyLevel",
+                        "valid_difficulty": [level.value for level in DifficultyLevel],
+                        "valid_question_types": [qtype.value for qtype in QuestionType]
+                    }
 
-            # 워크플로우 실행
-            final_state = await self.workflow.ainvoke(initial_state)
+            # 문제 유형 값 검증
+            if not isinstance(request.question_type, QuestionType):
+                try:
+                    request.question_type = QuestionType(request.question_type)
+                except ValueError:
+                    return {
+                        "success": False,
+                        "error": f"잘못된 파라미터: '{request.question_type}' is not a valid QuestionType",
+                        "valid_difficulty": [level.value for level in DifficultyLevel],
+                        "valid_question_types": [qtype.value for qtype in QuestionType]
+                    }
 
-            # 결과 정리
-            result = {
+            preprocess_start = time.time()
+            logger.info(f"[전처리] 시작 (문서별 완전 비동기, use_sampling={use_sampling})")
+
+            async def process_single_doc(doc):
+                filename = doc.get("filename", "Unknown")
+                content = doc.get("content", "")
+                if use_sampling:
+                    content = self.smart_truncate(content, 2000)
+                summary_prompt = self.prompt_manager.get_prompt("summary").format(content=content)
+                topic_prompt = self.prompt_manager.get_prompt("topic").format(
+                    content=content,
+                    difficulty=request.difficulty.value,
+                    num_questions=request.num_questions,
+                    question_type=request.question_type.value,
+                    num_topics=request.num_questions + 3
+                )
+                keyword_prompt = self.prompt_manager.get_prompt("keyword").format(
+                    content=content,
+                    difficulty=request.difficulty.value,
+                    question_type=request.question_type.value,
+                    num_keywords=request.num_questions * 3
+                )
+                s_task = self.summary_chain.ainvoke({"prompt": summary_prompt})
+                t_task = self.topic_chain.ainvoke({"prompt": topic_prompt})
+                k_task = self.keyword_chain.ainvoke({"prompt": keyword_prompt})
+                summary_resp, topic_resp, keyword_resp = await asyncio.gather(s_task, t_task, k_task)
+                return {
+                    "summary": summary_resp.content,
+                    "topics": topic_resp.content,
+                    "keywords": keyword_resp.content
+                }
+
+            doc_tasks = [process_single_doc(doc) for doc in documents]
+            doc_results = await asyncio.gather(*doc_tasks)
+
+            # 결과 합치기
+            summary = "\n".join([r["summary"] for r in doc_results])
+            topics = []
+            for r in doc_results:
+                topics.extend([line.strip().lstrip('- •').strip() for line in r["topics"].split('\n') if line.strip().startswith(('-', '•'))])
+            keywords = []
+            for r in doc_results:
+                keywords.extend([kw.strip() for kw in r["keywords"].split(',') if kw.strip()])
+            logger.info(f"[전처리] 완료 (총 소요 시간: {time.time() - preprocess_start:.2f}초)")
+
+            # 2. 문제 생성: 더 많은 문제를 생성하여 부족한 경우 대비
+            generate_start = time.time()
+            logger.info("[문제 생성] 시작 (더 많은 문제 생성)")
+
+            # 요청 수의 1.5배로 생성하여 품질 검사 후 필터링 대비
+            target_questions = int(request.num_questions * 1.5)
+            batch_size = 3  # 배치 크기 증가
+            total_batches = (target_questions + batch_size - 1) // batch_size
+
+            async def generate_questions_batch(batch_num):
+                question_prompt = self.prompt_manager.get_prompt("question").format(
+                    summary=summary,
+                    topics="\n".join(f"- {topic}" for topic in topics),
+                    keywords="\n".join(f"- {keyword}" for keyword in keywords),
+                    num_questions=batch_size,
+                    difficulty=request.difficulty.value,
+                    question_type=request.question_type.value
+                )
+                response = await self.question_chain.ainvoke({
+                    "system_message": "당신은 전문 교육 컨텐츠 개발자입니다.",
+                    "prompt": question_prompt
+                })
+                return self._parse_questions(response.content)
+
+            tasks = [generate_questions_batch(i) for i in range(total_batches)]
+            results = await asyncio.gather(*tasks)
+            questions = [q for batch in results for q in batch]
+
+            # 품질 검사 후 문제 수가 부족한 경우 추가 생성
+            questions = self._basic_quality_check(questions)
+            if len(questions) < request.num_questions:
+                logger.info(f"문제 수 부족 ({len(questions)}/{request.num_questions}), 추가 생성 시작")
+
+                # 부족한 수의 2배로 추가 생성
+                additional_needed = (request.num_questions - len(questions)) * 2
+                additional_batches = (additional_needed + batch_size - 1) // batch_size
+
+                additional_tasks = [generate_questions_batch(i) for i in range(additional_batches)]
+                additional_results = await asyncio.gather(*additional_tasks)
+                additional_questions = [q for batch in additional_results for q in batch]
+                additional_questions = self._basic_quality_check(additional_questions)
+
+                questions.extend(additional_questions)
+                logger.info(f"추가 생성 완료: 총 {len(questions)}개 문제")
+
+            logger.info(f"[문제 생성] 완료 (소요 시간: {time.time() - generate_start:.2f}초)")
+
+            # 3. 후처리: ID 부여 및 최종 정리
+            post_start = time.time()
+            logger.info("[후처리] 시작")
+            # 품질 검사는 이미 문제 생성 단계에서 완료됨
+            questions = questions[:request.num_questions]  # 요청 수만큼만 반환
+            for i, question in enumerate(questions, 1):
+                question["id"] = i
+                # 전처리에서 이미 선택지 번호와 correct_answer_number가 처리되었으므로 추가 처리 제거
+                # 다중선택 문제의 경우 전처리에서 이미 올바른 형식으로 처리됨
+            logger.info(f"[후처리] 완료 (소요 시간: {time.time() - post_start:.2f}초)")
+
+            total_end = time.time()
+            logger.info(f"[실행시간] 전체 문제 생성 프로세스 소요 시간: {total_end - total_start:.2f}초")
+            logger.info("🎉 SUCCESS 문제 생성 완료")
+
+            return {
                 "success": True,
                 "request": {
                     "file_ids": request.file_ids,
@@ -489,22 +943,16 @@ class QuizGeneratorAgent:
                     "question_type": request.question_type.value
                 },
                 "process_info": {
-                    "summary": final_state["summary"],
-                    "core_topics": final_state["core_topics"],
-                    "keywords": final_state["keywords"],
-                    "domain_context": final_state["domain_context"]
+                    "summary": summary,
+                    "core_topics": topics,
+                    "keywords": keywords
                 },
-                "questions": final_state["generated_questions"],
+                "questions": questions,
                 "meta": {
-                    "generated_count": len(final_state["generated_questions"]),
-                    "errors": final_state["errors"],
-                    "final_step": final_state["current_step"]
+                    "generated_count": len(questions),
+                    "final_step": "generate_quiz"
                 }
             }
-
-            logger.info("🎉 SUCCESS 문제 생성 완료")
-            return result
-
         except Exception as e:
             logger.error(f"ERROR 문제 생성 실패: {e}")
             return {

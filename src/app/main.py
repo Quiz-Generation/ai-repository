@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 
 from .api import document_routes, quiz_routes
+from .service.vector_db_service import VectorDBService
 
 # 로깅 설정
 log_dir = "../logs"
@@ -27,12 +28,30 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# 전역 서비스 인스턴스
+global_vector_service = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """애플리케이션 시작/종료 시 실행"""
+    global global_vector_service
+
     logger.info("🚀 FastAPI PDF Processing with Vector DB 시작")
+
+    # 전역 서비스 초기화
+    try:
+        logger.info("🔧 전역 벡터 DB 서비스 초기화 시작")
+        global_vector_service = VectorDBService()
+        await global_vector_service.initialize_embedding_model()
+        await global_vector_service.initialize_vector_db("milvus")
+        logger.info("✅ 전역 벡터 DB 서비스 초기화 완료")
+    except Exception as e:
+        logger.error(f"❌ 전역 서비스 초기화 실패: {e}")
+        raise
+
     yield
+
     logger.info("🛑 FastAPI PDF Processing with Vector DB 종료")
 
 
@@ -64,6 +83,7 @@ async def root():
     return {
         "message": "PDF Processing with Vector DB & AI Quiz Generation API",
         "version": "2.0.0",
+        "global_services_initialized": global_vector_service is not None,
         "features": [
             "🔍 동적 PDF 로더 선택 (PyMuPDF, PDFPlumber, PyPDF2, PDFMiner)",
             "🗄️ 벡터 데이터베이스 통합 (Milvus, Weaviate, FAISS)",
@@ -102,7 +122,8 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "PDF Processing with Vector DB",
-        "version": "2.0.0"
+        "version": "2.0.0",
+        "global_services_initialized": global_vector_service is not None
     }
 
 # 개발 서버 실행

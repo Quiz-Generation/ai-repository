@@ -346,3 +346,83 @@ class DocumentService:
         """문서 삭제"""
         # TODO: 실제 구현
         return True
+
+    async def calculate_optimal_question_count(self, content: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        PDF 내용을 분석하여 최적의 문제 수를 계산합니다.
+
+        Args:
+            content: PDF에서 추출한 텍스트 내용
+            metadata: PDF 메타데이터
+
+        Returns:
+            Dict[str, Any]: 문제 수 분석 결과
+        """
+        try:
+            # 1. 기본 텍스트 분석
+            sentences = [s.strip() for s in content.split('.') if s.strip()]
+            paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
+
+            # 2. 문장 복잡도 분석
+            complexity_scores = []
+            for sentence in sentences:
+                # 문장 길이 기반 복잡도
+                length_score = min(len(sentence) / 100, 1.0)
+
+                # 전문 용어 기반 복잡도
+                technical_terms = len([w for w in sentence.split() if len(w) > 8])
+                term_score = min(technical_terms / 5, 1.0)
+
+                # 수식이나 코드 포함 여부
+                has_math = any(c in sentence for c in ['=', '+', '-', '*', '/', '(', ')', '[', ']'])
+                has_code = any(c in sentence for c in ['{', '}', ';', ':', '->', '=>'])
+                special_score = 0.5 if (has_math or has_code) else 0.0
+
+                # 최종 복잡도 점수
+                complexity_scores.append((length_score + term_score + special_score) / 3)
+
+            avg_complexity = sum(complexity_scores) / len(complexity_scores) if complexity_scores else 0
+
+            # 3. 키워드/개념 추출
+            words = content.lower().split()
+            word_freq = {}
+            for word in words:
+                if len(word) > 4:  # 4글자 이상 단어만 고려
+                    word_freq[word] = word_freq.get(word, 0) + 1
+
+            key_concepts = [w for w, f in word_freq.items() if f > 2][:15]  # 상위 15개 키워드
+
+            # 4. 최적 문제 수 계산
+            base_questions = len(sentences) // 4  # 4문장당 1문제 (더 집중된 문제 생성)
+            complexity_factor = 1 + (avg_complexity * 0.5)  # 복잡도에 따른 가중치 (최대 1.5배)
+            concept_factor = min(len(key_concepts) / 5, 1.2)  # 키워드 수에 따른 가중치 (최대 1.2배)
+
+            recommended_questions = int(base_questions * complexity_factor * concept_factor)
+
+            # 5. 5의 배수로 조정
+            recommended_questions = round(recommended_questions / 5) * 5
+
+            # 6. 문제 수 제한 (너무 많지 않도록)
+            recommended_questions = min(max(recommended_questions, 5), 50)
+
+            return {
+                "count": recommended_questions,
+                "calculation_factors": {
+                    "base_questions": base_questions,
+                    "complexity_factor": complexity_factor,
+                    "concept_factor": concept_factor
+                },
+                "content_metrics": {
+                    "total_sentences": len(sentences),
+                    "total_paragraphs": len(paragraphs),
+                    "key_concepts": key_concepts,
+                    "complexity_score": avg_complexity
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"문제 수 계산 중 오류 발생: {e}")
+            return {
+                "count": 10,  # 기본값
+                "error": str(e)
+            }
