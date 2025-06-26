@@ -34,6 +34,8 @@ class QuizRequest:
     difficulty: DifficultyLevel = DifficultyLevel.MEDIUM
     question_type: QuestionType = QuestionType.MULTIPLE_CHOICE
     custom_topic: Optional[str] = None  # 특정 주제 지정
+    category: Optional[str] = None      # 대분류(예: 컴퓨터 공학)
+    sub_category: Optional[str] = None  # 소분류(예: 데이터베이스)
     additional_instructions: Optional[List[str]] = None  # 추가 지시사항
 
 

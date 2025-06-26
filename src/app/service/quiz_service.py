@@ -34,18 +34,20 @@ class QuizService:
         num_questions: int = 5,
         difficulty: str = "medium",
         question_type: str = "multiple_choice",
-        custom_topic: Optional[str] = None
+        custom_topic: Optional[str] = None,
+        category: Optional[str] = None,
+        sub_category: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         단일 파일 ID를 기반으로 문제 생성
-
         Args:
             file_id: 대상 파일 ID (단일)
             num_questions: 생성할 문제 수
             difficulty: 난이도 (easy/medium/hard)
             question_type: 문제 유형 (multiple_choice/true_false/short_answer/essay/fill_blank)
             custom_topic: 특정 주제 (선택사항)
-
+            category: 대분류 (선택사항, 예: 컴퓨터 공학)
+            sub_category: 소분류 (선택사항, 예: 데이터베이스)
         Returns:
             생성된 문제 데이터
         """
@@ -80,6 +82,8 @@ class QuizService:
                 difficulty=difficulty_enum,
                 question_type=question_type_enum,
                 custom_topic=custom_topic,
+                category=category,
+                sub_category=sub_category,
                 additional_instructions=[
                     "각 문제는 구체적인 예시나 실제 응용 사례를 포함해야 합니다.",
                     "문제는 서로 중복되지 않아야 하며, 각각 독립적인 개념을 다뤄야 합니다.",
