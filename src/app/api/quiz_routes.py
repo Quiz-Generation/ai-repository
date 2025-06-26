@@ -23,6 +23,8 @@ class QuizGenerationRequest(BaseModel):
     difficulty: str = "medium"  # easy, medium, hard
     question_type: str = "multiple_choice"  # multiple_choice, true_false, short_answer, essay, fill_blank
     custom_topic: Optional[str] = None
+    category: Optional[str] = None  # 대분류(예: 컴퓨터 공학)
+    sub_category: Optional[str] = None  # 소분류(예: 데이터베이스)
 
 
 # 🔧 서비스 의존성 주입
@@ -83,6 +85,8 @@ async def generate_quiz(
     - difficulty: 난이도 (easy/medium/hard)
     - question_type: 문제 유형 (multiple_choice/true_false/short_answer/essay/fill_blank)
     - custom_topic: 특정 주제 지정 (선택사항)
+    - category: 대분류(선택사항, 예: 컴퓨터 공학)
+    - sub_category: 소분류(선택사항, 예: 데이터베이스)
 
     **AI 워크플로우:**
     1. 📄 문서 분석 → 2. 🎯 핵심 개념 추출 → 3. 🔑 키워드 매핑 → 4. ❓ 교수급 문제 생성 → 5. ✅ 품질 검증
@@ -112,7 +116,9 @@ async def generate_quiz(
             num_questions=request.num_questions,
             difficulty=request.difficulty,
             question_type=request.question_type,
-            custom_topic=request.custom_topic
+            custom_topic=request.custom_topic,
+            category=getattr(request, 'category', None),
+            sub_category=getattr(request, 'sub_category', None)
         )
 
         if result["success"]:
