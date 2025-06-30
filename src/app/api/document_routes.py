@@ -13,7 +13,7 @@ from ..helper.pdf_loader_helper import PDFLoaderHelper
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/documents", tags=["documents"])
+router = APIRouter(tags=["documents"])
 
 # 서비스 의존성 주입
 async def get_document_service() -> DocumentService:

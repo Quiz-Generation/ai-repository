@@ -12,7 +12,7 @@ from ..service.quiz_service import QuizService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/quiz", tags=["quiz"])
+router = APIRouter(tags=["quiz"])
 
 
 # 🔧 Request Models
