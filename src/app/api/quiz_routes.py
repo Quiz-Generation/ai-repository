@@ -9,8 +9,9 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from ..service.quiz_service import QuizService
+from src.common.utils.logger import set_logger
 
-logger = logging.getLogger(__name__)
+logger = set_logger(__name__)
 
 router = APIRouter(tags=["quiz"])
 

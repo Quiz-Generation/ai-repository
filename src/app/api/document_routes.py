@@ -10,8 +10,9 @@ from fastapi.responses import JSONResponse
 from ..service.document_service import DocumentService
 from ..service.vector_db_service import VectorDBService
 from ..helper.pdf_loader_helper import PDFLoaderHelper
+from src.common.utils.logger import set_logger
 
-logger = logging.getLogger(__name__)
+logger = set_logger(__name__)
 
 router = APIRouter(tags=["documents"])
 
