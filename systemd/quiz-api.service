@@ -1,0 +1,18 @@
+[Unit]
+Description=Hotseller Quiz AI API
+After=network.target
+
+[Service]
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/src/quiz-api
+ExecStart=/bin/bash /home/ubuntu/src/quiz-api/scripts/start.sh 8000
+ExecReload=/bin/bash /home/ubuntu/src/quiz-api/scripts/reload.sh
+Restart=on-failure
+LimitNOFILE=infinity
+LimitNPROC=infinity
+
+[Install]
+# Alias=quiz-api
+WantedBy=multi-user.target
+
