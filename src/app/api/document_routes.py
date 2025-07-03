@@ -12,7 +12,7 @@ from ..service.vector_db_service import VectorDBService
 from ..helper.pdf_loader_helper import PDFLoaderHelper
 from src.common.utils.logger import set_logger
 
-logger = set_logger(__name__)
+logger = set_logger("api.document")
 
 router = APIRouter(tags=["documents"])
 

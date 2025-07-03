@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from ..service.quiz_service import QuizService
 from src.common.utils.logger import set_logger
 
-logger = set_logger(__name__)
+logger = set_logger("api.quiz")
 
 router = APIRouter(tags=["quiz"])
 
