@@ -16,8 +16,8 @@ export PYTHONPATH=$PYTHONPATH:`pwd`  # 파이썬 환경변수 등록
 # # 경로
 # cd /home/ubuntu/src/self-marketing-platform-api
 
-source venv/bin/activate  # 파이썬 env 세팅
-gunicorn -c gunicorn.conf.py --bind 0.0.0.0:$port_number --log-config gunicorn_log.conf src.app.app:APP
+source .venv/bin/activate  # 파이썬 env 세팅
+gunicorn -c gunicorn.conf.py --bind 0.0.0.0:$port_number --log-config gunicorn_log.conf src.app.main:app
 # deactivate
 
 popd
