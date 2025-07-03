@@ -50,6 +50,9 @@ setup(
 
         # Additional utilities
         "requests==2.32.3",
+
+        # colorlog
+        "colorlog==6.9.0",
     ],
     extras_require={
         "dev": [
