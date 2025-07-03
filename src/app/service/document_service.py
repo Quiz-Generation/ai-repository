@@ -15,7 +15,7 @@ from ..core.pdf_loader.factory import PDFLoaderFactory
 logger = logging.getLogger(__name__)
 
 # 🎯 하드코딩된 설정값들 (config 의존성 제거)
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 UPLOAD_DIR = "data/uploads"
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
