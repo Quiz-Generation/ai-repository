@@ -1,0 +1,18 @@
+[Unit]
+Description=Hotseller Quiz AI API
+After=network.target
+
+[Service]
+User=jypark
+Group=jypark
+WorkingDirectory=/home/jypark/ai-repository
+ExecStart=/bin/bash /home/jypark/ai-repository/scripts/start.sh 7000
+ExecReload=/bin/bash /home/jypark/ai-repository/scripts/reload.sh
+Restart=on-failure
+LimitNOFILE=infinity
+LimitNPROC=infinity
+
+[Install]
+# Alias=quiz-api
+WantedBy=multi-user.target
+

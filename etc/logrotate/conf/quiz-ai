@@ -1,0 +1,16 @@
+/var/log/jypark/quiz-ai-api/*.log /var/log/jypark/quiz-ai-api/**/*.log {
+    su ubuntu ubuntu
+    create 664 ubuntu ubuntu
+    daily
+    rotate 30
+    dateext
+    dateformat -%Y-%m-%d
+    maxage 30
+    missingok
+    compress
+    notifempty
+    sharedscripts
+    postrotate
+		    /bin/bash /home/jypark/ai-repository/scripts/reload.sh;
+    endscript
+}
