@@ -20,7 +20,7 @@ cd "$package_abs_path"
 
 export PYTHONPATH=$PYTHONPATH:`pwd`
 
-. venv/bin/activate
+. .venv/bin/activate
 
 
 # gunicorn -c ../gunicorn.conf.py --log-config ../gunicorn_log.conf  --bind 0.0.0.0:$port_number --log-config ../gunicorn_log.conf --pid ../gunicorn.pid
