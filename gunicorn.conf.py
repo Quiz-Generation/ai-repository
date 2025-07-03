@@ -272,7 +272,7 @@ umask = 0
 user = None
 group = None
 tmp_upload_dir = None
-worker_tmp_dir = "/home/ubuntu/src/self-marketing-platform-api/tmp"
+worker_tmp_dir = "/home/ubuntu/src/quiz-api/tmp"
 #
 #   Logging
 #
