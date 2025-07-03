@@ -12,7 +12,7 @@ from colorlog import ColoredFormatter
 from src.common.conf.settings import settings
 from src.common.constants import DEFAULT_LOGGING_LEVEL
 
-ROOT_PKG = "hotpartners-api"
+ROOT_PKG = "quiz-api"
 
 LOG_COLORS_CONFIG = {
     'DEBUG':    'cyan',
