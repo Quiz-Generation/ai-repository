@@ -1,6 +1,6 @@
 /var/log/jypark/quiz-api/*.log /var/log/jypark/quiz-api/**/*.log {
-    su ubuntu ubuntu
-    create 664 ubuntu ubuntu
+    su root root                # 권한 문제 방지 (ubuntu → root)
+    create 644 jypark jypark   # 로그 소유자에 맞게 수정
     daily
     rotate 30
     dateext
@@ -11,6 +11,6 @@
     notifempty
     sharedscripts
     postrotate
-		    /bin/bash /home/jypark/ai-repository/scripts/reload.sh;
+        /bin/bash /home/jypark/ai-repository/scripts/reload.sh || true
     endscript
 }
