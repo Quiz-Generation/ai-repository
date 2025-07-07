@@ -5,6 +5,7 @@ import logging
 import os
 from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, HTTPException, Depends, Query, Form
+from ..docs import quiz_docs
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -41,7 +42,9 @@ async def get_quiz_service() -> QuizService:
 
 
 # 📋 1. 문제 생성 가능한 파일 목록 조회
-@router.get("/available-files")
+@router.get("/available-files",
+    summary="문제 생성 가능한 파일 목록 조회",
+)
 async def get_available_files(
     quiz_service: QuizService = Depends(get_quiz_service)
 ) -> JSONResponse:
@@ -68,7 +71,10 @@ async def get_available_files(
 
 
 # 🤖 2. AI 문제 생성 (POST 방식)
-@router.post("/generate")
+@router.post("/generate",
+    summary="AI 문제 생성",
+    description=quiz_docs.generate_quiz_description,
+)
 async def generate_quiz(
     request: QuizGenerationRequest,
     quiz_service: QuizService = Depends(get_quiz_service)

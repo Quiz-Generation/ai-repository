@@ -6,7 +6,7 @@ import time
 from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form, Query
 from fastapi.responses import JSONResponse
-
+from ..docs import document_docs
 from ..service.document_service import DocumentService
 from ..service.vector_db_service import VectorDBService
 from ..helper.pdf_loader_helper import PDFLoaderHelper
@@ -30,7 +30,11 @@ async def get_vector_service() -> VectorDBService:
 
 
 # 🚀 1. PDF 업로드 및 벡터 저장 (+ 문서 ID 반환)
-@router.post("/upload")
+@router.post(
+        "/upload",
+        summary="PDF 업로드 및 벡터 저장",
+        description=document_docs.upload_pdf_to_vector_db_description,
+    )
 async def upload_pdf_to_vector_db(
     file: UploadFile = File(...),
     doc_service: DocumentService = Depends(get_document_service),
