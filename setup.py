@@ -53,6 +53,9 @@ setup(
 
         # colorlog
         "colorlog==6.9.0",
+
+        # redis
+        "redis==5.2.1",
     ],
     extras_require={
         "dev": [

@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     DEFAULT_LOGGING_PATH: str = os.getenv('DEFAULT_LOGGING_PATH', "")
     OPENAI_API_KEY: str = os.getenv('OPENAI_API_KEY', "")
 
+    #레디스
+    REDIS_HOST: str = os.getenv('REDIS_HOST', "")
+    REDIS_PORT: int = int(os.getenv('REDIS_PORT', 0))
+
 
     class Config:
         config_path = Path(__file__)
