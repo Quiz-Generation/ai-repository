@@ -10,10 +10,7 @@ logger = set_logger("api.test")
 
 router = APIRouter(tags=["test"])
 
-@router.get("/test-pubsub")
-async def test_pubsub():
-    return await test_service.test_pub()
+@router.get("/test-stream")
+async def test_stream():
+    return await test_service.test_stream()
 
-@router.get("/test-subscribe")
-async def test_sub():
-    return await test_service.test_sub()

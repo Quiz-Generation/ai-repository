@@ -1,9 +1,7 @@
-from src.common.redis.connect import test_publish, test_subscribe
+from src.common.redis.connect import push_quiz_to_stream
 
-async def test_pub():
-    await test_publish()
-    return {"message": "Hello, World! test_pub"}
 
-async def test_sub():
-    await test_subscribe()
-    return {"message": "Hello, World! test_sub"}
+
+async def test_stream():
+    await push_quiz_to_stream({"quiz_id": "123", "status": "done", "result": "..."})
+    return {"message": "Hello, World! test_stream"}
