@@ -75,46 +75,83 @@ class QuizService:
                     "valid_question_types": [q.value for q in QuestionType]
                 }
 
-            # 3. 문제 생성 요청 구성
-            quiz_request = QuizRequest(
-                file_ids=[file_id],
-                num_questions=num_questions,
-                difficulty=difficulty_enum,
-                question_type=question_type_enum,
-                custom_topic=custom_topic,
-                category=category,
-                sub_category=sub_category,
-                additional_instructions=[
-                    "각 문제는 구체적인 예시나 실제 응용 사례를 포함해야 합니다.",
-                    "문제는 서로 중복되지 않아야 하며, 각각 독립적인 개념을 다뤄야 합니다.",
-                    "선택지의 경우, 명확한 정답과 그럴듯한 오답을 포함해야 합니다.",
-                    "문제의 난이도는 일관성을 유지해야 합니다.",
-                    "문제는 실제 학습 목표와 연관되어야 합니다."
-                ]
-            )
-
-            # 4. AI 에이전트로 문제 생성
-            logger.info("STEP_AGENT AI 에이전트 문제 생성 시작")
-            result = await self.quiz_agent.generate_quiz(quiz_request, [document_data])
-
-            # 5. 결과 후처리
-            if result["success"]:
-                # 메타데이터 추가
-                result["meta"]["generation_timestamp"] = datetime.now().isoformat()
-                result["meta"]["service_version"] = "1.0.0"
-                result["meta"]["source_file"] = document_data.get("filename")
-                result["meta"]["file_id"] = file_id
-                result["meta"]["quality_metrics"] = {
-                    "difficulty_consistency": self._calculate_difficulty_consistency(result["questions"]),
-                    "question_uniqueness": self._calculate_question_uniqueness(result["questions"]),
-                    "example_coverage": self._calculate_example_coverage(result["questions"])
+            # 3. 난이도별 문제 개수 분배
+            def get_difficulty_distribution(overall: str, total: int):
+                # 비율: 쉬움 70/25/5, 중간 30/50/20, 어려움 10/30/60
+                table = {
+                    "easy":   [0.7, 0.25, 0.05],
+                    "medium": [0.3, 0.5, 0.2],
+                    "hard":   [0.1, 0.3, 0.6],
                 }
+                ratio = table.get(overall, [0.3, 0.5, 0.2])
+                easy = round(total * ratio[0])
+                medium = round(total * ratio[1])
+                hard = total - easy - medium
+                return [("easy", easy), ("medium", medium), ("hard", hard)]
 
-                logger.info(f"🎉 SUCCESS 문제 생성 완료: {result['meta']['generated_count']}개 문제")
-            else:
-                logger.error(f"ERROR 문제 생성 실패: {result.get('error')}")
+            dist = get_difficulty_distribution(difficulty_enum.value, num_questions)
+            all_questions = []
+            for diff, count in dist:
+                if count <= 0:
+                    continue
+                quiz_request = QuizRequest(
+                    file_ids=[file_id],
+                    num_questions=count,
+                    difficulty=DifficultyLevel(diff),
+                    question_type=question_type_enum,
+                    custom_topic=custom_topic,
+                    category=category,
+                    sub_category=sub_category,
+                    additional_instructions=[
+                        f"이 문제들은 '{diff}' 난이도로 생성되어야 합니다. 각 문제의 difficulty 필드를 반드시 '{diff}'로 설정하세요.",
+                        "각 문제는 구체적인 예시나 실제 응용 사례를 포함해야 합니다.",
+                        "문제는 서로 중복되지 않아야 하며, 각각 독립적인 개념을 다뤄야 합니다.",
+                        "선택지의 경우, 명확한 정답과 그럴듯한 오답을 포함해야 합니다.",
+                        "문제의 난이도는 일관성을 유지해야 합니다.",
+                        "문제는 실제 학습 목표와 연관되어야 합니다."
+                    ]
+                )
+                logger.info(f"STEP_AGENT AI 에이전트 문제 생성 시작 (난이도: {diff}, 개수: {count})")
+                result = await self.quiz_agent.generate_quiz(quiz_request, [document_data])
+                if result["success"]:
+                    for q in result.get("questions", []):
+                        q["difficulty"] = diff  # 명시적으로 태깅
+                        if q.get("choices") and q.get("answer"):
+                            q = self._shuffle_choices_and_map_answer(q)
+                        all_questions.append(q)
+                else:
+                    logger.error(f"ERROR 문제 생성 실패: {result.get('error')}")
 
-            return result
+            # 문제 개수 맞추기(혹시 초과 생성 시)
+            all_questions = all_questions[:num_questions]
+
+            # id를 1부터 다시 부여
+            for idx, q in enumerate(all_questions, 1):
+                q["id"] = idx
+
+            # 메타데이터 추가
+            meta = {
+                "generation_timestamp": datetime.now().isoformat(),
+                "service_version": "1.0.0",
+                "source_file": document_data.get("filename"),
+                "file_id": file_id,
+                "overall_difficulty": difficulty_enum.value,
+                "generated_count": len(all_questions),
+                "quality_metrics": {
+                    "difficulty_consistency": self._calculate_difficulty_consistency(all_questions),
+                    "question_uniqueness": self._calculate_question_uniqueness(all_questions),
+                    "example_coverage": self._calculate_example_coverage(all_questions)
+                }
+            }
+
+            logger.info(f"🎉 SUCCESS 문제 생성 완료: {len(all_questions)}개 (분포: {dist})")
+
+            return {
+                "success": True,
+                "questions": all_questions,
+                "meta": meta,
+                "overall_difficulty": difficulty_enum.value
+            }
 
         except Exception as e:
             logger.error(f"ERROR 문제 생성 서비스 실패: {e}")

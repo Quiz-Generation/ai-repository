@@ -1,10 +1,8 @@
 """
 📄 Document API Routes - Simplified
 """
-import logging
 import time
-from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form, Query
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
 from fastapi.responses import JSONResponse
 from ..docs import document_docs
 from ..service.document_service import DocumentService
@@ -40,12 +38,6 @@ async def upload_pdf_to_vector_db(
     doc_service: DocumentService = Depends(get_document_service),
     vector_service: VectorDBService = Depends(get_vector_service)
 ) -> JSONResponse:
-    """
-    📄 PDF 파일 업로드 및 벡터 DB 저장 (간단 버전)
-    - 파일명만 입력, 나머지는 자동 처리
-    - 벡터 DB: Milvus 우선 (전역 설정)
-    - 청크 크기: 자동 최적화
-    """
     total_start_time = time.time()
 
     try:
