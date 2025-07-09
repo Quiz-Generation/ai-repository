@@ -11,6 +11,7 @@ ExecReload=/bin/bash /home/jypark/ai-repository/scripts/reload.sh
 Restart=on-failure
 LimitNOFILE=infinity
 LimitNPROC=infinity
+Environment=DEFAULT_LOGGING_PATH=/var/log/jypark/quiz-api
 
 [Install]
 # Alias=quiz-api
