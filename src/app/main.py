@@ -4,14 +4,20 @@
 """
 import logging
 import os
-from fastapi import FastAPI
+import traceback
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
+from fastapi.responses import JSONResponse
 import uvicorn
+
+from src.common.utils.logger import set_logger
+from src.common.error import JSendError, ErrorCode
 
 from .api import document_routes, quiz_routes, test_routes
 from .service.vector_db_service import VectorDBService
+
 
 # 로깅 설정
 log_dir = "../logs"
@@ -25,9 +31,7 @@ logging.basicConfig(
         logging.FileHandler(os.path.join(log_dir, "app.log"), encoding="utf-8")
     ]
 )
-
-logger = logging.getLogger(__name__)
-
+logger = set_logger("exception")
 # 전역 서비스 인스턴스
 global_vector_service = None
 
@@ -97,4 +101,52 @@ if __name__ == "__main__":
         port=7000,
         reload=True,
         log_level="info"
+    )
+
+
+@app.exception_handler(JSendError)
+async def jsend_error_exception_handler(request: Request, exc: JSendError):
+    logger.error(f"[{request.url}] JSendError {exc.__dict__}\n{traceback.format_exc()}")
+    return JSONResponse(
+        status_code=400,
+        content={
+            "status": exc.status,
+            "code": exc.code,
+            "message": exc.message,
+            "data": exc.data,
+        },
+    )
+
+@app.exception_handler(Exception)
+async def unknown_error_exception_handler(request, exc: Exception):
+    # 전체 스택 트레이스를 가져옴
+    full_traceback = traceback.format_exc()
+
+    # 줄바꿈으로 분할하여 리스트로 만듦
+    traceback_lines = full_traceback.splitlines()
+
+    # 마지막 5줄 | 10줄만 추출
+    # last_five_lines_of_traceback = "\n".join(traceback_lines[-5:])
+    last_five_lines_of_traceback = "\n".join(traceback_lines[-10:])
+    logger.error(
+        f"""
+            [{request.url}] InternalError
+            {last_five_lines_of_traceback}
+        """
+    )
+
+
+    # 슬랙과 로거에 에러 메세지
+    # if setting.SLACK_WEBHOOK_ENABLE == "on":
+    #         await SLACK_LOGGER.application_in_critical_status_alarm(
+    #         str(exc) + "\n\n" + last_five_lines_of_traceback
+    #     )
+    logger.exception(f"[{request.url}] InternalError\n{traceback.format_exc()}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "status": "error",
+            "code": ErrorCode.Common.DEFAULT_ERROR[0],
+            "message": ErrorCode.Common.DEFAULT_ERROR[1]
+        }
     )
