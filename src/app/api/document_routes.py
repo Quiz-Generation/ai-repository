@@ -1,6 +1,3 @@
-"""
-📄 Document API Routes - Simplified
-"""
 import time
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
 from fastapi.responses import JSONResponse
