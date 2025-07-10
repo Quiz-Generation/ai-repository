@@ -79,25 +79,6 @@ async def generate_quiz(
     request: QuizGenerationRequest,
     quiz_service: QuizService = Depends(get_quiz_service)
 ) -> JSONResponse:
-    """
-    🤖 AI 기반 문제 생성 (단일 PDF 파일)
-
-    **🎓 대상**: 대학생 시험 + 자격증 준비생
-    **📊 문제 수량**: 1-50개 (사용자 특성에 따라 조절)
-    **📝 문제 유형**: OX, 객관식, 주관식 (객관식 위주)
-
-    **요청 파라미터:**
-    - file_id: 대상 파일 ID (단일 파일)
-    - num_questions: 생성할 문제 수 (1-50개)
-    - difficulty: 난이도 (easy/medium/hard)
-    - question_type: 문제 유형 (multiple_choice/true_false/short_answer/essay/fill_blank)
-    - custom_topic: 특정 주제 지정 (선택사항)
-    - category: 대분류(선택사항, 예: 컴퓨터 공학)
-    - sub_category: 소분류(선택사항, 예: 데이터베이스)
-
-    **AI 워크플로우:**
-    1. 📄 문서 분석 → 2. 🎯 핵심 개념 추출 → 3. 🔑 키워드 매핑 → 4. ❓ 교수급 문제 생성 → 5. ✅ 품질 검증
-    """
     try:
         logger.info("🚀 AI 문제 생성 API 시작 (단일 파일)")
 

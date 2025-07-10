@@ -865,7 +865,7 @@ class QuizGeneratorAgent:
             doc_results = await asyncio.gather(*doc_tasks)
 
             # 결과 합치기
-            summary = "\n".join([r["summary"] for r in doc_results])
+            summary = "\n".join([str(r.get("summary", "")) for r in doc_results])
             topics = []
             for r in doc_results:
                 topics.extend([line.strip().lstrip('- •').strip() for line in r["topics"].split('\n') if line.strip().startswith(('-', '•'))])
