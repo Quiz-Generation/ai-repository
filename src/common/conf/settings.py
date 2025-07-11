@@ -3,6 +3,14 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings
 
+def safe_int(value, default=0):
+    try:
+        # tcp://host:port 형태인 경우
+        if isinstance(value, str) and value.startswith('tcp://'):
+            return int(value.split(':')[-1])
+        return int(value)
+    except (ValueError, TypeError, AttributeError):
+        return default
 
 class Settings(BaseSettings):
     STAGE: str = os.getenv('STAGE', "")
@@ -14,7 +22,7 @@ class Settings(BaseSettings):
 
     #레디스
     REDIS_HOST: str = os.getenv('REDIS_HOST', "")
-    REDIS_PORT: int = int(os.getenv('REDIS_PORT', 0))
+    REDIS_PORT: int = safe_int(os.getenv('REDIS_PORT', 6379))
 
 
     class Config:
