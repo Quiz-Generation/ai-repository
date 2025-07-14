@@ -35,3 +35,30 @@ upload_pdf_to_vector_db_description = """
         - D002: PDF 분석에 실패했습니다.
         - D003: PDF 추출에 실패했습니다.
 """
+
+delete_all_documents_description = """
+* ***Description***:\n
+    * 벡터 DB에 저장된 모든 문서를 삭제합니다.
+* ***Request***:\n
+    * confirm_token: (str, required) 확인 토큰
+
+* ***Response (Success)***:\n
+    * HTTP 200
+        - {
+            "success": true,
+            "message": "벡터 DB 전체 삭제 완료",
+            "deleted_count": 100,
+            "remaining_count": 0
+        }
+
+* ***Response (Fail)***:\n
+    * HTTP 500
+        - C001: 내부 서버 에러시
+        - C002: 타임아웃 발생
+        - C003: 필수값 누락
+        - C004: 잘못된 요청
+    * HTTP 400
+        - D004: 삭제 확인 토큰이 필요합니다: CLEAR_ALL_CONFIRM
+        - D005: 벡터 DB 초기화 실패
+        - D006: 벡터 DB 전체 삭제에 실패했습니다.
+"""

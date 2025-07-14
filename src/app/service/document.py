@@ -193,8 +193,28 @@ async def clear_all_documents(
         result = await vector_db.clear_all_documents(
             confirm_token=confirm_token
         )
+        if result["success"] == False:
+            if result["error"] == '삭제 확인 토큰이 필요합니다: CLEAR_ALL_CONFIRM':
+                logger.error(f"ERROR 벡터 DB 전체 삭제 실패: {result['error']}")
+                raise JSendError(
+                    code=ErrorCode.Document.CLEAR_ALL_CONFIRM_ERROR[0],
+                    message=ErrorCode.Document.CLEAR_ALL_CONFIRM_ERROR[1]
+                )
 
-        if result["success"]:
+            elif result["error"] == '벡터 DB 초기화 실패':
+                logger.error(f"ERROR 벡터 DB 전체 삭제 실패: {result['error']}")
+                raise JSendError(
+                    code=ErrorCode.Document.CLEAR_ALL_ERROR[0],
+                    message=ErrorCode.Document.CLEAR_ALL_ERROR[1]
+                )
+            elif result["error"] == '데이터 삭제 중 오류 발생':
+                logger.error(f"ERROR 벡터 DB 전체 삭제 실패: {result['error']}")
+                raise JSendError(
+                    code=ErrorCode.Document.CLEAR_ALL_ERROR[0],
+                    message=ErrorCode.Document.CLEAR_ALL_ERROR[1]
+                )
+
+        elif result["success"]:
             response_data = {
                 "success": True,
                 "message": result["message"],
@@ -203,13 +223,6 @@ async def clear_all_documents(
                 "remaining_count": result.get("remaining_count", 0)
             }
             logger.info(f"SUCCESS 벡터 DB 전체 삭제 완료: {result.get('deleted_count', 0)}개 삭제")
-        else:
-            response_data = {
-                "success": False,
-                "message": "전체 삭제 실패",
-                "error": result.get("error"),
-                "vector_db_type": result.get("vector_db_type")
-            }
 
         return JSONResponse(content=response_data)
 

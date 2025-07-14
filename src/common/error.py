@@ -65,6 +65,21 @@ class ErrorCode:
             "PDF 추출에 실패했습니다.",
             "PDF 추출에 실패했습니다.",
         )
+        CLEAR_ALL_CONFIRM_ERROR = (
+            "D004",
+            "삭제 확인 토큰이 필요합니다: CLEAR_ALL_CONFIRM",
+            "삭제 확인 토큰이 필요합니다: CLEAR_ALL_CONFIRM",
+        )
+        CLEAR_ALL_ERROR = (
+            "D005",
+            "벡터 DB 초기화 실패",
+            "벡터 DB 초기화 실패",
+        )
+        CLEAR_ALL_DELETE_ERROR = (
+            "D006",
+            "벡터 DB 전체 삭제에 실패했습니다.",
+            "벡터 DB 전체 삭제에 실패했습니다.",
+        )
 
 
 
