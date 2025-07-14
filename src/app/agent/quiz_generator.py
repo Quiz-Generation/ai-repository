@@ -33,7 +33,6 @@ class QuizRequest:
     num_questions: int = 5              # 생성할 문제 수
     difficulty: DifficultyLevel = DifficultyLevel.MEDIUM
     question_type: QuestionType = QuestionType.MULTIPLE_CHOICE
-    custom_topic: Optional[str] = None  # 특정 주제 지정
     category: Optional[str] = None      # 대분류(예: 컴퓨터 공학)
     sub_category: Optional[str] = None  # 소분류(예: 데이터베이스)
     additional_instructions: Optional[List[str]] = None  # 추가 지시사항
@@ -72,7 +71,7 @@ class QuizGeneratorAgent:
 
         # LLM 모델 초기화
         self.llm = ChatOpenAI(
-            model="gpt-4o-mini",  # 비용 효율적인 모델
+            model="gpt-4.1-mini",  # 비용 효율적인 모델
             temperature=0.7,      # 창의성과 일관성의 균형
             api_key=self.openai_api_key if self.openai_api_key else None
         )

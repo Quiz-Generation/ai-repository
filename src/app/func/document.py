@@ -2,8 +2,7 @@
 📄 PDF Helper
 """
 from datetime import datetime
-import os
-from typing import Dict, Any
+from typing import Any, Dict
 from fastapi import UploadFile
 
 from src.app.core.pdf_loader.factory import PDFLoaderFactory
@@ -190,8 +189,6 @@ async def process_pdf(
 
 
 
-
-
 async def calculate_optimal_question_count(
         logger,
         content: str,
@@ -274,3 +271,4 @@ async def calculate_optimal_question_count(
             return {
                 "count": 10,  # 기본값
             }
+

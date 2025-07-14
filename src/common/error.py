@@ -86,6 +86,21 @@ class ErrorCode:
             "파일을 찾을 수 없습니다.",
             "파일을 찾을 수 없습니다.",
         )
+        INVALID_QUESTION_COUNT = (
+            "Q002",
+            "문제 수는 1-50개 사이여야 합니다.",
+            "문제 수는 1-50개 사이여야 합니다.",
+        )
+        INVALID_DIFFICULTY = (
+            "Q003",
+            "난이도는 easy/medium/hard 중 하나여야 합니다.",
+            "난이도는 easy/medium/hard 중 하나여야 합니다.",
+        )
+        INVALID_QUESTION_TYPE = (
+            "Q004",
+            "문제 유형은 multiple_choice/true_false/short_answer/essay/fill_blank 중 하나여야 합니다.",
+            "문제 유형은 multiple_choice/true_false/short_answer/essay/fill_blank 중 하나여야 합니다.",
+        )
 
 
 

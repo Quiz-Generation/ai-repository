@@ -1,11 +1,7 @@
 """
 🎯 Quiz Generation API Routes
 """
-import logging
-import os
-from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, HTTPException, Depends, Request
-from ..docs import quiz
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from src.common.utils.logger import set_logger
 from src.app.models import quiz as quiz_models
@@ -40,53 +36,24 @@ async def get_available_files(
 # 🤖 2. AI 문제 생성 (POST 방식)
 @router.post("/generate",
     summary="AI 문제 생성",
-    description=quiz.generate_quiz_description,
+    description=quiz_docs.generate_quiz_description,
 )
 async def generate_quiz(
-    request: quiz_models.QuizGenerationRequest,
+    request: Request,
+    quiz_request: quiz_models.QuizGenerationRequest,
 ) -> JSONResponse:
-    try:
-        logger.info("🚀 AI 문제 생성 API 시작")
+    # 문제 생성 실행
+    return await quiz_service.generate_quiz_from_file(
+        logger=logger,
+        vector_db=request.app.state.vector_db,
+        file_id=quiz_request.file_id,
+        num_questions=quiz_request.num_questions,
+        difficulty=quiz_request.difficulty,
+        question_type=quiz_request.question_type,
+        category=getattr(quiz_request, 'category', None) or "",
+        sub_category=getattr(quiz_request, 'sub_category', None) or ""
+    )
 
-        # 기본 검증
-        if not request.file_id:
-            raise HTTPException(status_code=400, detail="file_id는 필수입니다")
-
-        if not (1 <= request.num_questions <= 50):
-            raise HTTPException(status_code=400, detail="문제 수는 1-50개 사이여야 합니다")
-
-        if request.difficulty not in ["easy", "medium", "hard"]:
-            raise HTTPException(status_code=400, detail="difficulty는 easy/medium/hard 중 하나여야 합니다")
-
-        valid_types = ["multiple_choice", "true_false", "short_answer", "essay", "fill_blank"]
-        if request.question_type not in valid_types:
-            raise HTTPException(status_code=400, detail=f"question_type은 {valid_types} 중 하나여야 합니다")
-
-        logger.info(f"STEP_REQUEST 문제 생성 요청: {request.file_id}, {request.num_questions}개 문제, {request.difficulty} 난이도")
-
-        # 문제 생성 실행
-        result = await quiz_service.generate_quiz_from_file(
-            file_id=request.file_id,
-            num_questions=request.num_questions,
-            difficulty=request.difficulty,
-            question_type=request.question_type,
-            custom_topic=request.custom_topic,
-            category=getattr(request, 'category', None),
-            sub_category=getattr(request, 'sub_category', None)
-        )
-
-        if result["success"]:
-            logger.info(f"🎉 SUCCESS AI 문제 생성 완료: {result['meta']['generated_count']}개 문제")
-        else:
-            logger.error(f"ERROR AI 문제 생성 실패: {result.get('error')}")
-
-        return JSONResponse(content=result)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"ERROR AI 문제 생성 API 실패: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # 📊 3. 문제 생성 옵션 조회
