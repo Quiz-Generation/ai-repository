@@ -30,10 +30,17 @@ class MilvusDB(VectorDatabase):
 
         logger.info(f"INIT Milvus 설정 - dimension: {self.dimension}, Host: {self.host}, Port: {self.port}, Lite: {self.use_lite}")
 
-    async def initialize(self) -> None:
+    async def initialize(
+            self,
+            model_name: Optional[str] = None
+        ) -> None:
         """Milvus 클라이언트 초기화 및 컬렉션 생성"""
         try:
             from pymilvus import connections, Collection, FieldSchema, CollectionSchema, DataType, utility
+            if model_name == "text-embedding-3-large":
+                self.dimension = 3072
+            elif model_name == "all-MiniLM-L6-v2":
+                self.dimension = 384
 
             logger.info("STEP_VECTOR Milvus 초기화 시작")
 

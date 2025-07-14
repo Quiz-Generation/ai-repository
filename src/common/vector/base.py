@@ -30,7 +30,10 @@ class VectorDatabase(ABC):
         self.db_path = db_path
 
     @abstractmethod
-    async def initialize(self) -> None:
+    async def initialize(
+            self,
+            model_name: Optional[str] = None
+        ) -> None:
         """데이터베이스 초기화"""
         pass
 

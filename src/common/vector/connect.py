@@ -27,15 +27,17 @@ class VectorDBService:
         self.fallback_order = ["milvus"]
 
     async def initialize_embedding_model(
-            self
+            self,
+            model_name: str
     ) -> None:
         """임베딩 모델 초기화"""
         try:
+            self.model_name = model_name
             logger.info("STEP_VECTOR 임베딩 모델 로드 시작")
-            if self.model_name == "all-MiniLM-L6-v2":
-                self.embedding_model = SentenceTransformer(self.model_name)
-            elif self.model_name == 'text-embedding-3-large':
-                self.embedding_model = OpenAIEmbeddings(model=self.model_name)
+            if model_name == "all-MiniLM-L6-v2":
+                self.embedding_model = SentenceTransformer(model_name)
+            elif model_name == 'text-embedding-3-large':
+                self.embedding_model = OpenAIEmbeddings(model=model_name)
             else:
                 raise ValueError(f"지원하지 않는 모델 이름: {self.model_name}")
             logger.info(f"SUCCESS 임베딩 모델 로드 완료: {self.model_name}")
@@ -81,7 +83,11 @@ class VectorDBService:
             logger.error(f"ERROR 임베딩 생성 실패: {e}")
             raise
 
-    async def initialize_vector_db(self, preferred_db: Optional[str] = None) -> str:
+    async def initialize_vector_db(
+            self,
+            preferred_db: Optional[str] = None,
+            model_name: Optional[str] = None
+        ) -> str:
         """벡터 DB 초기화 (우선순위에 따른 폴백)"""
 
         # 🔥 이미 초기화된 DB가 있고 정상 작동 중이면 그대로 사용
@@ -114,7 +120,7 @@ class VectorDBService:
                     continue
 
                 # 초기화
-                await temp_db.initialize()
+                await temp_db.initialize(model_name=model_name)
 
                 self.vector_db = temp_db
                 self.current_db_type = db_type
@@ -150,12 +156,8 @@ class VectorDBService:
         """PDF 내용을 벡터 DB에 저장"""
         try:
             # 모델이 초기화되지 않은 경우 초기화
-            if not self.embedding_model:
-                await self.initialize_embedding_model()
-
-            # 벡터 DB가 초기화되지 않은 경우 초기화
-            if not self.vector_db:
-                await self.initialize_vector_db()
+            if not self.embedding_model or not self.vector_db:
+                raise Exception("벡터 DB 또는 임베딩 모델이 초기화되지 않았습니다.")
 
             logger.info("STEP_VECTOR PDF 내용 청킹 시작")
 
@@ -253,10 +255,8 @@ class VectorDBService:
         """유사한 내용 검색"""
         try:
             # 모델과 DB 초기화 확인
-            if not self.embedding_model:
-                await self.initialize_embedding_model()
-            if not self.vector_db:
-                await self.initialize_vector_db()
+            if not self.embedding_model or not self.vector_db:
+                raise Exception("벡터 DB 또는 임베딩 모델이 초기화되지 않았습니다.")
 
             logger.info(f"STEP_VECTOR 검색 쿼리: '{query[:50]}...'")
 
@@ -276,147 +276,6 @@ class VectorDBService:
         except Exception as e:
             logger.error(f"ERROR 유사도 검색 실패: {e}")
             return []
-
-    async def get_vector_db_status(self) -> Dict[str, Any]:
-        """벡터 DB 상태 정보 조회"""
-        try:
-            # 🔥 현재 DB가 없으면 자동으로 Milvus 초기화
-            if not self.current_db_type or not self.vector_db:
-                logger.info("STEP_AUTO Milvus 자동 초기화 시작 (기본값)")
-                try:
-                    await self.initialize_vector_db("milvus")
-                except Exception as e:
-                    logger.warning(f"WARNING Milvus 자동 초기화 실패, FAISS로 폴백: {e}")
-                    await self.initialize_vector_db("faiss")
-
-            status = {
-                "current_db_type": self.current_db_type,
-                "embedding_model": self.model_name,
-                "supported_db_types": VectorDBFactory.get_supported_types(),
-                "priority_order": VectorDBFactory.get_priority_order()
-            }
-
-            # 현재 DB 헬스체크
-            if self.vector_db:
-                health_info = await self.vector_db.health_check()
-                status["current_db_health"] = health_info
-                status["document_count"] = await self.vector_db.get_document_count()
-
-            # 모든 DB 타입 헬스체크
-            db_health_status = {}
-            for db_type in self.fallback_order:
-                try:
-                    temp_db = VectorDBFactory.create(db_type, f"data/vector_storage/{db_type}")
-                    health = await temp_db.health_check()
-                    db_health_status[db_type] = health
-                except Exception as e:
-                    db_health_status[db_type] = {
-                        "status": "unhealthy",
-                        "error": str(e),
-                        "db_type": db_type
-                    }
-
-            status["all_db_health"] = db_health_status
-            return status
-
-        except Exception as e:
-            logger.error(f"ERROR 벡터 DB 상태 조회 실패: {e}")
-            return {
-                "error": str(e),
-                "current_db_type": self.current_db_type
-            }
-
-    async def switch_vector_db(self, new_db_type: str) -> bool:
-        """벡터 DB 타입 변경"""
-        try:
-            if new_db_type not in VectorDBFactory.get_supported_types():
-                raise ValueError(f"지원하지 않는 DB 타입: {new_db_type}")
-
-            logger.info(f"STEP_VECTOR {new_db_type.upper()}로 전환 시도")
-
-            # 새 DB 초기화 (올바른 경로 사용)
-            db_path = f"data/vector_storage/{new_db_type}"
-            new_db = VectorDBFactory.create(new_db_type, db_path)
-            await new_db.initialize()
-
-            # 성공 시 교체
-            self.vector_db = new_db
-            self.current_db_type = new_db_type
-
-            logger.info(f"SUCCESS {new_db_type.upper()}로 전환 완료")
-            return True
-
-        except Exception as e:
-            logger.error(f"ERROR 벡터 DB 전환 실패: {e}")
-            return False
-
-    async def force_switch_to_milvus(self) -> None:
-        """강제로 Milvus DB로 전환 (기존 상태 무시)"""
-        try:
-            logger.info("🔥 FORCE Milvus 강제 전환 시작")
-
-            # 기존 연결 정리
-            self.vector_db = None
-            self.current_db_type = None
-
-            # Milvus 강제 초기화
-            db_path = f"data/vector_storage/milvus"
-            milvus_db = VectorDBFactory.create("milvus", db_path)
-
-            # 헬스체크 먼저 확인
-            health_status = await milvus_db.health_check()
-            if health_status.get("status") != "healthy":
-                raise Exception(f"Milvus 연결 실패: {health_status.get('error')}")
-
-            # 초기화 및 활성화
-            await milvus_db.initialize()
-            self.vector_db = milvus_db
-            self.current_db_type = "milvus"
-
-            logger.info("🎉 SUCCESS Milvus 강제 전환 완료")
-
-        except Exception as e:
-            logger.error(f"ERROR Milvus 강제 전환 실패: {e}")
-            # 폴백으로 FAISS 시도
-            logger.info("WARNING Milvus 실패, FAISS로 폴백")
-            await self.switch_vector_db("faiss")
-            raise Exception(f"Milvus 전환 실패, FAISS로 폴백됨: {e}")
-
-    async def delete_documents_by_filename(self, filename: str) -> Dict[str, Any]:
-        """파일명으로 문서들 삭제"""
-        try:
-            if not self.vector_db:
-                await self.initialize_vector_db()
-
-            # 필터로 해당 파일의 문서들 검색
-            filter_condition = {"filename": filename}
-            documents = await self.vector_db.search(
-                query_embedding=[0.0] * 384,  # 더미 임베딩
-                top_k=1000,  # 충분히 큰 수
-                filters=filter_condition
-            )
-
-            # 찾은 문서들 삭제
-            deleted_count = 0
-            for result in documents:
-                success = await self.vector_db.delete_document(result.document.id)
-                if success:
-                    deleted_count += 1
-
-            logger.info(f"SUCCESS {filename} 관련 {deleted_count}개 문서 삭제 완료")
-            return {
-                "success": True,
-                "deleted_count": deleted_count,
-                "filename": filename
-            }
-
-        except Exception as e:
-            logger.error(f"ERROR 문서 삭제 실패: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "filename": filename
-            }
 
     async def get_all_documents(
             self, limit: Optional[int] = None) -> Dict[str, Any]:
@@ -512,7 +371,7 @@ class VectorDBService:
 
             # 벡터 DB 초기화 확인
             if not self.vector_db:
-                await self.initialize_vector_db()
+                raise Exception("벡터 DB가 초기화되지 않았습니다.")
 
             # 벡터 DB와 타입이 초기화되었는지 재확인
             if not self.vector_db or not self.current_db_type:
