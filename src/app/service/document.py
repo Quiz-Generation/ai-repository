@@ -5,7 +5,6 @@ from src.common.vector.connect import VectorDBService
 from src.common.error import ErrorCode, JSendError
 from src.app.func import document_loader as document_loader_func
 from src.app.func import document as document_func
-from src.app.func import vector as vector_func
 
 async def upload_document(
         logger,
@@ -94,7 +93,6 @@ async def upload_document(
             )
 
         #4. 벡터 데이터 베이스 저장
-
         # 🔥 벡터 DB 강제 Milvus 초기화 (기존 서비스 무시)
         vector_init_start_time = time.time()
         vector_init_time = time.time() - vector_init_start_time
@@ -117,9 +115,7 @@ async def upload_document(
         # 벡터 DB에 저장
         vector_store_start_time = time.time()
         logger.info("STEP5 Milvus 벡터 DB 저장 시작")
-        vector_result = await vector_func.store_pdf_content(
-            logger=logger,
-            vector_db=vector_db,
+        vector_result = await vector_db.store_pdf_content(
             pdf_content=extraction_result["content"],
             metadata=metadata,
             chunk_size=auto_chunk_size,
@@ -172,10 +168,6 @@ async def upload_document(
             code=ErrorCode.Document.PDF_UPLOAD_ERROR[0],
             message=ErrorCode.Document.PDF_UPLOAD_ERROR[1]
         )
-
-
-
-
 
 
 async def clear_all_documents(

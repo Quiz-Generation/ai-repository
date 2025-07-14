@@ -4,12 +4,13 @@
 import logging
 import os
 from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, HTTPException, Depends
-from ..docs import quiz_docs
+from fastapi import APIRouter, HTTPException, Depends, Request
+from ..docs import quiz
 from fastapi.responses import JSONResponse
 from src.common.utils.logger import set_logger
 from src.app.models import quiz as quiz_models
 from src.app.service import quiz as quiz_service
+from src.app.docs import quiz as quiz_docs
 
 logger = set_logger("api.quiz")
 
@@ -19,35 +20,27 @@ router = APIRouter(tags=["quiz"])
 # 📋 1. 문제 생성 가능한 파일 목록 조회
 @router.get("/available-files",
     summary="문제 생성 가능한 파일 목록 조회",
+    description=quiz_docs.available_files_description,
 )
 async def get_available_files(
+    request: Request,
 ) -> JSONResponse:
     """
     📋 문제 생성 가능한 파일 목록 조회
     - 벡터 DB에 저장된 파일들 중 문제 생성에 적합한 파일들만 반환
     - 각 파일의 도메인, 언어, 청크 수 등 메타데이터 포함
     """
-    try:
-        logger.info("STEP_FILES 문제 생성 가능한 파일 목록 조회 시작")
+    return await quiz_service.get_available_files(
+        logger=logger,
+        vector_db=request.app.state.vector_db
+    )
 
-        result = await quiz_service.get_available_files()
-
-        if result["success"]:
-            logger.info(f"SUCCESS 파일 목록 조회 완료: {result['total_files']}개")
-        else:
-            logger.error(f"ERROR 파일 목록 조회 실패: {result.get('error')}")
-
-        return JSONResponse(content=result)
-
-    except Exception as e:
-        logger.error(f"ERROR 파일 목록 조회 API 실패: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # 🤖 2. AI 문제 생성 (POST 방식)
 @router.post("/generate",
     summary="AI 문제 생성",
-    description=quiz_docs.generate_quiz_description,
+    description=quiz.generate_quiz_description,
 )
 async def generate_quiz(
     request: quiz_models.QuizGenerationRequest,

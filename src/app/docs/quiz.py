@@ -21,3 +21,13 @@ generate_quiz_description = """
     * HTTP 400
         - 000003: 필수값 누락(000003)
 """
+
+available_files_description = """
+* ***Description***:\n
+    * 벡터 DB에 저장된 PDF 파일을 기반으로 퀴즈를 생성합니다.
+* ***Request***:\n
+    * file_id: (str, required) 퀴즈를 생성할 PDF 파일의 ID
+    * num_questions: (int, optional) 생성할 문제 개수 (기본값: 10)
+    * difficulty: (str, optional) 문제 난이도 (easy, medium, hard)
+    * question_type: (str, optional) 문제 유형 (multiple_choice, true_false, short_answer, essay, fill_blank)
+"""

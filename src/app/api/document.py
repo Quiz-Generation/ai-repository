@@ -10,8 +10,7 @@ logger = set_logger("api.document")
 
 router = APIRouter(tags=["documents"])
 
-
-# 🚀 1. PDF 업로드 및 벡터 저장 (+ 문서 ID 반환)
+# PDF 업로드 및 벡터 저장
 @router.post(
         "/upload",
         summary="PDF 업로드 및 벡터 저장",
@@ -28,9 +27,7 @@ async def upload_pdf_to_vector_db(
     )
 
 
-
-
-# 💥 5. 벡터 DB 모든 데이터 삭제 (위험한 작업)
+# 벡터 DB 모든 데이터 삭제
 @router.delete("/clear-all")
 async def clear_all_documents(
     request: Request,

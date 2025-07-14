@@ -13,11 +13,13 @@ logger = logging.getLogger(__name__)
 class MilvusDB(VectorDatabase):
     """Milvus 벡터 데이터베이스 구현체 (1순위 - 고성능 분산)"""
 
-    def __init__(self, db_path: str):
+    def __init__(
+            self, db_path: str):
         super().__init__(db_path)
         self.client = None
         self.collection_name = "pdf_documents"
-        self.dimension = 384  # sentence-transformers all-MiniLM-L6-v2 기본 차원
+        # self.dimension = 384  # sentence-transformers all-MiniLM-L6-v2 기본 차원
+        self.dimension = 3072  # openai-embed-large
 
         # 환경변수에서 호스트와 포트 읽기
         self.host = os.getenv("MILVUS_HOST", "localhost")
@@ -26,7 +28,7 @@ class MilvusDB(VectorDatabase):
         # 🔥 강제로 서버 모드 사용 (Docker 컨테이너와 연결)
         self.use_lite = False  # 무조건 서버 모드
 
-        logger.info(f"INIT Milvus 설정 - Host: {self.host}, Port: {self.port}, Lite: {self.use_lite}")
+        logger.info(f"INIT Milvus 설정 - dimension: {self.dimension}, Host: {self.host}, Port: {self.port}, Lite: {self.use_lite}")
 
     async def initialize(self) -> None:
         """Milvus 클라이언트 초기화 및 컬렉션 생성"""
@@ -230,7 +232,7 @@ class MilvusDB(VectorDatabase):
         """모든 문서 조회"""
         try:
             if not self.client:
-                await self.initialize()
+                raise Exception("벡터 DB가 초기화되지 않았습니다.")
 
             limit_count = limit if limit else 1000  # 기본 제한
             logger.info(f"STEP_QUERY Milvus 전체 문서 조회 시작 (제한: {limit_count})")

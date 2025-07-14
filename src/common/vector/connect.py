@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from sentence_transformers import SentenceTransformer
-
+from langchain_openai import OpenAIEmbeddings
 from src.common.vector.factory import VectorDBFactory
 from src.common.vector.base import  VectorDocument, SearchResult
 from src.app.func.text_helper import TextHelper
@@ -20,19 +20,65 @@ class VectorDBService:
 
     def __init__(self):
         self.embedding_model = None
-        self.model_name = "all-MiniLM-L6-v2"  # 경량화된 다국어 지원 모델
+        # self.model_name = "all-MiniLM-L6-v2"  # 경량화된 다국어 지원 모델
+        self.model_name = "text-embedding-3-large"  # 경량화된 다국어 지원 모델
         self.vector_db = None
         self.current_db_type = None
-        self.fallback_order = ["milvus", "faiss"]
+        self.fallback_order = ["milvus"]
 
-    async def initialize_embedding_model(self) -> None:
+    async def initialize_embedding_model(
+            self
+    ) -> None:
         """임베딩 모델 초기화"""
         try:
             logger.info("STEP_VECTOR 임베딩 모델 로드 시작")
-            self.embedding_model = SentenceTransformer(self.model_name)
+            if self.model_name == "all-MiniLM-L6-v2":
+                self.embedding_model = SentenceTransformer(self.model_name)
+            elif self.model_name == 'text-embedding-3-large':
+                self.embedding_model = OpenAIEmbeddings(model=self.model_name)
+            else:
+                raise ValueError(f"지원하지 않는 모델 이름: {self.model_name}")
             logger.info(f"SUCCESS 임베딩 모델 로드 완료: {self.model_name}")
         except Exception as e:
             logger.error(f"ERROR 임베딩 모델 로드 실패: {e}")
+            raise
+
+
+    async def change_embedding_model(
+            self,
+            model_name
+    ) -> None:
+        """임베딩 모델 변경"""
+        try:
+            self.model_name = model_name
+            if model_name == "all-MiniLM-L6-v2":
+                self.embedding_model = SentenceTransformer(self.model_name)
+            elif model_name == 'text-embedding-3-large':
+                self.embedding_model = OpenAIEmbeddings(model=self.model_name)
+            else:
+                raise ValueError(f"지원하지 않는 모델 이름: {model_name}")
+        except Exception as e:
+            logger.error(f"ERROR 임베딩 모델 변경 실패: {e}")
+
+    async def encode(
+            self,
+            text: str,
+    ):
+        """임베딩 생성"""
+        try:
+            #모델 이름에 따라 분기 처리
+            if not self.embedding_model:
+                raise
+            logger.info(f"STEP_VECTOR 임베딩 생성 시작: {self.model_name}")
+            if self.model_name == "all-MiniLM-L6-v2":
+                return self.embedding_model.encode(text, show_progress_bar=True).tolist()
+            elif self.model_name == 'text-embedding-3-large':
+                embeddings = await self.embedding_model.aembed_documents(text)
+                return embeddings
+            else:
+                raise ValueError(f"지원하지 않는 모델 이름: {self.model_name}")
+        except Exception as e:
+            logger.error(f"ERROR 임베딩 생성 실패: {e}")
             raise
 
     async def initialize_vector_db(self, preferred_db: Optional[str] = None) -> str:
@@ -127,7 +173,8 @@ class VectorDBService:
 
             # 임베딩 생성
             logger.info("STEP_VECTOR 임베딩 생성 시작")
-            embeddings = self.embedding_model.encode(chunks, show_progress_bar=True)
+            # embeddings = self.embedding_model.encode(chunks, show_progress_bar=True)
+            embeddings = await self.encode(chunks)
 
             # VectorDocument 객체들 생성
             vector_documents = []
@@ -149,7 +196,7 @@ class VectorDBService:
                 vector_doc = VectorDocument(
                     id=doc_id,
                     content=chunk,
-                    embedding=embedding.tolist(),
+                    embedding=embedding,
                     metadata=chunk_metadata
                 )
                 vector_documents.append(vector_doc)
@@ -214,7 +261,7 @@ class VectorDBService:
             logger.info(f"STEP_VECTOR 검색 쿼리: '{query[:50]}...'")
 
             # 쿼리 임베딩 생성
-            query_embedding = self.embedding_model.encode([query])[0]
+            query_embedding = await self.encode(query)
 
             # 벡터 DB에서 검색
             results = await self.vector_db.search(
@@ -371,12 +418,13 @@ class VectorDBService:
                 "filename": filename
             }
 
-    async def get_all_documents(self, limit: Optional[int] = None) -> Dict[str, Any]:
+    async def get_all_documents(
+            self, limit: Optional[int] = None) -> Dict[str, Any]:
         """벡터 DB의 문서 조회 (파일 단위)"""
         try:
             # 벡터 DB 초기화 확인
             if not self.vector_db:
-                await self.initialize_vector_db()
+                raise Exception("벡터 DB가 초기화되지 않았습니다.")
 
             # 🔥 파일 개수 제한 (기본 100개 파일)
             file_limit = limit if limit else 100
