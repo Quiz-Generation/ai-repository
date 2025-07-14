@@ -49,6 +49,7 @@ async def lifespan(app: FastAPI):
         global_vector_service = VectorDBService()
         await global_vector_service.initialize_embedding_model()
         await global_vector_service.initialize_vector_db("milvus")
+        app.state.vector_db = global_vector_service
         logger.info("✅ 전역 벡터 DB 서비스 초기화 완료")
     except Exception as e:
         logger.error(f"❌ 전역 서비스 초기화 실패: {e}")
