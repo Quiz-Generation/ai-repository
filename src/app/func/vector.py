@@ -2,8 +2,8 @@ from datetime import datetime
 import hashlib
 from typing import Any, Dict
 import uuid
-from src.app.core.vector_db.base import VectorDocument
-from src.app.service.vector_db_service import VectorDBService
+from src.common.vector.base import VectorDocument
+from src.common.vector.connect import VectorDBService
 from src.app.func import text as text_func
 
 

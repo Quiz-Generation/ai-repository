@@ -7,7 +7,21 @@ upload_pdf_to_vector_db_description = """
 * ***Response (Success)***:\n
     * HTTP 200
         * Json 타입 반환
-            - {’message’: ’PDF 파일 업로드 및 벡터 저장 성공’, ’data’: ’벡터 저장 결과’}
+        - {
+            "success": true,
+            "message": "PDF 업로드 완료",
+            "file_id": "file_20250714_165131_4be995ae_b462a1",
+            "filename": "4주차 강의자료.pdf",
+            "chunk_count": 202,
+            "recommended_questions": 5,
+            "total_time": 4.437061071395874,
+            "analysis_time": 0.19776296615600586,
+            "extraction_time": 0.1394939422607422,
+            "vector_init_time": 0,
+            "vector_store_time": 4.09014892578125,
+            "vector_performance": {}
+        }
+
 
 
 * ***Response (Fail)***:\n

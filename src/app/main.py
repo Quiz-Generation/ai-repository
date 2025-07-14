@@ -15,8 +15,8 @@ import uvicorn
 from src.common.utils.logger import set_logger
 from src.common.error import JSendError, ErrorCode
 
-from .api import document, quiz, test_routes
-from .service.vector_db_service import VectorDBService
+from src.app.api import document, quiz, test_routes
+from src.common.vector.connect import VectorDBService
 
 
 # 로깅 설정

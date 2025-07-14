@@ -1,6 +1,7 @@
 import time
 from fastapi import UploadFile
 from fastapi.responses import JSONResponse
+from src.common.vector.connect import VectorDBService
 from src.common.error import ErrorCode, JSendError
 from src.app.func import document_loader as document_loader_func
 from src.app.func import document as document_func
@@ -8,7 +9,7 @@ from src.app.func import vector as vector_func
 
 async def upload_document(
         logger,
-        vector_db,
+        vector_db: VectorDBService,
         file: UploadFile
     ) -> JSONResponse:
     """
@@ -175,3 +176,46 @@ async def upload_document(
 
 
 
+
+
+async def clear_all_documents(
+    logger,
+    vector_db: VectorDBService,
+    confirm_token
+) -> JSONResponse:
+    """
+    벡터 DB 전체 삭제
+    """
+    try:
+        logger.info("🚨 DANGER 벡터 DB 전체 삭제 요청")
+
+        # 전체 삭제 실행
+        result = await vector_db.clear_all_documents(
+            confirm_token=confirm_token
+        )
+
+        if result["success"]:
+            response_data = {
+                "success": True,
+                "message": result["message"],
+                "vector_db_type": result["vector_db_type"],
+                "deleted_count": result.get("deleted_count", 0),
+                "remaining_count": result.get("remaining_count", 0)
+            }
+            logger.info(f"SUCCESS 벡터 DB 전체 삭제 완료: {result.get('deleted_count', 0)}개 삭제")
+        else:
+            response_data = {
+                "success": False,
+                "message": "전체 삭제 실패",
+                "error": result.get("error"),
+                "vector_db_type": result.get("vector_db_type")
+            }
+
+        return JSONResponse(content=response_data)
+
+    except Exception as e:
+        logger.error(f"ERROR 벡터 DB 전체 삭제 실패: {e}")
+        raise JSendError(
+            code=ErrorCode.Common.DEFAULT_ERROR[0],
+            message=ErrorCode.Common.DEFAULT_ERROR[1]
+        )
