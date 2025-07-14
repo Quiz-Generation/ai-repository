@@ -11,7 +11,7 @@ from ..agent.quiz_generator import (
     DifficultyLevel,
     QuestionType
 )
-from ..service.vector_db_service import VectorDBService
+from .vector_db_service import VectorDBService
 
 logger = logging.getLogger(__name__)
 

@@ -4,41 +4,16 @@
 import logging
 import os
 from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, HTTPException, Depends, Query, Form
+from fastapi import APIRouter, HTTPException, Depends
 from ..docs import quiz_docs
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-
-from ..service.quiz_service import QuizService
 from src.common.utils.logger import set_logger
+from src.app.models import quiz as quiz_models
+from src.app.service import quiz as quiz_service
 
 logger = set_logger("api.quiz")
 
 router = APIRouter(tags=["quiz"])
-
-
-# 🔧 Request Models
-class QuizGenerationRequest(BaseModel):
-    """문제 생성 요청 모델"""
-    file_id: str  # 🔥 단일 파일 ID만 받음
-    num_questions: int = 10
-    difficulty: str = "medium"  # easy, medium, hard
-    question_type: str = "multiple_choice"  # multiple_choice, true_false, short_answer, essay, fill_blank
-    custom_topic: Optional[str] = None
-    category: Optional[str] = None  # 대분류(예: 컴퓨터 공학)
-    sub_category: Optional[str] = None  # 소분류(예: 데이터베이스)
-
-
-# 🔧 서비스 의존성 주입
-async def get_quiz_service() -> QuizService:
-    """퀴즈 서비스 의존성 주입"""
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    if not openai_api_key:
-        raise HTTPException(
-            status_code=500,
-            detail="OpenAI API 키가 설정되지 않았습니다. OPENAI_API_KEY 환경변수를 설정해주세요."
-        )
-    return QuizService(openai_api_key)
 
 
 # 📋 1. 문제 생성 가능한 파일 목록 조회
@@ -46,7 +21,6 @@ async def get_quiz_service() -> QuizService:
     summary="문제 생성 가능한 파일 목록 조회",
 )
 async def get_available_files(
-    quiz_service: QuizService = Depends(get_quiz_service)
 ) -> JSONResponse:
     """
     📋 문제 생성 가능한 파일 목록 조회
@@ -76,11 +50,10 @@ async def get_available_files(
     description=quiz_docs.generate_quiz_description,
 )
 async def generate_quiz(
-    request: QuizGenerationRequest,
-    quiz_service: QuizService = Depends(get_quiz_service)
+    request: quiz_models.QuizGenerationRequest,
 ) -> JSONResponse:
     try:
-        logger.info("🚀 AI 문제 생성 API 시작 (단일 파일)")
+        logger.info("🚀 AI 문제 생성 API 시작")
 
         # 기본 검증
         if not request.file_id:
