@@ -62,7 +62,7 @@ async def generate_quiz_from_file(
     sub_category: str
 ) -> JSONResponse:
     try :
-        logger.info("🚀 AI 문제 생성 API 시작")
+        logger.info("STEP_REQUEST AI 문제 생성 API 시작")
         logger.info(f"STEP_REQUEST 문제 생성 요청: {file_id}, {num_questions}개 문제, {difficulty} 난이도")
 
         # 기본 검증

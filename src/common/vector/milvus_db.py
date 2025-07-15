@@ -261,6 +261,69 @@ class MilvusDB(VectorDatabase):
             logger.error(f"ERROR Milvus 문서 조회 실패: {e}")
             return []
 
+    async def get_documents_by_file_id(self, file_id: str, limit: int = 10000) -> List[VectorDocument]:
+        """특정 file_id로 모든 청크(문서) 검색"""
+        try:
+            if not self.client:
+                await self.initialize()
+            expr = f'metadata["file_id"] == "{file_id}"'
+            query_results = self.client.query(
+                expr=expr,
+                output_fields=["id", "content", "metadata"],
+                limit=limit
+            )
+            return self._parse_query_results(query_results)
+        except Exception as e:
+            logger.error(f"ERROR file_id로 문서 조회 실패: {e}")
+            return []
+
+    async def get_documents_by_filename(self, filename: str, limit: int = 10000) -> List[VectorDocument]:
+        """특정 파일명으로 모든 문서 검색"""
+        try:
+            if not self.client:
+                await self.initialize()
+            expr = f'metadata["filename"] == "{filename}"'
+            query_results = self.client.query(
+                expr=expr,
+                output_fields=["id", "content", "metadata"],
+                limit=limit
+            )
+            return self._parse_query_results(query_results)
+        except Exception as e:
+            logger.error(f"ERROR filename으로 문서 조회 실패: {e}")
+            return []
+
+    async def get_chunks_by_file_id(self, file_id: str, limit: int = 10000) -> List[Dict[str, any]]:
+        """특정 file_id의 모든 청크를 chunk_index 순으로 반환"""
+        docs = await self.get_documents_by_file_id(file_id, limit)
+        # chunk_index 기준 정렬
+        docs.sort(key=lambda d: d.metadata.get("chunk_index", 0))
+        return [
+            {
+                "id": d.id,
+                "content": d.content,
+                "metadata": d.metadata
+            }
+            for d in docs
+        ]
+
+    async def get_document_by_id(self, doc_id: str) -> Optional[VectorDocument]:
+        """문서 ID로 단일 문서 검색"""
+        try:
+            if not self.client:
+                await self.initialize()
+            expr = f'id == "{doc_id}"'
+            query_results = self.client.query(
+                expr=expr,
+                output_fields=["id", "content", "metadata"],
+                limit=1
+            )
+            docs = self._parse_query_results(query_results)
+            return docs[0] if docs else None
+        except Exception as e:
+            logger.error(f"ERROR id로 문서 조회 실패: {e}")
+            return None
+
     def _parse_query_results(self, query_results) -> List[VectorDocument]:
         """쿼리 결과를 VectorDocument 리스트로 변환"""
         documents = []

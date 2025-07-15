@@ -358,89 +358,49 @@ class VectorDBService:
                 "total_files": 0
             }
 
-    async def get_file_chunks(
+
+    async def get_document_by_file_id(
             self,
-            file_id: str) -> List[Dict[str, Any]]:
-        """특정 파일의 모든 청크 조회"""
+            file_id: str
+    ) -> List[VectorDocument]:
+        """특정 file_id를 가진 모든 문서만 Milvus에서 직접 조회"""
         try:
-            # 벡터 DB에서 해당 file_id를 가진 모든 문서 조회
-            all_documents = await self.get_all_documents(10000)
+            if not self.vector_db:
+                raise Exception("벡터 DB가 초기화되지 않았습니다.")
+            expr = f'metadata["file_id"] == "{file_id}"'
+            query_results = await self.vector_db.query(
+                expr=expr,
+                output_fields=["id", "content", "metadata"],
+                limit=10000  # 필요시 조정
+            )
+            return self._parse_query_results(query_results)
+        except Exception as e:
+            logger.error(f"ERROR file_id로 문서 조회 실패: {e}")
+            return []
 
-            # file_id 기준으로 필터링
+
+    async def get_file_chunks(self, file_id: str) -> List[Dict[str, Any]]:
+        """특정 파일의 모든 청크를 효율적으로 조회"""
+        try:
+            # Milvus에서 file_id로 직접 조회
+            if not self.vector_db:
+                raise Exception("벡터 DB가 초기화되지 않았습니다.")
+            documents = await self.vector_db.get_documents_by_file_id(file_id)
             file_chunks = []
-            for doc in all_documents:
-                if doc.metadata.get("file_id") == file_id:
-                    chunk_data = {
-                        "id": doc.id,
-                        "content": doc.content,
-                        "metadata": doc.metadata
-                    }
-                    file_chunks.append(chunk_data)
-
-            # chunk_index 순서로 정렬 (가능한 경우)
+            for doc in documents:
+                chunk_data = {
+                    "id": doc.id,
+                    "content": doc.content,
+                    "metadata": doc.metadata
+                }
+                file_chunks.append(chunk_data)
             file_chunks.sort(key=lambda x: x["metadata"].get("chunk_index", 0))
-
             logger.info(f"SUCCESS 파일 청크 조회: {file_id} -> {len(file_chunks)}개 청크")
             return file_chunks
-
         except Exception as e:
             logger.error(f"ERROR 파일 청크 조회 실패: {e}")
             return []
 
-    async def get_document_by_file_id(self, file_id: str) -> Optional[Dict[str, Any]]:
-        """단일 파일 ID로 문서 내용 조회"""
-        try:
-            logger.info(f"STEP_VECTOR 파일 ID로 문서 조회: {file_id}")
-
-            # 모든 문서 조회 (충분히 큰 수)
-            all_docs_result = await self.get_all_documents(10000)
-            logger.info(f"STEP_VECTOR 모든 문서 조회 결과: {all_docs_result}")
-
-            if not all_docs_result["success"]:
-                logger.error("ERROR 전체 문서 조회 실패")
-                return None
-
-            # 지정된 file_id에 해당하는 파일 찾기
-            target_file = None
-            for file_info in all_docs_result["files"]:
-                if file_info["file_id"] == file_id:
-                    target_file = file_info
-                    break
-
-            if not target_file:
-                logger.warning(f"WARNING 지정된 파일 ID를 찾을 수 없음: {file_id}")
-                return None
-
-            # 해당 파일의 실제 문서 내용 조회
-            filename = target_file["filename"]
-
-            # 해당 파일의 문서 청크들 조회
-            file_chunks = await self.get_file_chunks(file_id)
-
-            # 청크들을 하나의 문서로 합치기
-            combined_content = ""
-            for chunk in file_chunks:
-                combined_content += chunk.get("content", "") + "\n\n"
-
-            # 문서 정보 구성
-            document = {
-                "file_id": file_id,
-                "filename": filename,
-                "content": combined_content.strip(),
-                "language": target_file.get("language", "unknown"),
-                "file_size": target_file.get("file_size", 0),
-                "total_chunks": target_file.get("total_chunks", 0),
-                "pdf_loader": target_file.get("pdf_loader", "unknown"),
-                "upload_timestamp": target_file.get("upload_timestamp"),
-                "domain": self._identify_domain(filename)
-            }
-
-            logger.info(f"SUCCESS 문서 조회: {filename} ({len(combined_content)}자)")
-            return document
-
-        except Exception as e:
-            logger.error(f"ERROR 문서 조회 실패: {e}")
-            return None
 
     async def clear_all_documents(self, confirm_token: Optional[str] = None) -> Dict[str, Any]:
         """벡터 DB의 모든 데이터 삭제 (위험한 작업)"""

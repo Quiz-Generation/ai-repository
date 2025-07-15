@@ -33,7 +33,6 @@ async def get_available_files(
 
 
 
-# 🤖 2. AI 문제 생성 (POST 방식)
 @router.post("/generate",
     summary="AI 문제 생성",
     description=quiz_docs.generate_quiz_description,
