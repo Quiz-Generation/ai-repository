@@ -16,8 +16,7 @@ from src.common.utils.logger import set_logger
 from src.common.error import JSendError, ErrorCode
 
 from src.app.api import document, quiz, test_routes
-from src.common.vector.connect import VectorDBService
-
+from src.common.milvus.connect import milvus_db
 
 # 로깅 설정
 log_dir = "../logs"
@@ -32,38 +31,13 @@ logging.basicConfig(
     ]
 )
 logger = set_logger("exception")
-# 전역 서비스 인스턴스
-global_vector_service = None
+
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """애플리케이션 시작/종료 시 실행"""
-    global global_vector_service
-
     logger.info("🚀 FastAPI PDF Processing with Vector DB 시작")
-
-    # 전역 서비스 초기화
-    try:
-        logger.info("🔧 전역 벡터 DB 서비스 초기화 시작")
-        global_vector_service = VectorDBService()
-        await global_vector_service.initialize_embedding_model(
-            model_name="text-embedding-3-large",
-            # model_name='all-MiniLM-L6-v2'
-        )
-        await global_vector_service.initialize_vector_db(
-            preferred_db="milvus",
-            model_name="text-embedding-3-large"
-            # model_name='all-MiniLM-L6-v2'
-        )
-        app.state.vector_db = global_vector_service
-        logger.info("✅ 전역 벡터 DB 서비스 초기화 완료")
-    except Exception as e:
-        logger.error(f"❌ 전역 서비스 초기화 실패: {e}")
-        raise
-
     yield
-
     logger.info("🛑 FastAPI PDF Processing with Vector DB 종료")
 
 

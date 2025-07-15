@@ -1,14 +1,14 @@
 import time
 from fastapi import UploadFile
 from fastapi.responses import JSONResponse
-from src.common.vector.connect import VectorDBService
+from src.common.milvus.connect import milvus_db
 from src.common.error import ErrorCode, JSendError
 from src.app.func import document_loader as document_loader_func
 from src.app.func import document as document_func
+from src.common.milvus.connect import milvus_db
 
 async def upload_document(
         logger,
-        vector_db: VectorDBService,
         file: UploadFile
     ) -> JSONResponse:
     """
@@ -115,8 +115,8 @@ async def upload_document(
         # 벡터 DB에 저장
         vector_store_start_time = time.time()
         logger.info("STEP5 Milvus 벡터 DB 저장 시작")
-        vector_result = await vector_db.store_pdf_content(
-            pdf_content=extraction_result["content"],
+        vector_result = await milvus_db.add_documents_async(
+            docs=extraction_result["content"],
             metadata=metadata,
             chunk_size=auto_chunk_size,
             chunk_overlap=auto_chunk_overlap
@@ -172,7 +172,6 @@ async def upload_document(
 
 async def clear_all_documents(
     logger,
-    vector_db: VectorDBService,
     confirm_token
 ) -> JSONResponse:
     """

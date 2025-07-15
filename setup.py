@@ -40,6 +40,7 @@ setup(
 
         # 벡터 데이터베이스 클라이언트
         "pymilvus[model]==2.5.11",
+        "langchain-milvus==0.2.1",
 
         # 기타 유틸리티
         "python-dotenv==1.1.0",

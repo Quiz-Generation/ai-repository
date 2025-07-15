@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Tuple
 from src.app.agent.prompt.quiz_prompt_manager import DifficultyLevel, QuestionType
 from src.app.agent.quiz_generator import QuizGeneratorAgent
 from src.app.agent.quiz_generator import QuizRequest
-from src.common.vector.connect import VectorDBService
+from src.common.milvus.connect import VectorDBService
 
 async def get_difficulty_distribution(
         overall: str,

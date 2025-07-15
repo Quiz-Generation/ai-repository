@@ -22,7 +22,6 @@ async def upload_pdf_to_vector_db(
 ) -> JSONResponse:
     return await document_service.upload_document(
         logger=logger,
-        vector_db=request.app.state.vector_db,
         file=file
     )
 
@@ -41,6 +40,5 @@ async def clear_all_documents(
     """
     return await document_service.clear_all_documents(
         logger=logger,
-        vector_db=request.app.state.vector_db,
         confirm_token=confirm_token
     )

@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     REDIS_HOST: str = os.getenv('REDIS_HOST', "")
     REDIS_PORT: int = int(os.getenv('REDIS_PORT', 0))
 
+    #milvus
+    MILVUS_URI: str = os.getenv('MILVUS_URI', "")
+    MILVUS_COLLECTION: str = os.getenv('MILVUS_COLLECTION', "")
 
     class Config:
         config_path = Path(__file__)
