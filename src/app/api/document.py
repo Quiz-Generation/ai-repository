@@ -29,7 +29,6 @@ async def upload_pdf_to_vector_db(
 
 
 
-
 # 💥 5. 벡터 DB 모든 데이터 삭제 (위험한 작업)
 @router.delete("/clear-all")
 async def clear_all_documents(
