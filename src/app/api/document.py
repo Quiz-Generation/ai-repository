@@ -1,0 +1,210 @@
+import time
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
+from fastapi.responses import JSONResponse
+from src.app.docs import document
+from src.app.service.document import DocumentService
+from src.app.service.vector_db_service import VectorDBService
+from src.app.helper.pdf_loader_helper import PDFLoaderHelper
+from src.app.core.service_container import ServiceContainer
+from src.common.utils.logger import set_logger
+
+logger = set_logger("api.document")
+
+router = APIRouter(tags=["documents"])
+
+# 🔧 서비스 의존성 주입 함수들
+
+
+# 🔧 간단한 서비스 의존성 주입
+async def get_document_service() -> DocumentService:
+    """문서 서비스 의존성 주입 - ServiceContainer 사용"""
+    try:
+        return ServiceContainer.get_document_service()
+    except Exception as e:
+        logger.error(f"ERROR DocumentService 의존성 주입 실패: {e}")
+        raise HTTPException(status_code=500, detail="서비스 초기화에 실패했습니다")
+
+
+async def get_vector_service() -> VectorDBService:
+    """벡터 DB 서비스 의존성 주입 - ServiceContainer 사용"""
+    try:
+        return ServiceContainer.get_vector_service()
+    except Exception as e:
+        logger.error(f"ERROR VectorDBService 의존성 주입 실패: {e}")
+        raise HTTPException(status_code=500, detail="벡터 DB 서비스 초기화에 실패했습니다")
+
+
+# 🚀 1. PDF 업로드 및 벡터 저장 (+ 문서 ID 반환)
+@router.post(
+        "/upload",
+        summary="PDF 업로드 및 벡터 저장",
+        description=document.upload_pdf_to_vector_db_description,
+    )
+async def upload_pdf_to_vector_db(
+    file: UploadFile = File(...),
+    doc_service: DocumentService = Depends(get_document_service),
+    vector_service: VectorDBService = Depends(get_vector_service)
+) -> JSONResponse:
+    total_start_time = time.time()
+
+    try:
+        logger.info("=" * 50)
+        logger.info("STEP1 PDF 업로드 및 벡터 저장 시작")
+
+        # 파일 검증
+        if not file.filename or not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="PDF 파일만 업로드 가능합니다")
+
+        # PDF 특성 분석 및 최적 로더 선택
+        analysis_start_time = time.time()
+        logger.info("STEP2 PDF 특성 분석 시작")
+        analysis_result = await PDFLoaderHelper.analyze_pdf_characteristics(file)
+        analysis_time = time.time() - analysis_start_time
+        logger.info(f"⏱️ PDF 분석 완료: {analysis_time:.2f}초")
+
+        # PDF 내용 추출
+        extraction_start_time = time.time()
+        logger.info("STEP3 PDF 내용 추출 시작")
+        extraction_result = await doc_service.process_pdf_with_dynamic_selection(
+            file, analysis_result.recommended_loader
+        )
+        extraction_time = time.time() - extraction_start_time
+        logger.info(f"⏱️ PDF 추출 완료: {extraction_time:.2f}초")
+
+        if not extraction_result["success"]:
+            raise HTTPException(
+                status_code=500,
+                detail=f"PDF 처리 실패: {extraction_result.get('error', 'Unknown error')}"
+            )
+
+        # 🔥 벡터 DB 강제 Milvus 초기화 (기존 서비스 무시)
+        vector_init_start_time = time.time()
+        logger.info("STEP4 Milvus 벡터 DB 강제 초기화")
+        await vector_service.force_switch_to_milvus()
+        vector_init_time = time.time() - vector_init_start_time
+        logger.info(f"⏱️ 벡터 DB 초기화: {vector_init_time:.2f}초")
+
+        # 🎯 자동 청크 설정 (한국어 최적화)
+        auto_chunk_size = 800  # 한국어에 최적화된 크기
+        auto_chunk_overlap = 100  # 적당한 오버랩
+
+        # 메타데이터 구성
+        metadata = {
+            "filename": file.filename,
+            "file_size": file.size,
+            "pdf_loader": extraction_result["loader_used"],
+            "language": analysis_result.language,
+            "upload_timestamp": extraction_result["processing_time"],
+            "source": "document_upload"
+        }
+
+        # 벡터 DB에 저장
+        vector_store_start_time = time.time()
+        logger.info("STEP5 Milvus 벡터 DB 저장 시작")
+        vector_result = await vector_service.store_pdf_content(
+            pdf_content=extraction_result["content"],
+            metadata=metadata,
+            chunk_size=auto_chunk_size,
+            chunk_overlap=auto_chunk_overlap
+        )
+        vector_store_time = time.time() - vector_store_start_time
+        logger.info(f"⏱️ 벡터 DB 저장 완료: {vector_store_time:.2f}초")
+
+        # 🔥 파일 ID 가져오기 (파일별 단일 ID)
+        file_id = vector_result.get("file_id")
+
+        # 전체 처리 시간 계산
+        total_time = time.time() - total_start_time
+
+        # 간단한 응답 반환
+        response_data = {
+            "success": vector_result["success"],
+            "message": "PDF 업로드 완료",
+            "file_id": file_id,
+            "filename": file.filename,
+            "vector_db_type": vector_service.current_db_type,  # 🎯 실제 사용된 DB
+            "chunk_count": vector_result.get("chunk_count", 0),
+            "auto_settings": {
+                "chunk_size": auto_chunk_size,
+                "chunk_overlap": auto_chunk_overlap,
+                "pdf_loader": extraction_result["loader_used"],
+                "language": analysis_result.language
+            },
+            "question_analysis": {
+                "recommended_questions": await doc_service.calculate_optimal_question_count(
+                    content=extraction_result["content"],
+                    metadata=metadata
+                ),
+                "content_analysis": {
+                    "total_sentences": extraction_result.get("total_sentences", 0),
+                    "total_paragraphs": extraction_result.get("total_paragraphs", 0),
+                    "key_concepts": extraction_result.get("key_concepts", []),
+                    "complexity_score": extraction_result.get("complexity_score", 0)
+                }
+            },
+            "performance_metrics": {
+                "total_time": total_time,
+                "analysis_time": analysis_time,
+                "extraction_time": extraction_time,
+                "vector_init_time": vector_init_time,
+                "vector_store_time": vector_store_time,
+                "vector_performance": vector_result.get("performance_metrics", {})
+            }
+        }
+
+        if not vector_result["success"]:
+            response_data["error"] = vector_result.get("error")
+
+        logger.info(f"🎉 SUCCESS PDF 업로드 완료: {file.filename} -> {vector_service.current_db_type}")
+        logger.info(f"⏱️ 전체 처리 시간: {total_time:.2f}초")
+        logger.info(f"📊 성능 요약: 분석({analysis_time:.2f}s) + 추출({extraction_time:.2f}s) + 벡터화({vector_store_time:.2f}s)")
+
+        return JSONResponse(content=response_data)
+
+    except Exception as e:
+        total_time = time.time() - total_start_time
+        logger.error(f"ERROR PDF 업로드 실패: {e} (총 소요시간: {total_time:.2f}초)")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# 💥 5. 벡터 DB 모든 데이터 삭제 (위험한 작업)
+@router.delete("/clear-all")
+async def clear_all_documents(
+    confirm_token: str = Form(..., description="삭제 확인 토큰: CLEAR_ALL_CONFIRM"),
+    vector_service: VectorDBService = Depends(get_vector_service)
+) -> JSONResponse:
+    """
+    💥 벡터 DB의 모든 데이터 삭제 (위험한 작업)
+
+    ⚠️ 주의: 이 작업은 되돌릴 수 없습니다!
+    confirm_token에 "CLEAR_ALL_CONFIRM"을 입력해야 합니다.
+    """
+    try:
+        logger.info("🚨 DANGER 벡터 DB 전체 삭제 요청")
+
+        # 전체 삭제 실행
+        result = await vector_service.clear_all_documents(confirm_token)
+
+        if result["success"]:
+            response_data = {
+                "success": True,
+                "message": result["message"],
+                "vector_db_type": result["vector_db_type"],
+                "deleted_count": result.get("deleted_count", 0),
+                "remaining_count": result.get("remaining_count", 0)
+            }
+            logger.info(f"SUCCESS 벡터 DB 전체 삭제 완료: {result.get('deleted_count', 0)}개 삭제")
+        else:
+            response_data = {
+                "success": False,
+                "message": "전체 삭제 실패",
+                "error": result.get("error"),
+                "vector_db_type": result.get("vector_db_type")
+            }
+
+        return JSONResponse(content=response_data)
+
+    except Exception as e:
+        logger.error(f"ERROR 벡터 DB 전체 삭제 실패: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

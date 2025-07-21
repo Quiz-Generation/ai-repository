@@ -1,9 +1,11 @@
 """
-🎯 Quiz Generation Service
+🎯 Quiz Generation Service - 성능 최적화 버전
 """
 import logging
+import asyncio
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+from functools import lru_cache
 
 from ..agent.quiz_generator import (
     QuizGeneratorAgent,
@@ -17,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 class QuizService:
-    """문제 생성 서비스"""
+    """문제 생성 서비스 - 성능 최적화 버전"""
 
     def __init__(self, openai_api_key: Optional[str] = None):
         """
@@ -27,6 +29,12 @@ class QuizService:
         """
         self.vector_service = VectorDBService()
         self.quiz_agent = QuizGeneratorAgent(openai_api_key)
+
+        # 🔥 성능 최적화: 캐시 추가
+        self._document_cache = {}
+        self._file_list_cache = None
+        self._cache_timestamp = None
+        self._cache_ttl = 300  # 5분 캐시
 
     async def generate_quiz_from_file(
         self,
@@ -39,23 +47,13 @@ class QuizService:
         sub_category: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        단일 파일 ID를 기반으로 문제 생성
-        Args:
-            file_id: 대상 파일 ID (단일)
-            num_questions: 생성할 문제 수
-            difficulty: 난이도 (easy/medium/hard)
-            question_type: 문제 유형 (multiple_choice/true_false/short_answer/essay/fill_blank)
-            custom_topic: 특정 주제 (선택사항)
-            category: 대분류 (선택사항, 예: 컴퓨터 공학)
-            sub_category: 소분류 (선택사항, 예: 데이터베이스)
-        Returns:
-            생성된 문제 데이터
+        단일 파일 ID를 기반으로 문제 생성 - 성능 최적화 버전
         """
         try:
             logger.info(f"🚀 문제 생성 서비스 시작: {file_id}")
 
-            # 1. 파일 ID로 문서 조회
-            document_data = await self._get_document_by_file_id(file_id)
+            # 1. 캐시된 문서 조회 (성능 개선)
+            document_data = await self._get_document_by_file_id_optimized(file_id)
             if not document_data:
                 return {
                     "success": False,
@@ -75,80 +73,74 @@ class QuizService:
                     "valid_question_types": [q.value for q in QuestionType]
                 }
 
-            # 3. 난이도별 문제 개수 분배
-            def get_difficulty_distribution(overall: str, total: int):
-                # 비율: 쉬움 70/25/5, 중간 30/50/20, 어려움 10/30/60
-                table = {
-                    "easy":   [0.7, 0.25, 0.05],
-                    "medium": [0.3, 0.5, 0.2],
-                    "hard":   [0.1, 0.3, 0.6],
+            # 3. 단일 AI 호출로 모든 문제 생성 (성능 개선)
+            logger.info(f"STEP_AGENT AI 에이전트 문제 생성 시작 ({num_questions}개 문제)")
+
+            quiz_request = QuizRequest(
+                file_ids=[file_id],
+                num_questions=num_questions,
+                difficulty=difficulty_enum,
+                question_type=question_type_enum,
+                custom_topic=custom_topic,
+                category=category,
+                sub_category=sub_category,
+                additional_instructions=[
+                    f"전체 {num_questions}개 문제를 생성하되, 난이도는 '{difficulty}'로 통일하세요.",
+                    "각 문제는 구체적인 예시나 실제 응용 사례를 포함해야 합니다.",
+                    "문제는 서로 중복되지 않아야 하며, 각각 독립적인 개념을 다뤄야 합니다.",
+                    "선택지의 경우, 명확한 정답과 그럴듯한 오답을 포함해야 합니다.",
+                    "문제의 난이도는 일관성을 유지해야 합니다.",
+                    "문제는 실제 학습 목표와 연관되어야 합니다."
+                ]
+            )
+
+            result = await self.quiz_agent.generate_quiz(quiz_request, [document_data])
+
+            if not result["success"]:
+                return {
+                    "success": False,
+                    "error": f"문제 생성 실패: {result.get('error')}",
+                    "file_id": file_id
                 }
-                ratio = table.get(overall, [0.3, 0.5, 0.2])
-                easy = round(total * ratio[0])
-                medium = round(total * ratio[1])
-                hard = total - easy - medium
-                return [("easy", easy), ("medium", medium), ("hard", hard)]
 
-            dist = get_difficulty_distribution(difficulty_enum.value, num_questions)
-            all_questions = []
-            for diff, count in dist:
-                if count <= 0:
-                    continue
-                quiz_request = QuizRequest(
-                    file_ids=[file_id],
-                    num_questions=count,
-                    difficulty=DifficultyLevel(diff),
-                    question_type=question_type_enum,
-                    custom_topic=custom_topic,
-                    category=category,
-                    sub_category=sub_category,
-                    additional_instructions=[
-                        f"이 문제들은 '{diff}' 난이도로 생성되어야 합니다. 각 문제의 difficulty 필드를 반드시 '{diff}'로 설정하세요.",
-                        "각 문제는 구체적인 예시나 실제 응용 사례를 포함해야 합니다.",
-                        "문제는 서로 중복되지 않아야 하며, 각각 독립적인 개념을 다뤄야 합니다.",
-                        "선택지의 경우, 명확한 정답과 그럴듯한 오답을 포함해야 합니다.",
-                        "문제의 난이도는 일관성을 유지해야 합니다.",
-                        "문제는 실제 학습 목표와 연관되어야 합니다."
-                    ]
-                )
-                logger.info(f"STEP_AGENT AI 에이전트 문제 생성 시작 (난이도: {diff}, 개수: {count})")
-                result = await self.quiz_agent.generate_quiz(quiz_request, [document_data])
-                if result["success"]:
-                    for q in result.get("questions", []):
-                        q["difficulty"] = diff  # 명시적으로 태깅
-                        if q.get("choices") and q.get("answer"):
-                            q = self._shuffle_choices_and_map_answer(q)
-                        all_questions.append(q)
-                else:
-                    logger.error(f"ERROR 문제 생성 실패: {result.get('error')}")
+            # 4. 결과 처리 및 품질 검사
+            questions = result.get("questions", [])
 
-            # 문제 개수 맞추기(혹시 초과 생성 시)
-            all_questions = all_questions[:num_questions]
+            # 품질 검사 및 후처리
+            processed_questions = []
+            for q in questions:
+                q["difficulty"] = difficulty  # 명시적으로 태깅
+                if q.get("choices") and q.get("answer"):
+                    q = self._shuffle_choices_and_map_answer(q)
+                processed_questions.append(q)
+
+            # 문제 개수 맞추기
+            processed_questions = processed_questions[:num_questions]
 
             # id를 1부터 다시 부여
-            for idx, q in enumerate(all_questions, 1):
+            for idx, q in enumerate(processed_questions, 1):
                 q["id"] = idx
 
             # 메타데이터 추가
             meta = {
                 "generation_timestamp": datetime.now().isoformat(),
-                "service_version": "1.0.0",
+                "service_version": "2.0.0",
                 "source_file": document_data.get("filename"),
                 "file_id": file_id,
                 "overall_difficulty": difficulty_enum.value,
-                "generated_count": len(all_questions),
+                "generated_count": len(processed_questions),
                 "quality_metrics": {
-                    "difficulty_consistency": self._calculate_difficulty_consistency(all_questions),
-                    "question_uniqueness": self._calculate_question_uniqueness(all_questions),
-                    "example_coverage": self._calculate_example_coverage(all_questions)
+                    "difficulty_consistency": self._calculate_difficulty_consistency(processed_questions),
+                    "question_uniqueness": self._calculate_question_uniqueness(processed_questions),
+                    "example_coverage": self._calculate_example_coverage(processed_questions)
                 }
             }
 
-            logger.info(f"🎉 SUCCESS 문제 생성 완료: {len(all_questions)}개 (분포: {dist})")
+            logger.info(f"🎉 SUCCESS 문제 생성 완료: {len(processed_questions)}개")
 
             return {
                 "success": True,
-                "questions": all_questions,
+                "questions": processed_questions,
                 "meta": meta,
                 "overall_difficulty": difficulty_enum.value
             }
@@ -161,6 +153,182 @@ class QuizService:
                 "file_id": file_id,
                 "timestamp": datetime.now().isoformat()
             }
+
+    async def _get_document_by_file_id_optimized(self, file_id: str) -> Optional[Dict[str, Any]]:
+        """최적화된 문서 조회 - 캐싱 적용"""
+        try:
+            # 🔥 캐시 확인
+            cache_key = f"doc_{file_id}"
+            if cache_key in self._document_cache:
+                cached_doc = self._document_cache[cache_key]
+                if datetime.now().timestamp() - cached_doc.get("timestamp", 0) < self._cache_ttl:
+                    logger.info(f"CACHE_HIT 문서 캐시 사용: {file_id}")
+                    return cached_doc["data"]
+                else:
+                    del self._document_cache[cache_key]
+
+            logger.info(f"STEP_VECTOR 파일 ID로 문서 조회: {file_id}")
+
+            # 벡터 DB 초기화 (한 번만)
+            if not self.vector_service.vector_db:
+                await self.vector_service.initialize_vector_db()
+
+            # 🔥 최적화: 직접 file_id로 조회 (가능한 경우)
+            try:
+                # 벡터 DB에서 file_id로 직접 조회 시도
+                if (self.vector_service.vector_db and
+                    hasattr(self.vector_service.vector_db, 'search_by_metadata')):
+                    file_docs = await self.vector_service.vector_db.search_by_metadata(
+                        {"file_id": file_id}, limit=1000
+                    )
+                else:
+                    # 폴백: 기존 방식 사용
+                    raise NotImplementedError("search_by_metadata 메서드가 지원되지 않습니다")
+
+                if file_docs:
+                    # 청크들을 하나의 문서로 합치기
+                    combined_content = ""
+                    file_chunks = []
+
+                    for doc in file_docs:
+                        combined_content += doc.content + "\n\n"
+                        file_chunks.append({
+                            "id": doc.id,
+                            "content": doc.content,
+                            "metadata": doc.metadata
+                        })
+
+                    # chunk_index 순서로 정렬
+                    file_chunks.sort(key=lambda x: x["metadata"].get("chunk_index", 0))
+
+                    # 문서 정보 구성
+                    document = {
+                        "file_id": file_id,
+                        "filename": file_chunks[0]["metadata"].get("filename", "unknown"),
+                        "content": combined_content.strip(),
+                        "language": file_chunks[0]["metadata"].get("language", "unknown"),
+                        "file_size": file_chunks[0]["metadata"].get("file_size", 0),
+                        "total_chunks": len(file_chunks),
+                        "pdf_loader": file_chunks[0]["metadata"].get("pdf_loader", "unknown"),
+                        "upload_timestamp": file_chunks[0]["metadata"].get("upload_timestamp"),
+                        "domain": self._identify_domain(file_chunks[0]["metadata"].get("filename", ""))
+                    }
+
+                    # 🔥 캐시에 저장
+                    self._document_cache[cache_key] = {
+                        "data": document,
+                        "timestamp": datetime.now().timestamp()
+                    }
+
+                    logger.info(f"SUCCESS 문서 조회 (최적화): {document['filename']} ({len(combined_content)}자)")
+                    return document
+
+            except Exception as e:
+                logger.warning(f"WARNING 최적화된 조회 실패, 기존 방식 사용: {e}")
+
+            # 🔥 폴백: 기존 방식 (캐시된 파일 목록 사용)
+            files_result = await self._get_cached_file_list()
+
+            if not files_result["success"]:
+                logger.error("ERROR 파일 목록 조회 실패")
+                return None
+
+            # 지정된 file_id에 해당하는 파일 찾기
+            target_file = None
+            for file_info in files_result["files"]:
+                if file_info["file_id"] == file_id:
+                    target_file = file_info
+                    break
+
+            if not target_file:
+                logger.warning(f"WARNING 지정된 파일 ID를 찾을 수 없음: {file_id}")
+                return None
+
+            # 해당 파일의 문서 청크들 조회
+            file_chunks = await self._get_file_chunks_optimized(file_id)
+
+            # 청크들을 하나의 문서로 합치기
+            combined_content = ""
+            for chunk in file_chunks:
+                combined_content += chunk.get("content", "") + "\n\n"
+
+            # 문서 정보 구성
+            document = {
+                "file_id": file_id,
+                "filename": target_file["filename"],
+                "content": combined_content.strip(),
+                "language": target_file.get("language", "unknown"),
+                "file_size": target_file.get("file_size", 0),
+                "total_chunks": target_file.get("total_chunks", 0),
+                "pdf_loader": target_file.get("pdf_loader", "unknown"),
+                "upload_timestamp": target_file.get("upload_timestamp"),
+                "domain": self._identify_domain(target_file["filename"])
+            }
+
+            # 🔥 캐시에 저장
+            self._document_cache[cache_key] = {
+                "data": document,
+                "timestamp": datetime.now().timestamp()
+            }
+
+            logger.info(f"SUCCESS 문서 조회: {target_file['filename']} ({len(combined_content)}자)")
+            return document
+
+        except Exception as e:
+            logger.error(f"ERROR 문서 조회 실패: {e}")
+            return None
+
+    async def _get_cached_file_list(self) -> Dict[str, Any]:
+        """캐시된 파일 목록 조회"""
+        current_time = datetime.now().timestamp()
+
+        # 캐시가 유효한지 확인
+        if (self._file_list_cache and self._cache_timestamp and
+            current_time - self._cache_timestamp < self._cache_ttl):
+            logger.info("CACHE_HIT 파일 목록 캐시 사용")
+            return self._file_list_cache
+
+        # 캐시 갱신
+        logger.info("CACHE_MISS 파일 목록 캐시 갱신")
+        files_result = await self.vector_service.get_all_documents(1000)
+
+        if files_result["success"]:
+            self._file_list_cache = files_result
+            self._cache_timestamp = current_time
+
+        return files_result
+
+    async def _get_file_chunks_optimized(self, file_id: str) -> List[Dict[str, Any]]:
+        """최적화된 파일 청크 조회"""
+        try:
+            # 🔥 최적화: file_id로 직접 조회
+            if hasattr(self.vector_service.vector_db, 'search_by_metadata'):
+                file_docs = await self.vector_service.vector_db.search_by_metadata(
+                    {"file_id": file_id}, limit=1000
+                )
+            else:
+                # 폴백: 기존 방식 사용
+                all_documents = await self.vector_service.vector_db.get_all_documents(10000)
+                file_docs = [doc for doc in all_documents if doc.metadata.get("file_id") == file_id]
+
+            file_chunks = []
+            for doc in file_docs:
+                chunk_data = {
+                    "id": doc.id,
+                    "content": doc.content,
+                    "metadata": doc.metadata
+                }
+                file_chunks.append(chunk_data)
+
+            # chunk_index 순서로 정렬
+            file_chunks.sort(key=lambda x: x["metadata"].get("chunk_index", 0))
+
+            logger.info(f"SUCCESS 파일 청크 조회 (최적화): {file_id} -> {len(file_chunks)}개 청크")
+            return file_chunks
+
+        except Exception as e:
+            logger.error(f"ERROR 파일 청크 조회 실패: {e}")
+            return []
 
     def _calculate_difficulty_consistency(self, questions: List[Dict[str, Any]]) -> float:
         """문제 난이도 일관성 계산"""
@@ -205,98 +373,13 @@ class QuizService:
 
         return example_count / len(questions)
 
-    async def _get_document_by_file_id(self, file_id: str) -> Optional[Dict[str, Any]]:
-        """단일 파일 ID로 문서 내용 조회"""
-        try:
-            logger.info(f"STEP_VECTOR 파일 ID로 문서 조회: {file_id}")
-
-            # 벡터 DB 초기화
-            if not self.vector_service.vector_db:
-                await self.vector_service.initialize_vector_db()
-
-            # 모든 문서 조회 (충분히 큰 수)
-            all_docs_result = await self.vector_service.get_all_documents(10000)
-
-            if not all_docs_result["success"]:
-                logger.error("ERROR 전체 문서 조회 실패")
-                return None
-
-            # 지정된 file_id에 해당하는 파일 찾기
-            target_file = None
-            for file_info in all_docs_result["files"]:
-                if file_info["file_id"] == file_id:
-                    target_file = file_info
-                    break
-
-            if not target_file:
-                logger.warning(f"WARNING 지정된 파일 ID를 찾을 수 없음: {file_id}")
-                return None
-
-            # 해당 파일의 실제 문서 내용 조회
-            filename = target_file["filename"]
-
-            # 해당 파일의 문서 청크들 조회
-            file_chunks = await self._get_file_chunks(file_id)
-
-            # 청크들을 하나의 문서로 합치기
-            combined_content = ""
-            for chunk in file_chunks:
-                combined_content += chunk.get("content", "") + "\n\n"
-
-            # 문서 정보 구성
-            document = {
-                "file_id": file_id,
-                "filename": filename,
-                "content": combined_content.strip(),
-                "language": target_file.get("language", "unknown"),
-                "file_size": target_file.get("file_size", 0),
-                "total_chunks": target_file.get("total_chunks", 0),
-                "pdf_loader": target_file.get("pdf_loader", "unknown"),
-                "upload_timestamp": target_file.get("upload_timestamp"),
-                "domain": self._identify_domain(filename)
-            }
-
-            logger.info(f"SUCCESS 문서 조회: {filename} ({len(combined_content)}자)")
-            return document
-
-        except Exception as e:
-            logger.error(f"ERROR 문서 조회 실패: {e}")
-            return None
-
-    async def _get_file_chunks(self, file_id: str) -> List[Dict[str, Any]]:
-        """특정 파일의 모든 청크 조회"""
-        try:
-            # 벡터 DB에서 해당 file_id를 가진 모든 문서 조회
-            all_documents = await self.vector_service.vector_db.get_all_documents(10000)
-
-            # file_id 기준으로 필터링
-            file_chunks = []
-            for doc in all_documents:
-                if doc.metadata.get("file_id") == file_id:
-                    chunk_data = {
-                        "id": doc.id,
-                        "content": doc.content,
-                        "metadata": doc.metadata
-                    }
-                    file_chunks.append(chunk_data)
-
-            # chunk_index 순서로 정렬 (가능한 경우)
-            file_chunks.sort(key=lambda x: x["metadata"].get("chunk_index", 0))
-
-            logger.info(f"SUCCESS 파일 청크 조회: {file_id} -> {len(file_chunks)}개 청크")
-            return file_chunks
-
-        except Exception as e:
-            logger.error(f"ERROR 파일 청크 조회 실패: {e}")
-            return []
-
     async def get_available_files(self) -> Dict[str, Any]:
-        """문제 생성 가능한 파일 목록 조회"""
+        """문제 생성 가능한 파일 목록 조회 - 캐싱 적용"""
         try:
             logger.info("STEP_FILES 사용 가능한 파일 목록 조회")
 
-            # 벡터 DB에서 파일 목록 조회
-            files_result = await self.vector_service.get_all_documents(1000)
+            # 캐시된 파일 목록 사용
+            files_result = await self._get_cached_file_list()
 
             if not files_result["success"]:
                 return {
@@ -354,3 +437,30 @@ class QuizService:
             return "교육/강의"
         else:
             return "기타"
+
+    def _shuffle_choices_and_map_answer(self, question: Dict[str, Any]) -> Dict[str, Any]:
+        """선택지 섞기 및 정답 매핑"""
+        import random
+
+        if not question.get("choices") or not question.get("answer"):
+            return question
+
+        choices = question["choices"]
+        correct_answer = question["answer"]
+
+        # 선택지와 정답을 함께 섞기
+        choice_answer_pairs = list(zip(choices, [i for i in range(len(choices))]))
+        random.shuffle(choice_answer_pairs)
+
+        # 새로운 선택지와 정답 인덱스
+        new_choices = [pair[0] for pair in choice_answer_pairs]
+        correct_index = None
+        for i, pair in enumerate(choice_answer_pairs):
+            if pair[1] == correct_answer:
+                correct_index = i
+                break
+
+        question["choices"] = new_choices
+        question["answer"] = correct_index if correct_index is not None else correct_answer
+
+        return question

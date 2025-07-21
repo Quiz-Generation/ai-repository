@@ -796,14 +796,12 @@ class QuizGeneratorAgent:
 
     async def generate_quiz(self, request: QuizRequest, documents: List[Dict[str, Any]], use_combined_prompt: bool = False, use_sampling: bool = False) -> Dict[str, Any]:
         """
-        문제 생성 메인 메서드 (문서별 전처리까지 완전 비동기 + 문제 생성 2문제씩 병렬)
-        use_combined_prompt: 무시(항상 분리 방식)
-        use_sampling: True면 샘플링(앞/중간/끝), False면 전체 결합
+        문제 생성 메인 메서드 - 성능 최적화 버전
         """
         import time
         try:
             total_start = time.time()
-            logger.info(f"🚀 문제 생성 AI 에이전트 시작 (문서별 전처리 완전 비동기, 문제 생성 병렬 2문제씩, use_sampling={use_sampling})")
+            logger.info(f"🚀 문제 생성 AI 에이전트 시작 (성능 최적화 버전)")
 
             # 난이도 값 검증
             if not isinstance(request.difficulty, DifficultyLevel):
@@ -829,107 +827,81 @@ class QuizGeneratorAgent:
                         "valid_question_types": [qtype.value for qtype in QuestionType]
                     }
 
+            # 🔥 최적화 1: 간소화된 전처리 (문서 내용만 결합)
             preprocess_start = time.time()
-            logger.info(f"[전처리] 시작 (문서별 완전 비동기, use_sampling={use_sampling})")
+            logger.info(f"[전처리] 시작 (간소화된 버전)")
 
-            async def process_single_doc(doc):
-                filename = doc.get("filename", "Unknown")
+            # 모든 문서 내용을 하나로 결합
+            combined_content = ""
+            for doc in documents:
                 content = doc.get("content", "")
                 if use_sampling:
-                    content = self.smart_truncate(content, 2000)
-                summary_prompt = self.prompt_manager.get_prompt("summary").format(content=content)
-                topic_prompt = self.prompt_manager.get_prompt("topic").format(
-                    content=content,
-                    difficulty=request.difficulty.value,
-                    num_questions=request.num_questions,
-                    question_type=request.question_type.value,
-                    num_topics=request.num_questions + 3
-                )
-                keyword_prompt = self.prompt_manager.get_prompt("keyword").format(
-                    content=content,
-                    difficulty=request.difficulty.value,
-                    question_type=request.question_type.value,
-                    num_keywords=request.num_questions * 3
-                )
-                s_task = self.summary_chain.ainvoke({"prompt": summary_prompt})
-                t_task = self.topic_chain.ainvoke({"prompt": topic_prompt})
-                k_task = self.keyword_chain.ainvoke({"prompt": keyword_prompt})
-                summary_resp, topic_resp, keyword_resp = await asyncio.gather(s_task, t_task, k_task)
-                return {
-                    "summary": summary_resp.content,
-                    "topics": topic_resp.content,
-                    "keywords": keyword_resp.content
-                }
+                    content = self.smart_truncate(content, 1500)  # 더 짧게
+                combined_content += content + "\n\n"
 
-            doc_tasks = [process_single_doc(doc) for doc in documents]
-            doc_results = await asyncio.gather(*doc_tasks)
+            # 🔥 최적화 2: 단일 AI 호출로 요약 생성
+            summary_prompt = f"""
+다음 문서의 핵심 내용을 간단히 요약해주세요 (200자 이내):
 
-            # 결과 합치기
-            summary = "\n".join([str(r.get("summary", "")) for r in doc_results])
-            topics = []
-            for r in doc_results:
-                topics.extend([line.strip().lstrip('- •').strip() for line in r["topics"].split('\n') if line.strip().startswith(('-', '•'))])
-            keywords = []
-            for r in doc_results:
-                keywords.extend([kw.strip() for kw in r["keywords"].split(',') if kw.strip()])
-            logger.info(f"[전처리] 완료 (총 소요 시간: {time.time() - preprocess_start:.2f}초)")
+{combined_content[:3000]}  # 처음 3000자만 사용
+"""
 
-            # 2. 문제 생성: 더 많은 문제를 생성하여 부족한 경우 대비
+            summary_response = await self.summary_chain.ainvoke({"prompt": summary_prompt})
+            summary = summary_response.content
+
+            # 🔥 최적화 3: 간단한 키워드 추출 (AI 호출 없이)
+            keywords = self._extract_simple_keywords(combined_content, request.num_questions * 2)
+
+            logger.info(f"[전처리] 완료 (소요 시간: {time.time() - preprocess_start:.2f}초)")
+
+            # 🔥 최적화 4: 효율적인 문제 생성
             generate_start = time.time()
-            logger.info("[문제 생성] 시작 (더 많은 문제 생성)")
+            logger.info("[문제 생성] 시작 (효율적인 배치 처리)")
 
-            # 요청 수의 1.5배로 생성하여 품질 검사 후 필터링 대비
-            target_questions = int(request.num_questions * 1.5)
-            batch_size = 3  # 배치 크기 증가
+            # 배치 크기 증가 및 정확한 수만 생성
+            batch_size = 5  # 배치 크기 증가
+            target_questions = request.num_questions + 2  # 여유분만 추가
             total_batches = (target_questions + batch_size - 1) // batch_size
 
             async def generate_questions_batch(batch_num):
+                current_batch_size = min(batch_size, target_questions - batch_num * batch_size)
+                if current_batch_size <= 0:
+                    return []
+
                 question_prompt = self.prompt_manager.get_prompt("question").format(
                     summary=summary,
-                    topics="\n".join(f"- {topic}" for topic in topics),
-                    keywords="\n".join(f"- {keyword}" for keyword in keywords),
-                    num_questions=batch_size,
+                    topics="",  # 간소화
+                    keywords="\n".join(f"- {keyword}" for keyword in keywords[:10]),  # 상위 10개만
+                    num_questions=current_batch_size,
                     difficulty=request.difficulty.value,
                     question_type=request.question_type.value
                 )
+
                 response = await self.question_chain.ainvoke({
                     "system_message": "당신은 전문 교육 컨텐츠 개발자입니다.",
                     "prompt": question_prompt
                 })
                 return self._parse_questions(response.content)
 
+            # 🔥 최적화 5: 병렬 처리로 배치 생성
             tasks = [generate_questions_batch(i) for i in range(total_batches)]
             results = await asyncio.gather(*tasks)
             questions = [q for batch in results for q in batch]
 
-            # 품질 검사 후 문제 수가 부족한 경우 추가 생성
-            questions = self._basic_quality_check(questions)
-            if len(questions) < request.num_questions:
-                logger.info(f"문제 수 부족 ({len(questions)}/{request.num_questions}), 추가 생성 시작")
-
-                # 부족한 수의 2배로 추가 생성
-                additional_needed = (request.num_questions - len(questions)) * 2
-                additional_batches = (additional_needed + batch_size - 1) // batch_size
-
-                additional_tasks = [generate_questions_batch(i) for i in range(additional_batches)]
-                additional_results = await asyncio.gather(*additional_tasks)
-                additional_questions = [q for batch in additional_results for q in batch]
-                additional_questions = self._basic_quality_check(additional_questions)
-
-                questions.extend(additional_questions)
-                logger.info(f"추가 생성 완료: 총 {len(questions)}개 문제")
+            # 🔥 최적화 6: 간단한 품질 검사 (한 번만)
+            questions = self._basic_quality_check_fast(questions)
 
             logger.info(f"[문제 생성] 완료 (소요 시간: {time.time() - generate_start:.2f}초)")
 
-            # 3. 후처리: ID 부여 및 최종 정리
+            # 🔥 최적화 7: 간소화된 후처리
             post_start = time.time()
             logger.info("[후처리] 시작")
-            # 품질 검사는 이미 문제 생성 단계에서 완료됨
-            questions = questions[:request.num_questions]  # 요청 수만큼만 반환
+
+            # 요청 수만큼만 반환
+            questions = questions[:request.num_questions]
             for i, question in enumerate(questions, 1):
                 question["id"] = i
-                # 전처리에서 이미 선택지 번호와 correct_answer_number가 처리되었으므로 추가 처리 제거
-                # 다중선택 문제의 경우 전처리에서 이미 올바른 형식으로 처리됨
+
             logger.info(f"[후처리] 완료 (소요 시간: {time.time() - post_start:.2f}초)")
 
             total_end = time.time()
@@ -946,7 +918,7 @@ class QuizGeneratorAgent:
                 },
                 "process_info": {
                     "summary": summary,
-                    "core_topics": topics,
+                    "core_topics": [],  # 간소화
                     "keywords": keywords
                 },
                 "questions": questions,
@@ -967,3 +939,55 @@ class QuizGeneratorAgent:
                     "question_type": request.question_type.value
                 }
             }
+
+    def _extract_simple_keywords(self, content: str, num_keywords: int) -> List[str]:
+        """간단한 키워드 추출 (AI 호출 없이)"""
+        import re
+
+        # 한국어 키워드 추출
+        korean_words = re.findall(r'[가-힣]{2,}', content)
+
+        # 영어 키워드 추출
+        english_words = re.findall(r'\b[a-zA-Z]{3,}\b', content.lower())
+
+        # 빈도수 계산
+        word_freq = {}
+        for word in korean_words + english_words:
+            if len(word) >= 2:
+                word_freq[word] = word_freq.get(word, 0) + 1
+
+        # 상위 키워드 선택
+        sorted_words = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)
+        keywords = [word for word, freq in sorted_words[:num_keywords]]
+
+        return keywords
+
+    def _basic_quality_check_fast(self, questions: List[Dict]) -> List[Dict]:
+        """빠른 품질 검사 (간소화된 버전)"""
+        if not questions:
+            return []
+
+        valid_questions = []
+        seen_questions = set()
+
+        for question in questions:
+            # 기본 필수 필드 확인
+            if not question.get("question") or not question.get("answer"):
+                continue
+
+            # 중복 제거 (간단한 방식)
+            question_text = question["question"].lower().strip()
+            if question_text in seen_questions:
+                continue
+            seen_questions.add(question_text)
+
+            # 선택지가 있는 경우 기본 검증
+            if question.get("choices"):
+                if len(question["choices"]) < 2:
+                    continue
+                if question.get("answer") is None:
+                    continue
+
+            valid_questions.append(question)
+
+        return valid_questions
