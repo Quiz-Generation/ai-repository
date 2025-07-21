@@ -26,7 +26,8 @@ class QuizPromptManager:
             "topic": self._get_topic_prompt(),
             "keyword": self._get_keyword_prompt(),
             "question": self._get_question_prompt(),
-            "validation": self._get_validation_prompt()
+            "validation": self._get_validation_prompt(),
+            "combined_preprocessing": self._get_combined_preprocessing_prompt()
         }
 
     def get_prompt(self, prompt_type: str) -> str:
@@ -233,6 +234,74 @@ class QuizPromptManager:
 
 정확히 {num_questions}개의 고품질 문제를 생성해주세요.
 """
+
+    def _get_combined_preprocessing_prompt(self) -> str:
+        """통합 전처리 프롬프트"""
+        return """
+당신은 전문 교육 컨텐츠 분석가입니다. 주어진 문서를 분석하여 요약, 핵심 주제, 키워드를 한 번에 추출해주세요.
+
+📋 **분석 대상 문서:**
+{content}
+
+🎯 **분석 조건:**
+- 난이도: {difficulty}
+- 문제 유형: {question_type}
+- 목표 문제 수: {num_questions}개
+
+**분석 지침:**
+1. **요약**: 문서의 핵심 내용을 300자 이내로 명확하게 요약
+2. **핵심 주제**: 교육적 가치가 높은 5개의 핵심 주제 추출
+3. **키워드**: 문제 출제에 직접 활용 가능한 10개의 키워드 추출
+
+**출력 형식 (정확히 지켜주세요):**
+
+요약:
+[문서의 핵심 내용을 300자 이내로 요약]
+
+핵심 주제:
+- [주제1]
+- [주제2]
+- [주제3]
+- [주제4]
+- [주제5]
+
+키워드:
+[키워드1], [키워드2], [키워드3], [키워드4], [키워드5], [키워드6], [키워드7], [키워드8], [키워드9], [키워드10]
+
+**중요**: 위 형식을 정확히 지켜주세요. 각 섹션은 반드시 "요약:", "핵심 주제:", "키워드:"로 시작해야 합니다.
+"""
+
+    def parse_combined_response(self, response_text: str) -> Dict[str, str]:
+        """통합 응답 파싱"""
+        try:
+            # 요약 추출
+            summary_start = response_text.find("요약:") + 3
+            summary_end = response_text.find("핵심 주제:")
+            summary = response_text[summary_start:summary_end].strip()
+
+            # 주제 추출
+            topics_start = response_text.find("핵심 주제:") + 6
+            topics_end = response_text.find("키워드:")
+            topics_text = response_text[topics_start:topics_end].strip()
+            topics = [line.strip()[2:] for line in topics_text.split('\n') if line.strip().startswith('-')]
+
+            # 키워드 추출
+            keywords_start = response_text.find("키워드:") + 4
+            keywords_text = response_text[keywords_start:].strip()
+            keywords = [kw.strip() for kw in keywords_text.split(',') if kw.strip()]
+
+            return {
+                "summary": summary,
+                "topics": "\n".join([f"- {topic}" for topic in topics]),
+                "keywords": ", ".join(keywords)
+            }
+        except Exception as e:
+            # 파싱 실패 시 기본값 반환
+            return {
+                "summary": "문서 분석 중 오류가 발생했습니다.",
+                "topics": "- 문서 분석",
+                "keywords": "분석, 문서, 내용"
+            }
 
     def _get_validation_prompt(self) -> str:
         return """

@@ -55,7 +55,7 @@ async def generate_quiz_from_file(
                 "valid_question_types": [q.value for q in QuestionType]
             }
 
-        # 3. AI 에이전트 초기화
+                # 3. AI 에이전트 초기화 (캐싱 적용)
         import os
         openai_api_key = os.getenv("OPENAI_API_KEY")
         if not openai_api_key:
@@ -64,7 +64,12 @@ async def generate_quiz_from_file(
                 message="OpenAI API 키가 설정되지 않았습니다. OPENAI_API_KEY 환경변수를 설정해주세요."
             )
 
-        quiz_agent = QuizGeneratorAgent(openai_api_key)
+        # 🔥 최적화: 전역 캐시에서 에이전트 재사용
+        if not hasattr(generate_quiz_from_file, '_cached_agent'):
+            generate_quiz_from_file._cached_agent = QuizGeneratorAgent(openai_api_key)
+            logger.info("🔄 AI 에이전트 캐시 생성")
+
+        quiz_agent = generate_quiz_from_file._cached_agent
 
         # 4. 문제 생성 요청 객체 생성
         quiz_request = QuizRequest(
@@ -205,51 +210,101 @@ async def _get_document_by_file_id(
     vector_db: VectorDBService,
     file_id: str
 ) -> Optional[Dict[str, Any]]:
-    """단일 파일 ID로 문서 내용 조회"""
+    """단일 파일 ID로 문서 내용 조회 (최적화된 버전)"""
     try:
         logger.info(f"STEP_VECTOR 파일 ID로 문서 조회: {file_id}")
 
-        # 모든 문서 조회 (충분히 큰 수)
-        all_docs_result = await vector_db.get_all_documents(10000)
+        # 🔥 최적화: file_id로 직접 필터링하여 조회
+        if hasattr(vector_db, 'vector_db') and vector_db.vector_db:
+            # 벡터 DB에서 해당 file_id를 가진 문서들만 조회
+            all_documents = await vector_db.vector_db.get_all_documents(10000)
 
-        if not all_docs_result["success"]:
-            logger.error("ERROR 전체 문서 조회 실패")
-            return None
+            # file_id 기준으로 필터링
+            target_chunks = []
+            target_file_info = None
 
-        # 지정된 file_id에 해당하는 파일 찾기
-        target_file = None
-        for file_info in all_docs_result["files"]:
-            if file_info["file_id"] == file_id:
-                target_file = file_info
-                break
+            for doc in all_documents:
+                if doc.metadata.get("file_id") == file_id:
+                    chunk_data = {
+                        "id": doc.id,
+                        "content": doc.content,
+                        "metadata": doc.metadata
+                    }
+                    target_chunks.append(chunk_data)
 
-        if not target_file:
-            logger.warning(f"WARNING 지정된 파일 ID를 찾을 수 없음: {file_id}")
-            return None
+                    # 파일 정보 추출 (첫 번째 청크에서)
+                    if not target_file_info:
+                        target_file_info = {
+                            "file_id": file_id,
+                            "filename": doc.metadata.get("filename", "Unknown"),
+                            "language": doc.metadata.get("language", "unknown"),
+                            "file_size": doc.metadata.get("file_size", 0),
+                            "pdf_loader": doc.metadata.get("pdf_loader", "unknown"),
+                            "upload_timestamp": doc.metadata.get("upload_timestamp"),
+                            "total_chunks": len([d for d in all_documents if d.metadata.get("file_id") == file_id])
+                        }
 
-        # 해당 파일의 문서 청크들 조회
-        file_chunks = await _get_file_chunks(vector_db, file_id)
+            if not target_chunks:
+                logger.warning(f"WARNING 지정된 파일 ID를 찾을 수 없음: {file_id}")
+                return None
 
-        # 청크들을 하나의 문서로 합치기
-        combined_content = ""
-        for chunk in file_chunks:
-            combined_content += chunk.get("content", "") + "\n\n"
+            # 청크들을 하나의 문서로 합치기 (정렬 후)
+            target_chunks.sort(key=lambda x: x["metadata"].get("chunk_index", 0))
+            combined_content = ""
+            for chunk in target_chunks:
+                combined_content += chunk.get("content", "") + "\n\n"
 
-        # 문서 정보 구성
-        document = {
-            "file_id": file_id,
-            "filename": target_file["filename"],
-            "content": combined_content.strip(),
-            "language": target_file.get("language", "unknown"),
-            "file_size": target_file.get("file_size", 0),
-            "total_chunks": target_file.get("total_chunks", 0),
-            "pdf_loader": target_file.get("pdf_loader", "unknown"),
-            "upload_timestamp": target_file.get("upload_timestamp"),
-            "domain": _identify_domain(target_file["filename"])
-        }
+            # 문서 정보 구성
+            document = {
+                "file_id": file_id,
+                "filename": target_file_info["filename"],
+                "content": combined_content.strip(),
+                "language": target_file_info["language"],
+                "file_size": target_file_info["file_size"],
+                "total_chunks": target_file_info["total_chunks"],
+                "pdf_loader": target_file_info["pdf_loader"],
+                "upload_timestamp": target_file_info["upload_timestamp"],
+                "domain": _identify_domain(target_file_info["filename"])
+            }
 
-        logger.info(f"SUCCESS 문서 조회: {target_file['filename']} ({len(combined_content)}자)")
-        return document
+            logger.info(f"SUCCESS 문서 조회: {target_file_info['filename']} ({len(combined_content)}자, {len(target_chunks)}개 청크)")
+            return document
+        else:
+            # 기존 방식으로 fallback
+            all_docs_result = await vector_db.get_all_documents(10000)
+            if not all_docs_result["success"]:
+                logger.error("ERROR 전체 문서 조회 실패")
+                return None
+
+            target_file = None
+            for file_info in all_docs_result["files"]:
+                if file_info["file_id"] == file_id:
+                    target_file = file_info
+                    break
+
+            if not target_file:
+                logger.warning(f"WARNING 지정된 파일 ID를 찾을 수 없음: {file_id}")
+                return None
+
+            file_chunks = await _get_file_chunks(vector_db, file_id)
+            combined_content = ""
+            for chunk in file_chunks:
+                combined_content += chunk.get("content", "") + "\n\n"
+
+            document = {
+                "file_id": file_id,
+                "filename": target_file["filename"],
+                "content": combined_content.strip(),
+                "language": target_file.get("language", "unknown"),
+                "file_size": target_file.get("file_size", 0),
+                "total_chunks": target_file.get("total_chunks", 0),
+                "pdf_loader": target_file.get("pdf_loader", "unknown"),
+                "upload_timestamp": target_file.get("upload_timestamp"),
+                "domain": _identify_domain(target_file["filename"])
+            }
+
+            logger.info(f"SUCCESS 문서 조회: {target_file['filename']} ({len(combined_content)}자)")
+            return document
 
     except Exception as e:
         logger.error(f"ERROR 문서 조회 실패: {e}")

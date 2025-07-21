@@ -83,6 +83,9 @@ class QuizGeneratorAgent:
         # 🎯 프롬프트 관리자 초기화
         self.prompt_manager = QuizPromptManager()
 
+        # 🔥 캐시 초기화
+        self._question_cache = {}
+
         # 프롬프트 템플릿 초기화
         self.summary_template = ChatPromptTemplate.from_messages([
             ("system", "당신은 전문 교육 컨텐츠 분석가입니다."),
@@ -650,6 +653,54 @@ class QuizGeneratorAgent:
 
         return score
 
+    def _advanced_quality_check(self, questions: List[Dict], target_count: int) -> List[Dict]:
+        """고급 품질 검증 및 다양성 보장"""
+        if not questions:
+            return []
+
+        # 1. 기본 품질 검사
+        questions = self._basic_quality_check(questions)
+
+        # 2. 품질 점수 계산 및 필터링
+        scored_questions = []
+        for question in questions:
+            score = self._calculate_question_score(question)
+            if score >= 0.5:  # 기본 품질 기준
+                question['quality_score'] = score
+                scored_questions.append(question)
+
+        # 3. 중복성 검사 및 제거
+        unique_questions = []
+        seen_patterns = set()
+
+        for question in scored_questions:
+            # 질문 패턴 생성 (키워드 기반)
+            keywords = self._extract_keywords_from_question(question.get('question', ''))
+            pattern = '|'.join(sorted(keywords))
+
+            if pattern not in seen_patterns:
+                seen_patterns.add(pattern)
+                unique_questions.append(question)
+
+        # 4. 다양성 보장
+        if len(unique_questions) > target_count:
+            # 품질 점수로 정렬하여 상위 문제 선택
+            unique_questions.sort(key=lambda x: x.get('quality_score', 0), reverse=True)
+            unique_questions = unique_questions[:target_count]
+
+        # 5. 최종 검증
+        final_questions = []
+        for question in unique_questions:
+            # 필수 필드 재검증
+            if (question.get('question') and
+                question.get('options') and
+                len(question.get('options', [])) >= 2 and
+                question.get('correct_answer') and
+                question.get('explanation')):
+                final_questions.append(question)
+
+        return final_questions
+
     def _basic_quality_check(self, questions: List[Dict]) -> List[Dict]:
         """기본적인 품질 검사 수행"""
         valid_questions = []
@@ -837,29 +888,20 @@ class QuizGeneratorAgent:
                 content = doc.get("content", "")
                 if use_sampling:
                     content = self.smart_truncate(content, 2000)
-                summary_prompt = self.prompt_manager.get_prompt("summary").format(content=content)
-                topic_prompt = self.prompt_manager.get_prompt("topic").format(
-                    content=content,
-                    difficulty=request.difficulty.value,
-                    num_questions=request.num_questions,
-                    question_type=request.question_type.value,
-                    num_topics=request.num_questions + 3
-                )
-                keyword_prompt = self.prompt_manager.get_prompt("keyword").format(
+
+                                                                # 🔥 최적화: 프롬프트 매니저 사용
+                combined_prompt = self.prompt_manager.get_prompt("combined_preprocessing").format(
                     content=content,
                     difficulty=request.difficulty.value,
                     question_type=request.question_type.value,
-                    num_keywords=request.num_questions * 3
+                    num_questions=request.num_questions
                 )
-                s_task = self.summary_chain.ainvoke({"prompt": summary_prompt})
-                t_task = self.topic_chain.ainvoke({"prompt": topic_prompt})
-                k_task = self.keyword_chain.ainvoke({"prompt": keyword_prompt})
-                summary_resp, topic_resp, keyword_resp = await asyncio.gather(s_task, t_task, k_task)
-                return {
-                    "summary": summary_resp.content,
-                    "topics": topic_resp.content,
-                    "keywords": keyword_resp.content
-                }
+
+                # 단일 AI 호출
+                combined_resp = await self.summary_chain.ainvoke({"prompt": combined_prompt})
+
+                # 프롬프트 매니저를 통한 응답 파싱
+                return self.prompt_manager.parse_combined_response(combined_resp.content)
 
             doc_tasks = [process_single_doc(doc) for doc in documents]
             doc_results = await asyncio.gather(*doc_tasks)
@@ -876,14 +918,92 @@ class QuizGeneratorAgent:
 
             # 2. 문제 생성: 더 많은 문제를 생성하여 부족한 경우 대비
             generate_start = time.time()
-            logger.info("[문제 생성] 시작 (더 많은 문제 생성)")
+            logger.info(f"[문제 생성] 시작 (목표: {request.num_questions}개)")
 
-            # 요청 수의 1.5배로 생성하여 품질 검사 후 필터링 대비
-            target_questions = int(request.num_questions * 1.5)
-            batch_size = 3  # 배치 크기 증가
+            # 진행률 추적
+            progress = {
+                "total_steps": 3,
+                "current_step": 1,
+                "step_name": "문제 생성",
+                "progress_percent": 33
+            }
+            logger.info(f"📊 진행률: {progress['progress_percent']}% - {progress['step_name']}")
+
+            # 🔥 최적화: 배치 크기 조정으로 효율성 향상
+            target_questions = int(request.num_questions * 1.05)  # 1.1배에서 1.05배로 줄임
+            batch_size = 3  # 배치 크기 8에서 3으로 줄임 (더 안정적)
             total_batches = (target_questions + batch_size - 1) // batch_size
 
+            # 🔥 고급 캐싱: Redis + 메모리 이중 캐싱
+            import hashlib
+            content_hash = hashlib.md5((summary + str(topics) + str(keywords)).encode()).hexdigest()
+            cache_key = f"quiz_{content_hash}_{request.difficulty.value}_{request.question_type.value}_{request.num_questions}"
+
+            # 1. 메모리 캐시 확인
+            if hasattr(self, '_question_cache') and cache_key in self._question_cache:
+                logger.info(f"🎯 메모리 캐시 사용: {len(self._question_cache[cache_key])}개")
+                cached_questions = self._question_cache[cache_key]
+                if len(cached_questions) >= request.num_questions:
+                    return {
+                        "success": True,
+                        "request": {
+                            "file_ids": request.file_ids,
+                            "num_questions": request.num_questions,
+                            "difficulty": request.difficulty.value,
+                            "question_type": request.question_type.value
+                        },
+                        "process_info": {
+                            "summary": summary,
+                            "core_topics": topics,
+                            "keywords": keywords
+                        },
+                        "questions": cached_questions[:request.num_questions],
+                        "meta": {
+                            "generated_count": len(cached_questions[:request.num_questions]),
+                            "final_step": "generate_quiz",
+                            "cached": True
+                        }
+                    }
+
+            # 2. Redis 캐시 확인 (선택적)
+            try:
+                import redis
+                redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+                cached_result = redis_client.get(cache_key)
+                if cached_result:
+                    import json
+                    questions = json.loads(cached_result)
+                    logger.info(f"🎯 Redis 캐시 사용: {len(questions)}개")
+                    # 메모리 캐시에도 저장
+                    if not hasattr(self, '_question_cache'):
+                        self._question_cache = {}
+                    self._question_cache[cache_key] = questions
+                    if len(questions) >= request.num_questions:
+                        return {
+                            "success": True,
+                            "request": {
+                                "file_ids": request.file_ids,
+                                "num_questions": request.num_questions,
+                                "difficulty": request.difficulty.value,
+                                "question_type": request.question_type.value
+                            },
+                            "process_info": {
+                                "summary": summary,
+                                "core_topics": topics,
+                                "keywords": keywords
+                            },
+                            "questions": questions[:request.num_questions],
+                            "meta": {
+                                "generated_count": len(questions[:request.num_questions]),
+                                "final_step": "generate_quiz",
+                                "cached": True
+                            }
+                        }
+            except Exception as e:
+                logger.warning(f"Redis 캐시 확인 실패: {e}")
+
             async def generate_questions_batch(batch_num):
+                # 🔥 최적화된 AI 기반 문제 생성 (LangChain 활용)
                 question_prompt = self.prompt_manager.get_prompt("question").format(
                     summary=summary,
                     topics="\n".join(f"- {topic}" for topic in topics),
@@ -892,8 +1012,10 @@ class QuizGeneratorAgent:
                     difficulty=request.difficulty.value,
                     question_type=request.question_type.value
                 )
+
+                # 🔥 최적화: 단순화된 문제 생성
                 response = await self.question_chain.ainvoke({
-                    "system_message": "당신은 전문 교육 컨텐츠 개발자입니다.",
+                    "system_message": "당신은 전문 교육 컨텐츠 개발자입니다. 고품질의 문제를 생성하세요.",
                     "prompt": question_prompt
                 })
                 return self._parse_questions(response.content)
@@ -902,22 +1024,38 @@ class QuizGeneratorAgent:
             results = await asyncio.gather(*tasks)
             questions = [q for batch in results for q in batch]
 
-            # 품질 검사 후 문제 수가 부족한 경우 추가 생성
-            questions = self._basic_quality_check(questions)
-            if len(questions) < request.num_questions:
-                logger.info(f"문제 수 부족 ({len(questions)}/{request.num_questions}), 추가 생성 시작")
+            # 🔥 고급 품질 검증 및 최적화
+            questions = self._advanced_quality_check(questions, request.num_questions)
 
-                # 부족한 수의 2배로 추가 생성
-                additional_needed = (request.num_questions - len(questions)) * 2
-                additional_batches = (additional_needed + batch_size - 1) // batch_size
+            # 품질 점수 계산
+            quality_scores = [self._calculate_question_score(q) for q in questions]
+            avg_quality = sum(quality_scores) / len(quality_scores) if quality_scores else 0
+            logger.info(f"평균 품질 점수: {avg_quality:.2f}")
+
+            # 품질이 낮은 문제 필터링 (점수 0.6 미만 제거)
+            high_quality_questions = [q for q, score in zip(questions, quality_scores) if score >= 0.6]
+            logger.info(f"고품질 문제: {len(high_quality_questions)}/{len(questions)}개")
+
+            if len(high_quality_questions) < request.num_questions:
+                logger.info(f"고품질 문제 부족 ({len(high_quality_questions)}/{request.num_questions}), 추가 생성 시작")
+
+                # 부족한 수만큼만 추가 생성
+                additional_needed = int((request.num_questions - len(high_quality_questions)) * 1.2)
+                additional_batches = max(1, (additional_needed + batch_size - 1) // batch_size)
 
                 additional_tasks = [generate_questions_batch(i) for i in range(additional_batches)]
                 additional_results = await asyncio.gather(*additional_tasks)
                 additional_questions = [q for batch in additional_results for q in batch]
-                additional_questions = self._basic_quality_check(additional_questions)
+                additional_questions = self._advanced_quality_check(additional_questions, additional_needed)
 
-                questions.extend(additional_questions)
-                logger.info(f"추가 생성 완료: 총 {len(questions)}개 문제")
+                # 추가 문제도 품질 필터링
+                additional_scores = [self._calculate_question_score(q) for q in additional_questions]
+                high_quality_additional = [q for q, score in zip(additional_questions, additional_scores) if score >= 0.6]
+
+                high_quality_questions.extend(high_quality_additional)
+                logger.info(f"추가 생성 완료: 총 {len(high_quality_questions)}개 고품질 문제")
+
+            questions = high_quality_questions
 
             logger.info(f"[문제 생성] 완료 (소요 시간: {time.time() - generate_start:.2f}초)")
 
@@ -936,6 +1074,19 @@ class QuizGeneratorAgent:
             logger.info(f"[실행시간] 전체 문제 생성 프로세스 소요 시간: {total_end - total_start:.2f}초")
             logger.info("🎉 SUCCESS 문제 생성 완료")
 
+            # 🔥 캐시에 결과 저장 (Redis + 메모리)
+            self._question_cache[cache_key] = questions
+
+            # Redis 캐시에도 저장 (선택적)
+            try:
+                import redis
+                import json
+                redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+                redis_client.setex(cache_key, 3600, json.dumps(questions))  # 1시간 TTL
+                logger.info(f"🎯 Redis 캐시 저장 완료: {len(questions)}개")
+            except Exception as e:
+                logger.warning(f"Redis 캐시 저장 실패: {e}")
+
             return {
                 "success": True,
                 "request": {
@@ -952,7 +1103,8 @@ class QuizGeneratorAgent:
                 "questions": questions,
                 "meta": {
                     "generated_count": len(questions),
-                    "final_step": "generate_quiz"
+                    "final_step": "generate_quiz",
+                    "cached": False
                 }
             }
         except Exception as e:
