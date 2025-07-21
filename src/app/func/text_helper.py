@@ -4,7 +4,7 @@
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from ..models.document_model import DocumentChunk
+from ..models.document import DocumentChunk
 from ..core.config import settings
 
 logger = logging.getLogger(__name__)

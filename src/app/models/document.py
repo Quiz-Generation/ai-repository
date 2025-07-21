@@ -42,3 +42,4 @@ class DocumentChunk:
     def __post_init__(self):
         if not self.id:
             self.id = f"{self.document_id}_chunk_{self.chunk_index}"
+
