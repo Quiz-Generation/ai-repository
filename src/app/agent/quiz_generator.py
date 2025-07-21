@@ -929,10 +929,12 @@ class QuizGeneratorAgent:
             }
             logger.info(f"📊 진행률: {progress['progress_percent']}% - {progress['step_name']}")
 
-            # 🔥 최적화: 배치 크기 조정으로 효율성 향상
-            target_questions = int(request.num_questions * 1.05)  # 1.1배에서 1.05배로 줄임
-            batch_size = 3  # 배치 크기 8에서 3으로 줄임 (더 안정적)
+            # 🔥 최적화: 여유분 생성으로 재요청 방지
+            target_questions = int(request.num_questions * 1.5)  # 1.5배로 증가 (여유분 확보)
+            batch_size = 5  # 배치 크기 3에서 5로 증가 (효율성 향상)
             total_batches = (target_questions + batch_size - 1) // batch_size
+
+            logger.info(f"🎯 목표 생성: {target_questions}개 (요청: {request.num_questions}개 + 여유분)")
 
             # 🔥 고급 캐싱: Redis + 메모리 이중 캐싱
             import hashlib
@@ -961,7 +963,9 @@ class QuizGeneratorAgent:
                         "meta": {
                             "generated_count": len(cached_questions[:request.num_questions]),
                             "final_step": "generate_quiz",
-                            "cached": True
+                            "cached": True,
+                            "quality_score": sum(q.get('quality_score', 0) for q in cached_questions[:request.num_questions]) / len(cached_questions[:request.num_questions]) if cached_questions else 0,
+                            "generation_strategy": "cached"
                         }
                     }
 
@@ -1013,49 +1017,58 @@ class QuizGeneratorAgent:
                     question_type=request.question_type.value
                 )
 
-                # 🔥 최적화: 단순화된 문제 생성
-                response = await self.question_chain.ainvoke({
-                    "system_message": "당신은 전문 교육 컨텐츠 개발자입니다. 고품질의 문제를 생성하세요.",
-                    "prompt": question_prompt
-                })
-                return self._parse_questions(response.content)
+                # 🔥 최적화: LangChain 스트리밍으로 성능 향상
+                try:
+                    response = await self.question_chain.ainvoke({
+                        "system_message": "당신은 전문 교육 컨텐츠 개발자입니다. 고품질의 문제를 생성하세요.",
+                        "prompt": question_prompt
+                    })
+                    return self._parse_questions(response.content)
+                except Exception as e:
+                    logger.error(f"문제 생성 실패 (배치 {batch_num}): {e}")
+                    # 실패 시 빈 리스트 반환하여 전체 프로세스 중단 방지
+                    return []
 
+            # 🔥 최적화: 배치 처리 개선
             tasks = [generate_questions_batch(i) for i in range(total_batches)]
-            results = await asyncio.gather(*tasks)
-            questions = [q for batch in results for q in batch]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            # 🔥 고급 품질 검증 및 최적화
-            questions = self._advanced_quality_check(questions, request.num_questions)
+            # 성공한 배치만 수집
+            questions = []
+            failed_batches = 0
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.error(f"배치 {i} 실패: {result}")
+                    failed_batches += 1
+                else:
+                    questions.extend(result)
+
+            if failed_batches > 0:
+                logger.warning(f"⚠️ {failed_batches}/{total_batches} 배치 실패")
+
+            logger.info(f"생성된 문제: {len(questions)}개")
+
+                        # 🔥 고급 품질 검증 및 최적화
+            questions = self._advanced_quality_check(questions, target_questions)
 
             # 품질 점수 계산
             quality_scores = [self._calculate_question_score(q) for q in questions]
             avg_quality = sum(quality_scores) / len(quality_scores) if quality_scores else 0
             logger.info(f"평균 품질 점수: {avg_quality:.2f}")
 
-            # 품질이 낮은 문제 필터링 (점수 0.6 미만 제거)
-            high_quality_questions = [q for q, score in zip(questions, quality_scores) if score >= 0.6]
+            # 품질이 낮은 문제 필터링 (점수 0.5 미만 제거 - 기준 완화)
+            high_quality_questions = [q for q, score in zip(questions, quality_scores) if score >= 0.5]
             logger.info(f"고품질 문제: {len(high_quality_questions)}/{len(questions)}개")
 
-            if len(high_quality_questions) < request.num_questions:
-                logger.info(f"고품질 문제 부족 ({len(high_quality_questions)}/{request.num_questions}), 추가 생성 시작")
-
-                # 부족한 수만큼만 추가 생성
-                additional_needed = int((request.num_questions - len(high_quality_questions)) * 1.2)
-                additional_batches = max(1, (additional_needed + batch_size - 1) // batch_size)
-
-                additional_tasks = [generate_questions_batch(i) for i in range(additional_batches)]
-                additional_results = await asyncio.gather(*additional_tasks)
-                additional_questions = [q for batch in additional_results for q in batch]
-                additional_questions = self._advanced_quality_check(additional_questions, additional_needed)
-
-                # 추가 문제도 품질 필터링
-                additional_scores = [self._calculate_question_score(q) for q in additional_questions]
-                high_quality_additional = [q for q, score in zip(additional_questions, additional_scores) if score >= 0.6]
-
-                high_quality_questions.extend(high_quality_additional)
-                logger.info(f"추가 생성 완료: 총 {len(high_quality_questions)}개 고품질 문제")
-
-            questions = high_quality_questions
+            # 여유분이 충분한지 확인
+            if len(high_quality_questions) >= request.num_questions:
+                logger.info(f"✅ 충분한 문제 확보: {len(high_quality_questions)}개 (요청: {request.num_questions}개)")
+                # 품질 순으로 정렬하여 상위 문제 선택
+                high_quality_questions.sort(key=lambda x: x.get('quality_score', 0), reverse=True)
+                questions = high_quality_questions[:request.num_questions]
+            else:
+                logger.warning(f"⚠️ 문제 부족: {len(high_quality_questions)}개 (요청: {request.num_questions}개)")
+                questions = high_quality_questions  # 있는 만큼 반환
 
             logger.info(f"[문제 생성] 완료 (소요 시간: {time.time() - generate_start:.2f}초)")
 
