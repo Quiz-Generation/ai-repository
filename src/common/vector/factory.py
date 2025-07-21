@@ -4,7 +4,6 @@
 from typing import Dict, Type, List
 from .base import VectorDatabase
 from .milvus_db import MilvusDB
-from .faiss_db import FaissDB
 
 
 class VectorDBFactory:
@@ -12,12 +11,10 @@ class VectorDBFactory:
 
     _registry: Dict[str, Type[VectorDatabase]] = {
         "milvus": MilvusDB,    # 1순위 - 고성능 분산 벡터 DB
-        "faiss": FaissDB,      # 2순위 - 로컬 파일 기반
     }
 
     _priority_order = {
         "milvus": 1,  # 최우선 (Docker 컨테이너)
-        "faiss": 2,   # 폴백
     }
 
     @classmethod

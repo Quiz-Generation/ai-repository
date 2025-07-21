@@ -15,8 +15,8 @@ import uvicorn
 from src.common.utils.logger import set_logger
 from src.common.error import JSendError, ErrorCode
 
-from .api import document_routes, quiz_routes, test_routes
-from .service.vector_db_service import VectorDBService
+from src.app.api import document, quiz, test_routes
+from src.common.vector.connect import VectorDBService
 
 
 # 로깅 설정
@@ -49,6 +49,7 @@ async def lifespan(app: FastAPI):
         global_vector_service = VectorDBService()
         await global_vector_service.initialize_embedding_model()
         await global_vector_service.initialize_vector_db("milvus")
+        app.state.vector_db = global_vector_service
         logger.info("✅ 전역 벡터 DB 서비스 초기화 완료")
     except Exception as e:
         logger.error(f"❌ 전역 서비스 초기화 실패: {e}")
@@ -77,8 +78,8 @@ app.add_middleware(
 )
 
 # 라우터 등록
-app.include_router(document_routes.router, prefix="/api/v2/documents")
-app.include_router(quiz_routes.router, prefix="/api/v2/quiz")
+app.include_router(document.router, prefix="/api/v2/documents")
+app.include_router(quiz.router, prefix="/api/v2/quiz")
 app.include_router(test_routes.router, prefix="/api/v2/test")
 
 

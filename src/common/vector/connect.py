@@ -8,9 +8,9 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 from sentence_transformers import SentenceTransformer
 
-from ..core.vector_db.factory import VectorDBFactory
-from ..core.vector_db.base import VectorDatabase, VectorDocument, SearchResult
-from ..helper.text_helper import TextHelper
+from src.common.vector.factory import VectorDBFactory
+from src.common.vector.base import  VectorDocument, SearchResult
+from src.app.func.text_helper import TextHelper
 
 logger = logging.getLogger(__name__)
 
