@@ -30,14 +30,7 @@ def _generate_document_id(
         content: str,
         metadata: Dict[str, Any]
     ) -> str:
-    """문서 ID 생성 (현재시간 + UUID)"""
     # 🔥 현재시간 + UUID 기반 ID 생성 (파일명 노출 방지)
-    logger.info(
-        f"""
-            [문서 ID 생성 시작]
-            "파일명": {metadata.get("filename", "unknown")}
-        """
-    )
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     unique_id = uuid.uuid4().hex[:12]  # 12자리 UUID
 

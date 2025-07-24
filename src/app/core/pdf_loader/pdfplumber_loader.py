@@ -69,7 +69,7 @@ class PDFPlumberLoader(PDFLoader):
                 except:
                     pass
 
-                logger.info(f"SUCCESS PDFPlumber로 {len(pdf.pages)}페이지, {tables_found}개 테이블 처리 완료")
+                logger.info(f"{len(pdf.pages)}페이지, {tables_found}개 테이블 처리 완료")
 
                 return PDFContent(
                     text=text.strip(),

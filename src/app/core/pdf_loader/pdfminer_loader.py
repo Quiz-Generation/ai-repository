@@ -65,7 +65,7 @@ class PDFMinerLoader(PDFLoader):
                 "supports_korean": True
             }
 
-            logger.info(f"SUCCESS PDFMiner로 {page_count}페이지, {len(fonts_used)}개 폰트, {char_count}자 처리 완료")
+            logger.info(f"{page_count}페이지, {len(fonts_used)}개 폰트, {char_count}자 처리 완료")
 
             # 포맷된 텍스트가 있으면 사용, 없으면 기본 텍스트 사용
             final_text = formatted_text.strip() if formatted_text.strip() else text.strip()

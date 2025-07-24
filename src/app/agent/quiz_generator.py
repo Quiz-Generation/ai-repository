@@ -135,7 +135,7 @@ class QuizGeneratorAgent:
         return workflow.compile()
 
     async def _parallel_process(self, state: QuizState) -> QuizState:
-        """📄 병렬 처리: 문서 요약, 핵심 주제 추출, 키워드 추출"""
+        """병렬 처리: 문서 요약, 핵심 주제 추출, 키워드 추출"""
         try:
             parallel_start = time.time()
             logger.info("병렬 처리 시작")
@@ -224,7 +224,7 @@ class QuizGeneratorAgent:
             }
             state["current_step"] = "parallel_processor"
 
-            logger.info(f"SUCCESS 병렬 처리 완료: {recommended_questions}개 문제 추천")
+            logger.info(f"병렬 처리 완료: {recommended_questions}개 문제 추천")
             return state
 
         except Exception as e:
@@ -246,7 +246,7 @@ class QuizGeneratorAgent:
             # 추가 지시사항이 있는 경우 프롬프트에 추가
             additional_guide = ""
             if request.additional_instructions:
-                additional_guide = "\n\n📝 **추가 지시사항**:\n" + "\n".join(f"- {instruction}" for instruction in request.additional_instructions)
+                additional_guide = "\n\n**추가 지시사항**:\n" + "\n".join(f"- {instruction}" for instruction in request.additional_instructions)
 
             # 🎯 최적화된 배치 크기 계산 (더 작은 배치로 다양성 확보)
             target_questions = request.num_questions
@@ -1192,7 +1192,7 @@ class QuizGeneratorAgent:
 
             total_end = time.time()
             logger.info(f"[실행시간] 전체 문제 생성 프로세스 소요 시간: {total_end - total_start:.2f}초")
-            logger.info("🎉 SUCCESS 문제 생성 완료")
+            logger.info("문제 생성 완료")
 
             # 🔥 캐시에 결과 저장 (Redis + 메모리)
             self._question_cache[cache_key] = questions

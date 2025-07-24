@@ -23,46 +23,22 @@ class MilvusDB(VectorDatabase):
         self.host = os.getenv("MILVUS_HOST", "localhost")
         self.port = os.getenv("MILVUS_PORT", "19530")
 
-        # 🔥 강제로 서버 모드 사용 (Docker 컨테이너와 연결)
-        self.use_lite = False  # 무조건 서버 모드
-
-        logger.info(f"INIT Milvus 설정 - Host: {self.host}, Port: {self.port}, Lite: {self.use_lite}")
+        logger.info(f"Milvus 설정 - Host: {self.host}, Port: {self.port}")
 
     async def initialize(self) -> None:
         """Milvus 클라이언트 초기화 및 컬렉션 생성"""
         try:
             from pymilvus import connections, Collection, FieldSchema, CollectionSchema, DataType, utility
 
-            logger.info("STEP_VECTOR Milvus 초기화 시작")
-
-            # Milvus Lite 모드 시도
-            if self.use_lite:
-                try:
-                    logger.info("STEP_VECTOR Milvus Lite 모드 시도")
-
-                    # Lite 모드 연결 (로컬 파일 기반)
-                    lite_db_path = f"{self.db_path}/milvus_lite.db"
-                    connections.connect(
-                        alias="default",
-                        uri=lite_db_path,  # Lite 모드는 파일 경로 사용
-                        # host와 port는 사용하지 않음
-                    )
-
-                    logger.info(f"SUCCESS Milvus Lite 연결 완료: {lite_db_path}")
-
-                except Exception as lite_error:
-                    logger.warning(f"WARNING Milvus Lite 모드 실패: {lite_error}")
-                    self.use_lite = False
+            logger.info("Milvus 초기화 시작")
 
             # 서버 모드 폴백
-            if not self.use_lite:
-                logger.info("STEP_VECTOR Milvus 서버 모드 시도")
-                connections.connect(
-                    alias="default",
-                    host=self.host,
-                    port=self.port
-                )
-                logger.info(f"SUCCESS Milvus 서버 연결 완료: {self.host}:{self.port}")
+            connections.connect(
+                alias="default",
+                host=self.host,
+                port=self.port
+            )
+            logger.info(f"서버 연결 완료: {self.host}:{self.port}")
 
             # 컬렉션 스키마 정의
             fields = [
@@ -76,10 +52,10 @@ class MilvusDB(VectorDatabase):
 
             # 컬렉션 생성 또는 로드
             if utility.has_collection(self.collection_name):
-                logger.info(f"STEP_VECTOR 기존 Milvus 컬렉션 로드: {self.collection_name}")
+                logger.info(f"기존 Milvus 컬렉션 로드: {self.collection_name}")
                 self.client = Collection(self.collection_name)
             else:
-                logger.info(f"STEP_VECTOR 새 Milvus 컬렉션 생성: {self.collection_name}")
+                logger.info(f"새 Milvus 컬렉션 생성: {self.collection_name}")
                 self.client = Collection(self.collection_name, schema)
 
                 # 인덱스 생성 (HNSW 알고리즘 사용)
@@ -93,17 +69,13 @@ class MilvusDB(VectorDatabase):
             # 컬렉션 로드 (검색 가능하도록)
             self.client.load()
 
-            mode = "Lite" if self.use_lite else "Server"
-            logger.info(f"SUCCESS Milvus ({mode}) 초기화 완료")
+            logger.info(f"Milvus 초기화 완료")
 
         except ImportError:
             logger.error("ERROR pymilvus 라이브러리가 설치되지 않았습니다. 'pip install pymilvus[model]' 실행하세요.")
             raise ImportError("pymilvus 라이브러리가 필요합니다")
         except Exception as e:
             logger.error(f"ERROR Milvus 초기화 실패: {e}")
-            if not self.use_lite:
-                logger.warning("WARNING Milvus 서버가 실행 중인지 확인하세요")
-                logger.info("TIP: Milvus Lite 모드로 전환하려면 use_lite=True 설정")
             raise
 
     async def add_documents(self, documents: List[VectorDocument]) -> List[str]:
@@ -125,7 +97,7 @@ class MilvusDB(VectorDatabase):
             # 인덱스 플러시 (즉시 검색 가능하도록)
             self.client.flush()
 
-            logger.info(f"SUCCESS Milvus에 {len(documents)}개 문서 추가 완료")
+            logger.info(f"Milvus에 {len(documents)}개 문서 추가 완료")
             return ids
 
         except Exception as e:
@@ -186,7 +158,7 @@ class MilvusDB(VectorDatabase):
                         distance=hit.distance
                     ))
 
-            logger.info(f"SUCCESS Milvus 검색 완료: {len(results)}개 결과")
+            logger.info(f"검색 완료: {len(results)}개 결과")
             return results
 
         except Exception as e:
@@ -245,7 +217,7 @@ class MilvusDB(VectorDatabase):
             )
 
             documents = self._parse_query_results(query_results)
-            logger.info(f"SUCCESS Milvus에서 {len(documents)}개 문서 조회 완료")
+            logger.info(f"Milvus에서 {len(documents)}개 문서 조회 완료")
             return documents
 
         except Exception as e:
@@ -274,23 +246,13 @@ class MilvusDB(VectorDatabase):
             if connections.has_connection("default"):
                 connections.disconnect("default")
 
-            # 실제 연결 시도
-            if self.use_lite:
-                lite_db_path = f"{self.db_path}/milvus_lite.db"
-                connections.connect(
-                    alias="default",
-                    uri=lite_db_path
-                )
-                connection_info = f"Lite mode: {lite_db_path}"
-                mode = "Lite"
-            else:
-                connections.connect(
-                    alias="default",
-                    host=self.host,
-                    port=self.port
-                )
-                connection_info = f"Server: {self.host}:{self.port}"
-                mode = "Server"
+            connections.connect(
+                alias="default",
+                host=self.host,
+                port=self.port
+            )
+            connection_info = f"Server: {self.host}:{self.port}"
+            mode = "Server"
 
             # 연결 성공 시 추가 확인
             collection_exists = utility.has_collection(self.collection_name)
@@ -304,7 +266,7 @@ class MilvusDB(VectorDatabase):
             else:
                 document_count = 0
 
-            logger.info(f"SUCCESS Milvus 헬스체크 성공 - {mode} 모드")
+            logger.info(f"Milvus 헬스체크 성공 - {mode} 모드")
 
             return {
                 "status": "healthy",
@@ -318,7 +280,7 @@ class MilvusDB(VectorDatabase):
                 "library_available": True,
                 "index_type": "HNSW",
                 "metric_type": "COSINE",
-                "storage": "file-based" if self.use_lite else "distributed",
+                "storage": "distributed",
                 "connection": connection_info
             }
 
@@ -336,8 +298,7 @@ class MilvusDB(VectorDatabase):
                 "db_type": "milvus",
                 "error": f"연결 실패: {str(e)}",
                 "library_available": True,
-                "attempted_connection": f"{self.host}:{self.port}" if not self.use_lite else "Lite mode",
-                "use_lite": self.use_lite
+                "attempted_connection": f"{self.host}:{self.port}"
             }
 
     async def clear_all(self) -> bool:
@@ -354,17 +315,17 @@ class MilvusDB(VectorDatabase):
             if utility.has_collection(self.collection_name):
                 # 컬렉션 삭제 (데이터와 함께)
                 utility.drop_collection(self.collection_name)
-                logger.info(f"SUCCESS Milvus 컬렉션 '{self.collection_name}' 삭제 완료")
+                logger.info(f"Milvus 컬렉션 '{self.collection_name}' 삭제 완료")
 
                 # 컬렉션 재생성 (initialize 메서드 재호출)
                 await self.initialize()
-                logger.info(f"SUCCESS Milvus 컬렉션 '{self.collection_name}' 재생성 완료")
+                logger.info(f"Milvus 컬렉션 '{self.collection_name}' 재생성 완료")
 
                 return True
             else:
-                logger.info(f"INFO Milvus 컬렉션 '{self.collection_name}'이 존재하지 않음")
+                logger.info(f"Milvus 컬렉션 '{self.collection_name}'이 존재하지 않음")
                 return True
 
         except Exception as e:
-            logger.error(f"ERROR Milvus 전체 삭제 실패: {e}")
+            logger.error(f"Milvus 전체 삭제 실패: {e}")
             return False

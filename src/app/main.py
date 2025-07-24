@@ -1,7 +1,3 @@
-#!/usr/bin/env python3
-"""
-🚀 FastAPI PDF Processing with Vector DB Integration
-"""
 import logging
 import os
 import traceback
@@ -41,23 +37,22 @@ async def lifespan(app: FastAPI):
     """애플리케이션 시작/종료 시 실행"""
     global global_vector_service
 
-    logger.info("🚀 FastAPI PDF Processing with Vector DB 시작")
+    logger.info("FastAPI PDF Processing with Vector DB 시작")
 
     # 전역 서비스 초기화
     try:
-        logger.info("🔧 전역 벡터 DB 서비스 초기화 시작")
         global_vector_service = VectorDBService()
         await global_vector_service.initialize_embedding_model()
         await global_vector_service.initialize_vector_db("milvus")
         app.state.vector_db = global_vector_service
-        logger.info("✅ 전역 벡터 DB 서비스 초기화 완료")
+        logger.info("전역 벡터 DB 서비스 초기화 완료")
     except Exception as e:
-        logger.error(f"❌ 전역 서비스 초기화 실패: {e}")
+        logger.error(f"전역 서비스 초기화 실패: {e}")
         raise
 
     yield
 
-    logger.info("🛑 FastAPI PDF Processing with Vector DB 종료")
+    logger.info("FastAPI PDF Processing with Vector DB 종료")
 
 
 # FastAPI 앱 생성
@@ -95,7 +90,7 @@ async def health_check():
 
 # 개발 서버 실행
 if __name__ == "__main__":
-    logger.info("🎯 서버 시작: http://localhost:7000")
+    logger.info("서버 시작: http://localhost:7000")
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",

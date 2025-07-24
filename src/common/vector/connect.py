@@ -28,25 +28,21 @@ class VectorDBService:
     async def initialize_embedding_model(self) -> None:
         """임베딩 모델 초기화"""
         try:
-            logger.info("STEP_VECTOR 임베딩 모델 로드 시작")
             self.embedding_model = SentenceTransformer(self.model_name)
-            logger.info(f"SUCCESS 임베딩 모델 로드 완료: {self.model_name}")
+            logger.info(f"임베딩 모델 로드 완료: {self.model_name}")
         except Exception as e:
-            logger.error(f"ERROR 임베딩 모델 로드 실패: {e}")
+            logger.error(f"임베딩 모델 로드 실패: {e}")
             raise
 
     async def initialize_vector_db(self, preferred_db: Optional[str] = None) -> str:
-        """벡터 DB 초기화 (우선순위에 따른 폴백)"""
-
-        # 🔥 이미 초기화된 DB가 있고 정상 작동 중이면 그대로 사용
         if self.vector_db and self.current_db_type:
             try:
                 health_status = await self.vector_db.health_check()
                 if health_status.get("status") == "healthy":
-                    logger.info(f"REUSE 기존 {self.current_db_type.upper()} DB 재사용")
+                    logger.info(f"기존 {self.current_db_type} DB 재사용")
                     return self.current_db_type
             except Exception as e:
-                logger.warning(f"WARNING 기존 DB 헬스체크 실패, 재초기화: {e}")
+                logger.warning(f"기존 DB 헬스체크 실패, 재초기화: {e} {self.current_db_type}")
 
         db_types_to_try = [preferred_db] if preferred_db else self.fallback_order
 
@@ -55,7 +51,7 @@ class VectorDBService:
                 continue
 
             try:
-                logger.info(f"STEP_VECTOR {db_type.upper()} 초기화 시도")
+                logger.info(f"{db_type.upper()} 초기화 시도")
 
                 # 벡터 DB 인스턴스 생성 (올바른 경로 사용)
                 db_path = f"data/vector_storage/{db_type}"
@@ -72,11 +68,11 @@ class VectorDBService:
 
                 self.vector_db = temp_db
                 self.current_db_type = db_type
-                logger.info(f"SUCCESS {db_type.upper()} 초기화 및 활성화 완료")
+                logger.info(f"{db_type.upper()} 초기화 및 활성화 완료")
                 return db_type
 
             except Exception as e:
-                logger.warning(f"WARNING {db_type.upper()} 초기화 실패: {e}")
+                logger.warning(f"{db_type.upper()} 초기화 실패: {e}")
                 continue
 
         # 모든 DB 실패 시 마지막으로 FAISS 강제 시도
@@ -123,8 +119,6 @@ class VectorDBService:
                 chunk_overlap=chunk_overlap
             )
 
-            logger.info(f"STEP_VECTOR {len(chunks)}개 청크 생성 완료")
-
             # 임베딩 생성
             logger.info("STEP_VECTOR 임베딩 생성 시작")
             embeddings = self.embedding_model.encode(chunks, show_progress_bar=True)
@@ -169,7 +163,6 @@ class VectorDBService:
                 "stored_ids": stored_ids[:5]  # 처음 5개 ID만 반환
             }
 
-            logger.info(f"SUCCESS PDF 벡터화 저장 완료: {len(stored_ids)}개 문서")
             return result
 
         except Exception as e:
@@ -326,7 +319,7 @@ class VectorDBService:
             self.vector_db = milvus_db
             self.current_db_type = "milvus"
 
-            logger.info("🎉 SUCCESS Milvus 강제 전환 완료")
+            logger.info("강제 전환 완료")
 
         except Exception as e:
             logger.error(f"ERROR Milvus 강제 전환 실패: {e}")

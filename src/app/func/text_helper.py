@@ -152,7 +152,6 @@ class TextHelper:
         chunk_overlap: int = 200
     ) -> List[str]:
         """
-        📝 정적 메서드: 텍스트를 청크로 분할 (벡터 DB용)
         - sentence-transformers와 벡터 DB에서 사용
         """
         try:
@@ -200,11 +199,11 @@ class TextHelper:
             if loop_count >= 1000:
                 logger.warning(f"WARNING 청킹이 1000개 제한에 도달했습니다. 현재 {len(chunks)}개 청크 생성됨")
 
-            logger.info(f"SUCCESS 텍스트 청킹 완료: {len(chunks)}개 청크 생성")
+            logger.info(f"텍스트 청킹 완료: {len(chunks)}개 청크 생성")
             return chunks
 
         except Exception as e:
-            logger.error(f"ERROR 텍스트 청킹 실패: {e}")
+            logger.error(f"텍스트 청킹 실패: {e}")
             return [text]  # 실패 시 원본 텍스트 그대로 반환
 
     def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
