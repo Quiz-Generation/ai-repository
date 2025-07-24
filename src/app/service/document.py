@@ -23,12 +23,7 @@ async def upload_document(
     try:
         total_start_time = time.time()
 
-        logger.info(
-            f"""
-                STEP1 PDF 업로드 시작
-                "파일명": {file.filename}
-            """
-        )
+        logger.info(f"PDF 업로드 시작: {file.filename}")
 
         #1. 파일 검증
         if not file.filename or not file.filename.lower().endswith('.pdf'):
@@ -45,17 +40,13 @@ async def upload_document(
 
         #2. 해당 파일 특성 분석 및 최적 로더 선택
         analysis_start_time = time.time()
-        logger.info(
-            f"""
-                STEP2 PDF 특성 분석 시작
-            """
-        )
+
         analysis_result = await document_loader_func.analyze_pdf_characteristics(
             logger=logger,
             file=file
         )
         analysis_time = time.time() - analysis_start_time
-        logger.info(f"⏱️ PDF 분석 완료: {analysis_time:.2f}초")
+        logger.info(f"PDF 분석 완료: {analysis_time:.2f}초")
 
         if not analysis_result.recommended_loader:
             logger.error(
@@ -72,13 +63,7 @@ async def upload_document(
 
         #3. PDF 내용 추출
         extraction_start_time = time.time()
-        logger.info(
-            f"""
-                STEP3 PDF 내용 추출 시작
-                "파일명": {file.filename}
-                "최적 로더": {analysis_result.recommended_loader}
-            """
-        )
+
         extraction_result = await document_func.process_pdf(
             logger=logger,
             file=file,
@@ -116,7 +101,7 @@ async def upload_document(
 
         # 벡터 DB에 저장
         vector_store_start_time = time.time()
-        logger.info("STEP5 Milvus 벡터 DB 저장 시작")
+
         vector_result = await vector_func.store_pdf_content(
             logger=logger,
             vector_db=vector_db,
@@ -129,7 +114,7 @@ async def upload_document(
         logger.info(f"벡터 DB 저장 완료: {vector_store_time:.2f}초")
 
         #5. 문제 수 계산
-        logger.info("STEP6 문제 수 계산 시작")
+
         question_count_result = await document_func.calculate_optimal_question_count(
             logger=logger,
             content=extraction_result["content"],
@@ -202,7 +187,7 @@ async def clear_all_documents(
                 "deleted_count": result.get("deleted_count", 0),
                 "remaining_count": result.get("remaining_count", 0)
             }
-            logger.info(f"SUCCESS 벡터 DB 전체 삭제 완료: {result.get('deleted_count', 0)}개 삭제")
+            logger.info(f"벡터 DB 전체 삭제 완료: {result.get('deleted_count', 0)}개 삭제")
         else:
             response_data = {
                 "success": False,

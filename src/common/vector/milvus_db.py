@@ -175,7 +175,7 @@ class MilvusDB(VectorDatabase):
             expr = f'id == "{document_id}"'
             self.client.delete(expr)
 
-            logger.info(f"SUCCESS 문서 {document_id} 삭제 완료")
+
             return True
 
         except Exception as e:
@@ -309,7 +309,7 @@ class MilvusDB(VectorDatabase):
 
             from pymilvus import utility
 
-            logger.info("🚨 DANGER Milvus 컬렉션 전체 삭제 시작")
+            logger.info("Milvus 컬렉션 전체 삭제 시작")
 
             # 컬렉션이 존재하는지 확인
             if utility.has_collection(self.collection_name):

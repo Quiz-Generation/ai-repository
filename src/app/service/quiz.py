@@ -32,7 +32,7 @@ async def generate_quiz_from_file(
     단일 파일 ID를 기반으로 문제 생성
     """
     try:
-        logger.info(f"🚀 문제 생성 서비스 시작: {file_id}")
+
 
         # 1. 파일 ID로 문서 조회
         document_data = await _get_document_by_file_id(logger, vector_db, file_id)
@@ -67,7 +67,7 @@ async def generate_quiz_from_file(
         # 🔥 최적화: 전역 캐시에서 에이전트 재사용
         if not hasattr(generate_quiz_from_file, '_cached_agent'):
             generate_quiz_from_file._cached_agent = QuizGeneratorAgent(openai_api_key)
-            logger.info("🔄 AI 에이전트 캐시 생성")
+
 
         quiz_agent = generate_quiz_from_file._cached_agent
 
@@ -91,7 +91,7 @@ async def generate_quiz_from_file(
         )
 
         # 5. AI 에이전트로 문제 생성
-        logger.info(f"STEP_AGENT AI 에이전트 문제 생성 시작 ({num_questions}개 문제)")
+        logger.info(f"문제 생성 시작: {num_questions}개")
         result = await quiz_agent.generate_quiz(quiz_request, [document_data])
 
         if not result["success"]:
@@ -134,7 +134,7 @@ async def generate_quiz_from_file(
             }
         }
 
-        logger.info(f"🎉 SUCCESS 문제 생성 완료: {len(processed_questions)}개")
+        logger.info(f"문제 생성 완료: {len(processed_questions)}개")
 
         return {
             "success": True,
@@ -159,7 +159,7 @@ async def get_available_files(
 ) -> Dict[str, Any]:
     """문제 생성 가능한 파일 목록 조회"""
     try:
-        logger.info("STEP_FILES 사용 가능한 파일 목록 조회")
+
 
         # 벡터 DB에서 파일 목록 조회
         files_result = await vector_db.get_all_documents(1000)
@@ -212,7 +212,7 @@ async def _get_document_by_file_id(
 ) -> Optional[Dict[str, Any]]:
     """단일 파일 ID로 문서 내용 조회 (최적화된 버전)"""
     try:
-        logger.info(f"STEP_VECTOR 파일 ID로 문서 조회: {file_id}")
+
 
         # 🔥 최적화: file_id로 직접 필터링하여 조회
         if hasattr(vector_db, 'vector_db') and vector_db.vector_db:
@@ -267,7 +267,7 @@ async def _get_document_by_file_id(
                 "domain": _identify_domain(target_file_info["filename"])
             }
 
-            logger.info(f"SUCCESS 문서 조회: {target_file_info['filename']} ({len(combined_content)}자, {len(target_chunks)}개 청크)")
+
             return document
         else:
             # 기존 방식으로 fallback
@@ -303,7 +303,7 @@ async def _get_document_by_file_id(
                 "domain": _identify_domain(target_file["filename"])
             }
 
-            logger.info(f"SUCCESS 문서 조회: {target_file['filename']} ({len(combined_content)}자)")
+
             return document
 
     except Exception as e:
@@ -334,7 +334,7 @@ async def _get_file_chunks(
         # chunk_index 순서로 정렬 (가능한 경우)
         file_chunks.sort(key=lambda x: x["metadata"].get("chunk_index", 0))
 
-        logger.info(f"SUCCESS 파일 청크 조회: {file_id} -> {len(file_chunks)}개 청크")
+
         return file_chunks
 
     except Exception as e:

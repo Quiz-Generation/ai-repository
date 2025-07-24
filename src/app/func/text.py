@@ -59,7 +59,7 @@ async def create_text_chunks(
             if loop_count >= 1000:
                 logger.warning(f"WARNING 청킹이 1000개 제한에 도달했습니다. 현재 {len(chunks)}개 청크 생성됨")
 
-            logger.info(f"SUCCESS 텍스트 청킹 완료: {len(chunks)}개 청크 생성")
+
             return chunks
 
         except Exception as e:

@@ -52,7 +52,7 @@ class PyMuPDFLoader(PDFLoader):
 
             doc.close()
 
-            logger.info(f"SUCCESS PyMuPDF로 {page_count}페이지 PDF 처리 완료")
+
 
             return PDFContent(
                 text=text.strip(),
