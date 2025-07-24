@@ -135,7 +135,7 @@ class QuizGeneratorAgent:
         return workflow.compile()
 
     async def _parallel_process(self, state: QuizState) -> QuizState:
-        """📄 병렬 처리: 문서 요약, 핵심 주제 추출, 키워드 추출"""
+        """병렬 처리: 문서 요약, 핵심 주제 추출, 키워드 추출"""
         try:
             parallel_start = time.time()
             logger.info("병렬 처리 시작")
@@ -224,7 +224,7 @@ class QuizGeneratorAgent:
             }
             state["current_step"] = "parallel_processor"
 
-            logger.info(f"SUCCESS 병렬 처리 완료: {recommended_questions}개 문제 추천")
+            logger.info(f"병렬 처리 완료: {recommended_questions}개 문제 추천")
             return state
 
         except Exception as e:
@@ -236,7 +236,7 @@ class QuizGeneratorAgent:
         """❓ 4단계: 다양성과 품질을 고려한 최적화된 병렬 배치 문제 생성"""
         try:
             generate_start = time.time()
-            logger.info("STEP4 다양성과 품질을 고려한 최적화된 병렬 배치 문제 생성 시작")
+
 
             request = state["request"]
             summary = state["summary"]
@@ -246,7 +246,7 @@ class QuizGeneratorAgent:
             # 추가 지시사항이 있는 경우 프롬프트에 추가
             additional_guide = ""
             if request.additional_instructions:
-                additional_guide = "\n\n📝 **추가 지시사항**:\n" + "\n".join(f"- {instruction}" for instruction in request.additional_instructions)
+                additional_guide = "\n\n**추가 지시사항**:\n" + "\n".join(f"- {instruction}" for instruction in request.additional_instructions)
 
             # 🎯 최적화된 배치 크기 계산 (더 작은 배치로 다양성 확보)
             target_questions = request.num_questions
@@ -424,7 +424,7 @@ class QuizGeneratorAgent:
             concept_count = sum(1 for q in final_questions if q.get("difficulty_level") == "concept_integration")
             app_count = sum(1 for q in final_questions if q.get("difficulty_level") == "application")
 
-            logger.info(f"SUCCESS 다양성과 품질을 고려한 문제 생성 완료: 총 {len(final_questions)}개")
+
             logger.info(f"- 기본 개념: {basic_count}개")
             logger.info(f"- 개념 연계: {concept_count}개")
             logger.info(f"- 응용 문제: {app_count}개")
@@ -767,7 +767,7 @@ class QuizGeneratorAgent:
         # 최종 정렬 (품질 순)
         selected_questions.sort(key=lambda x: x.get('quality_score', 0), reverse=True)
 
-        logger.info(f"🎯 난이도 분산 완료: 쉬움 {len(easy_questions[:easy_count])}개, 보통 {len(medium_questions[:medium_count])}개, 어려움 {len(hard_questions[:hard_count])}개")
+        logger.info(f"난이도 분산 완료: 쉬움 {len(easy_questions[:easy_count])}개, 보통 {len(medium_questions[:medium_count])}개, 어려움 {len(hard_questions[:hard_count])}개")
 
         return selected_questions[:target_count]
 
@@ -924,7 +924,7 @@ class QuizGeneratorAgent:
         import time
         try:
             total_start = time.time()
-            logger.info(f"🚀 문제 생성 AI 에이전트 시작 (문서별 전처리 완전 비동기, 문제 생성 병렬 2문제씩, use_sampling={use_sampling})")
+
 
             # 난이도 값 검증
             if not isinstance(request.difficulty, DifficultyLevel):
@@ -1002,14 +1002,14 @@ class QuizGeneratorAgent:
                 "step_name": "문제 생성",
                 "progress_percent": 33
             }
-            logger.info(f"📊 진행률: {progress['progress_percent']}% - {progress['step_name']}")
+
 
             # 🔥 최적화: 토큰 제한 고려한 배치 크기 조정
             target_questions = int(request.num_questions * 1.3)  # 1.3배로 조정 (토큰 제한 고려)
             batch_size = 3  # 배치 크기 5에서 3으로 줄임 (토큰 제한 고려)
             total_batches = (target_questions + batch_size - 1) // batch_size
 
-            logger.info(f"🎯 목표 생성: {target_questions}개 (요청: {request.num_questions}개 + 여유분)")
+
 
             # 🔥 고급 캐싱: Redis + 메모리 이중 캐싱
             import hashlib
@@ -1018,7 +1018,7 @@ class QuizGeneratorAgent:
 
             # 1. 메모리 캐시 확인
             if hasattr(self, '_question_cache') and cache_key in self._question_cache:
-                logger.info(f"🎯 메모리 캐시 사용: {len(self._question_cache[cache_key])}개")
+
                 cached_questions = self._question_cache[cache_key]
                 if len(cached_questions) >= request.num_questions:
                     return {
@@ -1052,7 +1052,7 @@ class QuizGeneratorAgent:
                 if cached_result:
                     import json
                     questions = json.loads(cached_result)
-                    logger.info(f"🎯 Redis 캐시 사용: {len(questions)}개")
+
                     # 메모리 캐시에도 저장
                     if not hasattr(self, '_question_cache'):
                         self._question_cache = {}
@@ -1165,7 +1165,7 @@ class QuizGeneratorAgent:
 
             # 여유분이 충분한지 확인
             if len(high_quality_questions) >= request.num_questions:
-                logger.info(f"✅ 충분한 문제 확보: {len(high_quality_questions)}개 (요청: {request.num_questions}개)")
+
 
                 # 🔥 난이도 분산 처리
                 questions = self._distribute_difficulty_levels(
@@ -1192,7 +1192,7 @@ class QuizGeneratorAgent:
 
             total_end = time.time()
             logger.info(f"[실행시간] 전체 문제 생성 프로세스 소요 시간: {total_end - total_start:.2f}초")
-            logger.info("🎉 SUCCESS 문제 생성 완료")
+            logger.info("문제 생성 완료")
 
             # 🔥 캐시에 결과 저장 (Redis + 메모리)
             self._question_cache[cache_key] = questions
@@ -1203,7 +1203,7 @@ class QuizGeneratorAgent:
                 import json
                 redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
                 redis_client.setex(cache_key, 3600, json.dumps(questions))  # 1시간 TTL
-                logger.info(f"🎯 Redis 캐시 저장 완료: {len(questions)}개")
+
             except Exception as e:
                 logger.warning(f"Redis 캐시 저장 실패: {e}")
 

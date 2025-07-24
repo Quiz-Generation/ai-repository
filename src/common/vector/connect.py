@@ -28,25 +28,21 @@ class VectorDBService:
     async def initialize_embedding_model(self) -> None:
         """임베딩 모델 초기화"""
         try:
-            logger.info("STEP_VECTOR 임베딩 모델 로드 시작")
             self.embedding_model = SentenceTransformer(self.model_name)
-            logger.info(f"SUCCESS 임베딩 모델 로드 완료: {self.model_name}")
+            logger.info(f"임베딩 모델 로드 완료: {self.model_name}")
         except Exception as e:
-            logger.error(f"ERROR 임베딩 모델 로드 실패: {e}")
+            logger.error(f"임베딩 모델 로드 실패: {e}")
             raise
 
     async def initialize_vector_db(self, preferred_db: Optional[str] = None) -> str:
-        """벡터 DB 초기화 (우선순위에 따른 폴백)"""
-
-        # 🔥 이미 초기화된 DB가 있고 정상 작동 중이면 그대로 사용
         if self.vector_db and self.current_db_type:
             try:
                 health_status = await self.vector_db.health_check()
                 if health_status.get("status") == "healthy":
-                    logger.info(f"REUSE 기존 {self.current_db_type.upper()} DB 재사용")
+                    logger.info(f"기존 {self.current_db_type} DB 재사용")
                     return self.current_db_type
             except Exception as e:
-                logger.warning(f"WARNING 기존 DB 헬스체크 실패, 재초기화: {e}")
+                logger.warning(f"기존 DB 헬스체크 실패, 재초기화: {e} {self.current_db_type}")
 
         db_types_to_try = [preferred_db] if preferred_db else self.fallback_order
 
@@ -55,7 +51,7 @@ class VectorDBService:
                 continue
 
             try:
-                logger.info(f"STEP_VECTOR {db_type.upper()} 초기화 시도")
+                logger.info(f"{db_type.upper()} 초기화 시도")
 
                 # 벡터 DB 인스턴스 생성 (올바른 경로 사용)
                 db_path = f"data/vector_storage/{db_type}"
@@ -72,22 +68,22 @@ class VectorDBService:
 
                 self.vector_db = temp_db
                 self.current_db_type = db_type
-                logger.info(f"SUCCESS {db_type.upper()} 초기화 및 활성화 완료")
+                logger.info(f"{db_type.upper()} 초기화 및 활성화 완료")
                 return db_type
 
             except Exception as e:
-                logger.warning(f"WARNING {db_type.upper()} 초기화 실패: {e}")
+                logger.warning(f"{db_type.upper()} 초기화 실패: {e}")
                 continue
 
         # 모든 DB 실패 시 마지막으로 FAISS 강제 시도
         if not self.current_db_type:
             try:
-                logger.info("STEP_VECTOR 마지막 시도: FAISS 강제 초기화")
+
                 db_path = f"data/vector_storage/faiss"
                 self.vector_db = VectorDBFactory.create("faiss", db_path)
                 await self.vector_db.initialize()
                 self.current_db_type = "faiss"
-                logger.info("SUCCESS FAISS 강제 초기화 완료")
+                logger.info("FAISS 강제 초기화 완료")
                 return "faiss"
             except Exception as e:
                 logger.error(f"ERROR FAISS 강제 초기화도 실패: {e}")
@@ -111,7 +107,7 @@ class VectorDBService:
             if not self.vector_db:
                 await self.initialize_vector_db()
 
-            logger.info("STEP_VECTOR PDF 내용 청킹 시작")
+
 
             # 🔥 파일별 고유 ID 생성 (한 번만)
             file_id = self._generate_file_id(metadata.get("filename", "unknown"))
@@ -123,10 +119,8 @@ class VectorDBService:
                 chunk_overlap=chunk_overlap
             )
 
-            logger.info(f"STEP_VECTOR {len(chunks)}개 청크 생성 완료")
-
             # 임베딩 생성
-            logger.info("STEP_VECTOR 임베딩 생성 시작")
+
             embeddings = self.embedding_model.encode(chunks, show_progress_bar=True)
 
             # VectorDocument 객체들 생성
@@ -155,7 +149,7 @@ class VectorDBService:
                 vector_documents.append(vector_doc)
 
             # 벡터 DB에 저장
-            logger.info(f"STEP_VECTOR {self.current_db_type.upper()}에 저장 시작")
+
             stored_ids = await self.vector_db.add_documents(vector_documents)
 
             result = {
@@ -169,7 +163,6 @@ class VectorDBService:
                 "stored_ids": stored_ids[:5]  # 처음 5개 ID만 반환
             }
 
-            logger.info(f"SUCCESS PDF 벡터화 저장 완료: {len(stored_ids)}개 문서")
             return result
 
         except Exception as e:
@@ -211,7 +204,7 @@ class VectorDBService:
             if not self.vector_db:
                 await self.initialize_vector_db()
 
-            logger.info(f"STEP_VECTOR 검색 쿼리: '{query[:50]}...'")
+
 
             # 쿼리 임베딩 생성
             query_embedding = self.embedding_model.encode([query])[0]
@@ -223,7 +216,7 @@ class VectorDBService:
                 filters=filters
             )
 
-            logger.info(f"SUCCESS 유사도 검색 완료: {len(results)}개 결과")
+
             return results
 
         except Exception as e:
@@ -235,7 +228,7 @@ class VectorDBService:
         try:
             # 🔥 현재 DB가 없으면 자동으로 Milvus 초기화
             if not self.current_db_type or not self.vector_db:
-                logger.info("STEP_AUTO Milvus 자동 초기화 시작 (기본값)")
+
                 try:
                     await self.initialize_vector_db("milvus")
                 except Exception as e:
@@ -285,7 +278,7 @@ class VectorDBService:
             if new_db_type not in VectorDBFactory.get_supported_types():
                 raise ValueError(f"지원하지 않는 DB 타입: {new_db_type}")
 
-            logger.info(f"STEP_VECTOR {new_db_type.upper()}로 전환 시도")
+
 
             # 새 DB 초기화 (올바른 경로 사용)
             db_path = f"data/vector_storage/{new_db_type}"
@@ -296,7 +289,7 @@ class VectorDBService:
             self.vector_db = new_db
             self.current_db_type = new_db_type
 
-            logger.info(f"SUCCESS {new_db_type.upper()}로 전환 완료")
+            logger.info(f"{new_db_type.upper()}로 전환 완료")
             return True
 
         except Exception as e:
@@ -306,7 +299,7 @@ class VectorDBService:
     async def force_switch_to_milvus(self) -> None:
         """강제로 Milvus DB로 전환 (기존 상태 무시)"""
         try:
-            logger.info("🔥 FORCE Milvus 강제 전환 시작")
+            logger.info("Milvus 강제 전환 시작")
 
             # 기존 연결 정리
             self.vector_db = None
@@ -326,7 +319,7 @@ class VectorDBService:
             self.vector_db = milvus_db
             self.current_db_type = "milvus"
 
-            logger.info("🎉 SUCCESS Milvus 강제 전환 완료")
+            logger.info("강제 전환 완료")
 
         except Exception as e:
             logger.error(f"ERROR Milvus 강제 전환 실패: {e}")
@@ -356,7 +349,7 @@ class VectorDBService:
                 if success:
                     deleted_count += 1
 
-            logger.info(f"SUCCESS {filename} 관련 {deleted_count}개 문서 삭제 완료")
+            logger.info(f"{filename} 관련 {deleted_count}개 문서 삭제 완료")
             return {
                 "success": True,
                 "deleted_count": deleted_count,
@@ -380,7 +373,7 @@ class VectorDBService:
 
             # 🔥 파일 개수 제한 (기본 100개 파일)
             file_limit = limit if limit else 100
-            logger.info(f"STEP_VECTOR 파일 조회 시작 (제한: {file_limit}개 파일)")
+
 
             # 🔥 충분히 많은 청크를 조회해서 모든 파일을 찾기 위해
             chunk_limit = 10000  # 충분히 큰 수로 설정
@@ -438,7 +431,7 @@ class VectorDBService:
                 "embedding_model": self.model_name
             }
 
-            logger.info(f"SUCCESS 파일 조회 완료: {len(limited_files)}개 파일 (전체 {len(files_info)}개 중)")
+
             return result
 
         except Exception as e:
@@ -474,11 +467,11 @@ class VectorDBService:
                     "vector_db_type": "unknown"
                 }
 
-            logger.info("🚨 DANGER 모든 벡터 데이터 삭제 시작")
+            logger.info("모든 벡터 데이터 삭제 시작")
 
             # 삭제 전 현재 상태 확인
             current_count = await self.vector_db.get_document_count()
-            logger.info(f"STEP_DELETE 삭제 예정 문서 수: {current_count}개")
+
 
             # 벡터 DB 타입별 전체 삭제 처리
             if hasattr(self.vector_db, 'clear_all'):
@@ -486,7 +479,7 @@ class VectorDBService:
                 success = await self.vector_db.clear_all()
             else:
                 # 전용 메서드가 없는 경우 - 모든 문서 개별 삭제
-                logger.info("STEP_DELETE 개별 문서 삭제 방식으로 처리")
+
 
                 # 모든 문서 조회 (제한 없이)
                 all_documents = await self.vector_db.get_all_documents(limit=None)
@@ -502,13 +495,13 @@ class VectorDBService:
                         continue
 
                 success = deleted_count > 0
-                logger.info(f"STEP_DELETE 개별 삭제 완료: {deleted_count}개 문서")
+
 
             # 삭제 후 상태 확인
             final_count = await self.vector_db.get_document_count()
 
             if success:
-                logger.info("🎉 SUCCESS 모든 벡터 데이터 삭제 완료")
+                logger.info("모든 벡터 데이터 삭제 완료")
                 return {
                     "success": True,
                     "message": "모든 벡터 데이터 삭제 완료",

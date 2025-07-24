@@ -15,7 +15,6 @@ logger = set_logger("api.quiz")
 router = APIRouter(tags=["quiz"])
 
 
-# 📋 1. 문제 생성 가능한 파일 목록 조회
 @router.get("/available-files",
     summary="문제 생성 가능한 파일 목록 조회",
 )
@@ -23,7 +22,7 @@ async def get_available_files(
     request: Request
 ) -> JSONResponse:
     """
-    📋 문제 생성 가능한 파일 목록 조회
+    문제 생성 가능한 파일 목록 조회
     - 벡터 DB에 저장된 파일들 중 문제 생성에 적합한 파일들만 반환
     - 각 파일의 도메인, 언어, 청크 수 등 메타데이터 포함
     """
@@ -34,7 +33,6 @@ async def get_available_files(
     return JSONResponse(content=result)
 
 
-# 🤖 2. AI 문제 생성 (POST 방식)
 @router.post("/generate",
     summary="AI 문제 생성",
     description=quiz_docs.generate_quiz_description,

@@ -65,6 +65,11 @@ class ErrorCode:
             "PDF 추출에 실패했습니다.",
             "PDF 추출에 실패했습니다.",
         )
+        CLEAR_ALL_DOCUMENTS_ERROR = (
+            "D004",
+            "벡터 DB의 모든 데이터 삭제에 실패했습니다.",
+            "벡터 DB의 모든 데이터 삭제에 실패했습니다.",
+        )
 
 
 

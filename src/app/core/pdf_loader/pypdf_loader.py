@@ -56,7 +56,7 @@ class PyPDFLoader(PDFLoader):
             except Exception as e:
                 logger.warning(f"메타데이터 추출 실패: {e}")
 
-            logger.info(f"SUCCESS PyPDF로 {len(pdf_reader.pages)}페이지 PDF 처리 완료")
+
 
             return PDFContent(
                 text=text.strip(),

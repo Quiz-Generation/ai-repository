@@ -118,7 +118,7 @@ async def process_pdf(
                 if not pdf_content or not hasattr(pdf_content, 'text') or not pdf_content.text.strip():
                     raise ValueError("추출된 텍스트가 비어있습니다")
 
-                logger.info(f"SUCCESS {loader_used} 로더로 PDF 처리 완료")
+
 
                 return {
                     "success": True,
@@ -154,7 +154,7 @@ async def process_pdf(
                         )
 
                         if pdf_content and hasattr(pdf_content, 'text') and pdf_content.text.strip():
-                            logger.info(f"SUCCESS {fallback_loader} 폴백 로더로 PDF 처리 완료")
+
 
                             return {
                                 "success": True,

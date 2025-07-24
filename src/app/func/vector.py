@@ -30,14 +30,7 @@ def _generate_document_id(
         content: str,
         metadata: Dict[str, Any]
     ) -> str:
-    """문서 ID 생성 (현재시간 + UUID)"""
     # 🔥 현재시간 + UUID 기반 ID 생성 (파일명 노출 방지)
-    logger.info(
-        f"""
-            [문서 ID 생성 시작]
-            "파일명": {metadata.get("filename", "unknown")}
-        """
-    )
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     unique_id = uuid.uuid4().hex[:12]  # 12자리 UUID
 
@@ -54,7 +47,7 @@ async def store_pdf_content(
     ) -> Dict[str, Any]:
     """PDF 내용을 벡터 DB에 저장"""
     try:
-        logger.info("STEP_VECTOR PDF 내용 청킹 시작")
+
 
         # 🔥 파일별 고유 ID 생성 (한 번만)
         file_id = _generate_file_id(
@@ -70,10 +63,10 @@ async def store_pdf_content(
             chunk_overlap=chunk_overlap
         )
 
-        logger.info(f"STEP_VECTOR {len(chunks)}개 청크 생성 완료")
+
 
         # 임베딩 생성
-        logger.info("STEP_VECTOR 임베딩 생성 시작")
+
         embeddings = vector_db.embedding_model.encode(chunks, show_progress_bar=True)
 
         # VectorDocument 객체들 생성
@@ -106,7 +99,7 @@ async def store_pdf_content(
             vector_documents.append(vector_doc)
 
         # 벡터 DB에 저장
-        logger.info(f"STEP_VECTOR {vector_db.current_db_type.upper()}에 저장 시작")
+
         stored_ids = await vector_db.vector_db.add_documents(vector_documents)
 
         result = {
@@ -120,7 +113,7 @@ async def store_pdf_content(
             "stored_ids": stored_ids[:5]  # 처음 5개 ID만 반환
         }
 
-        logger.info(f"SUCCESS PDF 벡터화 저장 완료: {len(stored_ids)}개 문서")
+        logger.info(f"벡터화 저장 완료: {len(stored_ids)}개 문서")
         return result
 
     except Exception as e:
