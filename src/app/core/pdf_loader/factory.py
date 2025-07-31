@@ -2,12 +2,13 @@
 🏭 PDF Loader Factory
 """
 import logging
-from typing import Type, Dict, Any
+from typing import Any, Dict, Type
+
 from .base import PDFLoader, PDFLoaderInfo
+from .pdfminer_loader import PDFMinerLoader
+from .pdfplumber_loader import PDFPlumberLoader
 from .pymupdf_loader import PyMuPDFLoader
 from .pypdf_loader import PyPDFLoader
-from .pdfplumber_loader import PDFPlumberLoader
-from .pdfminer_loader import PDFMinerLoader
 
 logger = logging.getLogger(__name__)
 
