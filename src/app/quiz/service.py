@@ -1,13 +1,12 @@
 """
 🎯 Quiz Generation Service
 """
-import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
 from src.common.utils.response import JSendResponse
 
-from src.app.agent.quiz_generator import (
+from src.app.quiz.agent.quiz_generator import (
     QuizGeneratorAgent,
     QuizRequest,
     DifficultyLevel,
@@ -16,7 +15,6 @@ from src.app.agent.quiz_generator import (
 from src.common.vector.connect import VectorDBService
 from src.common.error import ErrorCode, JSendError
 
-logger = logging.getLogger(__name__)
 
 class QuizService:
     def __init__(
@@ -118,7 +116,7 @@ class QuizService:
         )
 
         # 5. AI 에이전트로 문제 생성
-        logger.info(f"문제 생성 시작: {num_questions}개")
+        self.logger.info(f"문제 생성 시작: {num_questions}개")
         result = await quiz_agent.generate_quiz(quiz_request, [document_data])
 
         if not result["success"]:
@@ -165,7 +163,7 @@ class QuizService:
             }
         }
 
-        logger.info(f"문제 생성 완료: {len(processed_questions)}개")
+        self.logger.info(f"문제 생성 완료: {len(processed_questions)}개")
 
         return JSendResponse(
             status="success",
@@ -263,7 +261,7 @@ class QuizService:
                             }
 
                 if not target_chunks:
-                    logger.warning(f"WARNING 지정된 파일 ID를 찾을 수 없음: {file_id}")
+                    self.logger.warning(f"WARNING 지정된 파일 ID를 찾을 수 없음: {file_id}")
                     return None
 
                 # 청크들을 하나의 문서로 합치기 (정렬 후)
@@ -291,7 +289,7 @@ class QuizService:
                 # 기존 방식으로 fallback
                 all_docs_result = await self.vector_db.get_all_documents(10000)
                 if not all_docs_result["success"]:
-                    logger.error("ERROR 전체 문서 조회 실패")
+                    self.logger.error("ERROR 전체 문서 조회 실패")
                     return None
 
                 target_file = None
@@ -301,7 +299,7 @@ class QuizService:
                         break
 
                 if not target_file:
-                    logger.warning(f"WARNING 지정된 파일 ID를 찾을 수 없음: {file_id}")
+                    self.logger.warning(f"WARNING 지정된 파일 ID를 찾을 수 없음: {file_id}")
                     return None
 
                 file_chunks = await self.get_file_chunks(self.vector_db, file_id)
@@ -325,7 +323,7 @@ class QuizService:
                 return document
 
         except Exception as e:
-            logger.error(f"ERROR 문서 조회 실패: {e}")
+            self.logger.error(f"ERROR 문서 조회 실패: {e}")
             return None
 
 
@@ -357,7 +355,7 @@ class QuizService:
             return file_chunks
 
         except Exception as e:
-            logger.error(f"ERROR 파일 청크 조회 실패: {e}")
+            self.logger.error(f"ERROR 파일 청크 조회 실패: {e}")
             return []
 
 

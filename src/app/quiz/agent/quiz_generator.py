@@ -18,12 +18,13 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langchain.prompts import ChatPromptTemplate
-
+from src.common.utils.logger import set_logger
 # 🔥 프롬프트 관리자 임포트
 from .prompt import QuizPromptManager
 from .prompt.quiz_prompt_manager import DifficultyLevel, QuestionType
 
-logger = logging.getLogger(__name__)
+
+logger = set_logger(__name__)
 
 
 @dataclass

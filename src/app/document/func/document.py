@@ -7,7 +7,7 @@ from typing import Any, Dict
 
 from fastapi import UploadFile
 
-from src.app.core.pdf_loader.factory import PDFLoaderFactory
+from src.app.document.core.pdf_loader.factory import PDFLoaderFactory
 
 
 class Document:
