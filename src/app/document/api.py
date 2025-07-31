@@ -3,8 +3,8 @@ import time
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 
-from src.app.docs import document as document_docs
-from src.app.service.document import DocumentService
+from src.app.document import docs as document_docs
+from src.app.document.service import DocumentService
 from src.common.utils.logger import set_logger
 
 logger = set_logger("api.document")

@@ -1,14 +1,12 @@
 """
 🎯 Quiz Generation API Routes
 """
-import logging
-from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, HTTPException, Request
-from ..docs import quiz_docs
+from src.app.quiz import docs as quiz_docs
 from fastapi.responses import JSONResponse
 from src.common.utils.logger import set_logger
-from src.app.models import quiz as quiz_models
-from src.app.service import quiz as quiz_service
+from src.app.quiz import model as quiz_models
+from src.app.quiz import service as quiz_service
 
 logger = set_logger("api.quiz")
 

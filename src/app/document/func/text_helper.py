@@ -4,8 +4,8 @@
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from ..models.document import DocumentChunk
-from ..core.config import settings
+from src.app.document.model import DocumentChunk
+from src.app.core.config import settings
 
 logger = logging.getLogger(__name__)
 

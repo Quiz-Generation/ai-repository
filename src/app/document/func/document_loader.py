@@ -1,17 +1,13 @@
 """
 🔍 PDF Loader Selection Helper
 """
-import logging
 import re
-from dataclasses import dataclass
-from typing import Any, Dict, Optional
-
 from fastapi import UploadFile
 
-from src.app.models.document_loader import PDFAnalysisResult
+from src.app.document.model import PDFAnalysisResult
 
 
-class DocumentLoaderFunc:
+class DocumentLoader:
     def __init__(self, logger):
         self.logger = logger
 

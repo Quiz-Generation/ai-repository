@@ -4,9 +4,9 @@ from fastapi import UploadFile
 from fastapi.responses import JSONResponse
 
 from src.app.core.pdf_loader.factory import PDFLoaderFactory
-from src.app.func.document import DocumentFunc
-from src.app.func.document_loader import DocumentLoaderFunc
-from src.app.func.vector import VectorFunc
+from src.app.document.func.document import Document
+from src.app.document.func.document_loader import DocumentLoader
+from src.app.document.func.vector import Vector
 from src.common.error import ErrorCode, JSendError
 from src.common.vector.connect import VectorDBService
 
@@ -19,9 +19,9 @@ class DocumentService:
     ):
         self.logger = logger
         self.vector_db = vector_db
-        self.document_loader_func = DocumentLoaderFunc(logger=logger)
-        self.document_func = DocumentFunc(logger=logger, pdf_loader_factory=PDFLoaderFactory())
-        self.vector_func = VectorFunc(logger=logger, vector_db=vector_db)
+        self.document_loader = DocumentLoader(logger=logger)
+        self.document = Document(logger=logger, pdf_loader_factory=PDFLoaderFactory())
+        self.vector = Vector(logger=logger, vector_db=vector_db)
 
     async def upload_document(
         self,
@@ -56,7 +56,7 @@ class DocumentService:
             #2. 해당 파일 특성 분석 및 최적 로더 선택
             analysis_start_time = time.time()
 
-            analysis_result = await self.document_loader_func.analyze_pdf_characteristics(
+            analysis_result = await self.document_loader.analyze_pdf_characteristics(
                 file=file
             )
             analysis_time = time.time() - analysis_start_time
@@ -78,7 +78,7 @@ class DocumentService:
             #3. PDF 내용 추출
             extraction_start_time = time.time()
 
-            extraction_result = await self.document_func.process_pdf(
+            extraction_result = await self.document.process_pdf(
                 file=file,
                 loader=analysis_result.recommended_loader
             )
@@ -115,7 +115,7 @@ class DocumentService:
             # 벡터 DB에 저장
             vector_store_start_time = time.time()
 
-            vector_result = await self.vector_func.store_pdf_content(
+            vector_result = await self.vector.store_pdf_content(
                 pdf_content=extraction_result["content"],
                 metadata=metadata,
                 chunk_size=auto_chunk_size,
@@ -126,7 +126,7 @@ class DocumentService:
 
             #5. 문제 수 계산
 
-            question_count_result = await self.document_func.calculate_optimal_question_count(
+            question_count_result = await self.document.calculate_optimal_question_count(
                 content=extraction_result["content"],
                 metadata=metadata
             )

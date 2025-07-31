@@ -3,12 +3,12 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict
 
-from src.app.func.text import TextFunc
+from src.app.document.func.text import TextFunc
 from src.common.vector.base import VectorDocument
 from src.common.vector.connect import VectorDBService
 
 
-class VectorFunc:
+class Vector:
     def __init__(
         self,
         logger,

@@ -10,7 +10,7 @@ from fastapi import UploadFile
 from src.app.core.pdf_loader.factory import PDFLoaderFactory
 
 
-class DocumentFunc:
+class Document:
     def __init__(
         self,
         logger,

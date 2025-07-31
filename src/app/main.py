@@ -11,7 +11,8 @@ import uvicorn
 from src.common.utils.logger import set_logger
 from src.common.error import JSendError, ErrorCode
 
-from src.app.api import document, quiz, test_routes
+from src.app.quiz import api as quiz_api
+from src.app.document import api as document_api
 from src.common.vector.connect import VectorDBService
 
 
@@ -73,9 +74,8 @@ app.add_middleware(
 )
 
 # 라우터 등록
-app.include_router(document.router, prefix="/api/v2/documents")
-app.include_router(quiz.router, prefix="/api/v2/quiz")
-app.include_router(test_routes.router, prefix="/api/v2/test")
+app.include_router(document_api.router, prefix="/api/v2/documents")
+app.include_router(quiz_api.router, prefix="/api/v2/quiz")
 
 
 @app.get("/health")
