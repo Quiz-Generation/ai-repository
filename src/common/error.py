@@ -70,6 +70,38 @@ class ErrorCode:
             "벡터 DB의 모든 데이터 삭제에 실패했습니다.",
             "벡터 DB의 모든 데이터 삭제에 실패했습니다.",
         )
+    class Quiz:
+        GENERATE_QUIZ_ERROR = (
+            "Q001",
+            "문제 생성에 실패했습니다.",
+            "문제 생성에 실패했습니다.",
+        )
+        GET_AVAILABLE_FILES_ERROR = (   
+            "Q002",
+            "문제 생성 가능한 파일 목록 조회에 실패했습니다.",
+            "문제 생성 가능한 파일 목록 조회에 실패했습니다.",
+        )
+        GET_DOCUMENT_BY_FILE_ID_ERROR = (
+            "Q003",
+            "파일 ID로 문서 조회에 실패했습니다.",
+            "파일 ID로 문서 조회에 실패했습니다.",
+        )
+        GET_FILE_CHUNKS_ERROR = (
+            "Q004",
+            "파일 청크 조회에 실패했습니다.",
+            "파일 청크 조회에 실패했습니다.",
+        )
+        CALCULATE_DIFFICULTY_CONSISTENCY_ERROR = (
+            "Q005",
+            "난이도 일관성 계산에 실패했습니다.",
+            "난이도 일관성 계산에 실패했습니다.",
+        )
+        CALCULATE_QUESTION_UNIQUENESS_ERROR = (
+            "Q006",
+            "문제 중복성 계산에 실패했습니다.",
+            "문제 중복성 계산에 실패했습니다.",
+        )
+
 
 
 

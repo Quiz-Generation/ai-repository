@@ -1,7 +1,6 @@
 import time
 
 from fastapi import UploadFile
-from fastapi.responses import JSONResponse
 
 from src.app.core.pdf_loader.factory import PDFLoaderFactory
 from src.app.document.func.document import Document
@@ -9,6 +8,7 @@ from src.app.document.func.document_loader import DocumentLoader
 from src.app.document.func.vector import Vector
 from src.common.error import ErrorCode, JSendError
 from src.common.vector.connect import VectorDBService
+from src.common.utils.response import JSendResponse
 
 
 class DocumentService:
@@ -26,7 +26,7 @@ class DocumentService:
     async def upload_document(
         self,
         file: UploadFile,
-    ) -> JSONResponse:
+    ) -> JSendResponse:
         """
         PDF 파일 업로드 시 파일 특성 분석 및 최적 로더 선택
 
@@ -160,7 +160,10 @@ class DocumentService:
             self.logger.info(f"전체 처리 시간: {total_time:.2f}초")
             self.logger.info(f"성능 요약: 분석({analysis_time:.2f}s) + 추출({extraction_time:.2f}s) + 벡터화({vector_store_time:.2f}s)")
 
-            return JSONResponse(content=response_data)
+            return JSendResponse(
+                status="success",
+                data=response_data
+            )
         except Exception as e:
             self.logger.error(f"PDF 업로드 실패: {e}")
             raise JSendError(
@@ -171,7 +174,7 @@ class DocumentService:
     async def clear_all_documents(
         self,
         confirm_token: str
-    ) -> JSONResponse:
+    ) -> JSendResponse:
         """
         벡터 DB 전체 삭제
         """
@@ -200,7 +203,10 @@ class DocumentService:
                     "vector_db_type": result.get("vector_db_type")
                 }
 
-            return JSONResponse(content=response_data)
+            return JSendResponse(
+                status="success",
+                data=response_data
+            )
 
         except Exception as e:
             self.logger.error(f"ERROR 벡터 DB 전체 삭제 실패: {e}")
