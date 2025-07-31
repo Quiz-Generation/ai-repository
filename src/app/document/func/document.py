@@ -1,20 +1,30 @@
 """
 📄 PDF Helper
 """
-from datetime import datetime
 import os
-from typing import Dict, Any
+from datetime import datetime
+from typing import Any, Dict
+
 from fastapi import UploadFile
 
-from src.app.core.pdf_loader.factory import PDFLoaderFactory
+from src.app.document.core.pdf_loader.factory import PDFLoaderFactory
 
 
-async def _validate_pdf_file(
+class Document:
+    def __init__(
+        self,
         logger,
+        pdf_loader_factory: PDFLoaderFactory
+    ):
+        self.logger = logger
+        self.pdf_loader_factory = pdf_loader_factory
+
+    async def validate_pdf_file(
+        self,
         file: UploadFile
     ) -> bool:
         """PDF 파일 유효성 검증"""
-        logger.info(
+        self.logger.info(
             f"""
                 [PDF 파일 유효성 검증 시작]
             """
@@ -22,7 +32,7 @@ async def _validate_pdf_file(
         if not file.filename:
             return False
         if not file.filename.lower().endswith('.pdf'):
-            logger.error(
+            self.logger.error(
                 f"""
                     [PDF 파일 유효성 검증 실패]
                     "파일명": {file.filename}
@@ -32,8 +42,8 @@ async def _validate_pdf_file(
         return True
 
 
-async def _extract_pdf_with_selected_loader(
-        logger,
+    async def extract_pdf_with_selected_loader(
+        self,
         file: UploadFile,
         loader_type: str
     ):
@@ -43,7 +53,7 @@ async def _extract_pdf_with_selected_loader(
             await file.seek(0)
 
             # 팩토리에서 로더 생성
-            pdf_loader = PDFLoaderFactory.create(loader_type)
+            pdf_loader = self.pdf_loader_factory.create(loader_type)
 
             # 파일 유효성 검증
             if not pdf_loader.validate_file(file):
@@ -52,15 +62,15 @@ async def _extract_pdf_with_selected_loader(
             # 텍스트 추출
             pdf_content = await pdf_loader.extract_text_from_file(file)
 
-            logger.info(f"STEP4 {loader_type} 로더로 텍스트 추출 완료")
+            self.logger.info(f"STEP4 {loader_type} 로더로 텍스트 추출 완료")
             return pdf_content
 
         except Exception as e:
-            logger.error(f"ERROR PDF 추출 실패 ({loader_type}): {e}")
+            self.logger.error(f"ERROR PDF 추출 실패 ({loader_type}): {e}")
 
             # 실패 시 fallback 로더 시도
             if loader_type != "pymupdf":
-                logger.info("FALLBACK PyMuPDF 로더로 재시도")
+                self.logger.info("FALLBACK PyMuPDF 로더로 재시도")
                 # 🔥 폴백 시도 전에도 파일 포인터 리셋
                 await file.seek(0)
                 fallback_loader = PDFLoaderFactory.create("pymupdf")
@@ -69,8 +79,8 @@ async def _extract_pdf_with_selected_loader(
                 raise
 
 
-async def process_pdf(
-        logger,
+    async def process_pdf(
+        self,
         file: UploadFile,
         loader: str
     ) -> Dict[str, Any]:
@@ -83,7 +93,7 @@ async def process_pdf(
         fallback_attempts = 0
 
         try:
-            logger.info(
+            self.logger.info(
                 f"""
                     STEP_PDF PDF 처리 시작:
                     "파일명": {file.filename}
@@ -92,11 +102,10 @@ async def process_pdf(
             )
 
             # 1. 파일 검증
-            if not await _validate_pdf_file(
-                logger=logger,
+            if not await self.validate_pdf_file(
                 file=file
             ):
-                logger.error(
+                self.logger.error(
                     f"""
                         [PDF 파일 유효성 검증 실패]
                         "파일명": {file.filename}
@@ -109,8 +118,7 @@ async def process_pdf(
 
             # 2. 선택된 로더로 PDF 처리 시도
             try:
-                pdf_content = await _extract_pdf_with_selected_loader(
-                    logger=logger,
+                pdf_content = await self.extract_pdf_with_selected_loader(
                     file=file,
                     loader_type=loader_used
                 )
@@ -131,7 +139,7 @@ async def process_pdf(
                 }
 
             except Exception as e:
-                logger.warning(f"WARNING {loader_used} 로더 실패: {e}")
+                self.logger.warning(f"WARNING {loader_used} 로더 실패: {e}")
 
                 # 3. 폴백 메커니즘 - 우선순위 순서로 시도
                 fallback_loaders = ["pymupdf", "pdfplumber", "pypdf", "pdfminer"]
@@ -142,13 +150,12 @@ async def process_pdf(
 
                     try:
                         fallback_attempts += 1
-                        logger.info(f"FALLBACK {fallback_loader} 로더로 재시도 ({fallback_attempts})")
+                        self.logger.info(f"FALLBACK {fallback_loader} 로더로 재시도 ({fallback_attempts})")
 
                         # 🔥 폴백 시도 전에도 파일 포인터 리셋
                         await file.seek(0)
 
-                        pdf_content = await _extract_pdf_with_selected_loader(
-                            logger=logger,
+                        pdf_content = await self.extract_pdf_with_selected_loader(
                             file=file,
                             loader_type=fallback_loader
                         )
@@ -168,7 +175,7 @@ async def process_pdf(
                             }
 
                     except Exception as fallback_error:
-                        logger.warning(f"WARNING {fallback_loader} 폴백 로더도 실패: {fallback_error}")
+                        self.logger.warning(f"WARNING {fallback_loader} 폴백 로더도 실패: {fallback_error}")
                         continue
 
                 # 모든 로더 실패
@@ -180,7 +187,7 @@ async def process_pdf(
                 }
 
         except Exception as e:
-            logger.error(f"ERROR PDF 처리 중 예외 발생: {e}")
+            self.logger.error(f"ERROR PDF 처리 중 예외 발생: {e}")
             return {
                 "success": False,
                 "error": f"PDF 처리 중 예외: {str(e)}",
@@ -189,11 +196,8 @@ async def process_pdf(
             }
 
 
-
-
-
-async def calculate_optimal_question_count(
-        logger,
+    async def calculate_optimal_question_count(
+        self,
         content: str,
         metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -270,7 +274,7 @@ async def calculate_optimal_question_count(
             }
 
         except Exception as e:
-            logger.error(f"문제 수 계산 중 오류 발생: {e}")
+            self.logger.error(f"문제 수 계산 중 오류 발생: {e}")
             return {
                 "count": 10,  # 기본값
             }

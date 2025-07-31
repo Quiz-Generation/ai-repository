@@ -1,36 +1,34 @@
 """
 🎯 Quiz Generation API Routes
 """
-import logging
-from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, HTTPException, Request
-from ..docs import quiz_docs
+from fastapi import APIRouter, Depends, HTTPException, Request
+from src.common.utils.response import JSendResponse
+from src.app.quiz import docs as quiz_docs
 from fastapi.responses import JSONResponse
 from src.common.utils.logger import set_logger
-from src.app.models import quiz as quiz_models
-from src.app.service import quiz as quiz_service
+from src.app.quiz import model as quiz_models
+from src.app.quiz import service as quiz_service
 
 logger = set_logger("api.quiz")
 
 router = APIRouter(tags=["quiz"])
+
+def get_quiz_service(
+    request: Request
+):
+    return quiz_service.QuizService(
+        logger=logger,
+        vector_db=request.app.state.vector_db
+    )
 
 
 @router.get("/available-files",
     summary="문제 생성 가능한 파일 목록 조회",
 )
 async def get_available_files(
-    request: Request
-) -> JSONResponse:
-    """
-    문제 생성 가능한 파일 목록 조회
-    - 벡터 DB에 저장된 파일들 중 문제 생성에 적합한 파일들만 반환
-    - 각 파일의 도메인, 언어, 청크 수 등 메타데이터 포함
-    """
-    result = await quiz_service.get_available_files(
-        logger=logger,
-        vector_db=request.app.state.vector_db
-    )
-    return JSONResponse(content=result)
+    quiz_service: quiz_service.QuizService = Depends(get_quiz_service),
+) -> JSendResponse:
+    return await quiz_service.get_available_files()
 
 
 @router.post("/generate",
@@ -38,15 +36,13 @@ async def get_available_files(
     description=quiz_docs.generate_quiz_description,
 )
 async def generate_quiz(
-    request: Request,
     quiz_request: quiz_models.QuizGenerationRequest,
-) -> JSONResponse:
+    quiz_service: quiz_service.QuizService = Depends(get_quiz_service),
+) -> JSendResponse:
     """
     AI를 사용하여 PDF 문서에서 문제를 생성합니다.
     """
-    result = await quiz_service.generate_quiz_from_file(
-        logger=logger,
-        vector_db=request.app.state.vector_db,
+    return await quiz_service.generate_quiz_from_file(
         file_id=quiz_request.file_id,
         num_questions=quiz_request.num_questions,
         difficulty=quiz_request.difficulty,
@@ -55,7 +51,6 @@ async def generate_quiz(
         category=getattr(quiz_request, 'category', None),
         sub_category=getattr(quiz_request, 'sub_category', None)
     )
-    return JSONResponse(content=result)
 
 
 # 📊 3. 문제 생성 옵션 조회

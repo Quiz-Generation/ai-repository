@@ -4,10 +4,11 @@
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from ..models.document import DocumentChunk
-from ..core.config import settings
+from src.app.document.model import DocumentChunk
+from src.app.document.core.config import settings
+from src.common.utils.logger import set_logger
 
-logger = logging.getLogger(__name__)
+logger = set_logger(__name__)
 
 
 class TextHelper:

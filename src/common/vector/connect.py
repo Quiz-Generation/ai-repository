@@ -10,7 +10,7 @@ from sentence_transformers import SentenceTransformer
 
 from src.common.vector.factory import VectorDBFactory
 from src.common.vector.base import  VectorDocument, SearchResult
-from src.app.func.text_helper import TextHelper
+from src.app.document.func.text_helper import TextHelper
 
 logger = logging.getLogger(__name__)
 

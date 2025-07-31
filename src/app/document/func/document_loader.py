@@ -2,20 +2,21 @@
 🔍 PDF Loader Selection Helper
 """
 import re
-import logging
-from typing import Dict, Any, Optional
 from fastapi import UploadFile
-from dataclasses import dataclass
 
-from src.app.models.document_loader import PDFAnalysisResult
+from src.app.document.model import PDFAnalysisResult
 
 
-async def _detect_language_from_filename(
-        logger,
+class DocumentLoader:
+    def __init__(self, logger):
+        self.logger = logger
+
+    async def detect_language_from_filename(
+        self,
         filename: str
     ) -> str:
         """파일명에서 언어 감지"""
-        logger.info(
+        self.logger.info(
             f"""
                 [PDF 특성 분석 시작]
                 PDF 파일명: {filename}
@@ -26,14 +27,14 @@ async def _detect_language_from_filename(
 
         # 1. 파일명에 한글 문자가 있는지 직접 체크
         korean_chars = len(re.findall(r'[가-힣]', filename))
-        logger.info(
+        self.logger.info(
             f"""
                 STEP3-1b 파일명에서 한글 문자 {korean_chars}개 발견
             """
         )
 
         if korean_chars > 0:
-            logger.info(
+            self.logger.info(
                 f"""
                     STEP3-1b 한글 문자 발견으로 korean 반환
                 """
@@ -48,28 +49,28 @@ async def _detect_language_from_filename(
         korean_score = sum(1 for keyword in korean_keywords if keyword in filename_lower)
         english_score = sum(1 for keyword in english_keywords if keyword in filename_lower)
 
-        logger.info(
+        self.logger.info(
             f"""
                 STEP3-1b 키워드 점수: korean={korean_score}, english={english_score}
             """
         )
 
         if korean_score > 0:
-            logger.info(
+            self.logger.info(
                 f"""
                     STEP3-1b 한글 키워드 발견으로 korean 반환
                 """
             )
             return "korean"
         elif english_score > 0:
-            logger.info(
+            self.logger.info(
                 f"""
                     STEP3-1b 영어 키워드 발견으로 english 반환
                 """
             )
             return "english"
         else:
-            logger.info(
+            self.logger.info(
                 f"""
                     STEP3-1b 키워드 없음으로 unknown 반환
                 """
@@ -77,12 +78,12 @@ async def _detect_language_from_filename(
             return "unknown"
 
 
-async def _detect_language_from_content(
-        logger,
+    async def detect_language_from_content(
+        self,
         file: UploadFile
     ) -> str:
         """PDF 텍스트 내용에서 언어 감지"""
-        logger.info(
+        self.logger.info(
             f"""
                 STEP3-1c 텍스트 내용에서 언어 감지 시작
             """
@@ -98,7 +99,7 @@ async def _detect_language_from_content(
                 pass
 
             if not file_content:
-                logger.warning(
+                self.logger.warning(
                     f"""
                         STEP3-1c 파일 내용이 비어있습니다
                     """
@@ -111,7 +112,7 @@ async def _detect_language_from_content(
                 doc = fitz.open(stream=file_content, filetype="pdf")
 
                 if len(doc) == 0:
-                    logger.warning(
+                    self.logger.warning(
                         f"""
                             STEP3-1c PDF 페이지가 없습니다
                         """
@@ -124,7 +125,7 @@ async def _detect_language_from_content(
                 doc.close()
 
                 if not sample_text.strip():
-                    logger.warning(
+                    self.logger.warning(
                         f"""
                             STEP3-1c 추출된 텍스트가 비어있습니다
                         """
@@ -135,7 +136,7 @@ async def _detect_language_from_content(
                 korean_chars = len(re.findall(r'[가-힣]', sample_text))
                 english_chars = len(re.findall(r'[a-zA-Z]', sample_text))
 
-                logger.info(f"STEP3-1d 텍스트 분석: 한글={korean_chars}자, 영어={english_chars}자")
+                self.logger.info(f"STEP3-1d 텍스트 분석: 한글={korean_chars}자, 영어={english_chars}자")
 
                 if korean_chars > 20:
                     return "korean"
@@ -146,7 +147,7 @@ async def _detect_language_from_content(
                 return "unknown"
 
             except Exception as e:
-                logger.warning(
+                self.logger.warning(
                     f"""
                         STEP3-1c 텍스트 추출 실패: {e}
                     """
@@ -154,17 +155,17 @@ async def _detect_language_from_content(
                 return "unknown"
 
         except Exception as e:
-            logger.error(f"ERROR 언어 감지 실패: {e}")
+            self.logger.error(f"ERROR 언어 감지 실패: {e}")
             return "unknown"
 
 
-async def _combine_language_results(
-        logger,
+    async def combine_language_results(
+        self,
         filename_lang: str,
         text_lang: str
     ) -> str:
         """파일명과 텍스트 분석 결과 종합"""
-        logger.info(f"STEP3-1c 언어 결합: filename={filename_lang}, text={text_lang}")
+        self.logger.info(f"STEP3-1c 언어 결합: filename={filename_lang}, text={text_lang}")
 
         # 파일명에서 korean이 감지되면 우선시 (한글 파일명은 확실함)
         if filename_lang == "korean":
@@ -179,85 +180,85 @@ async def _combine_language_results(
             return "english"
 
 
-async def _estimate_complexity_from_size(
-        logger,
+    async def estimate_complexity_from_size(
+        self,
         file_size: int
     ) -> str:
-    """파일 크기로 복잡도 추정"""
-    logger.info(
-        f"""
-            STEP3-1e 파일 크기로 복잡도 추정 시작: {file_size}
-        """
-    )
-    if file_size < 1024 * 1024:  # 1MB 미만
-        return "simple"
-    elif file_size < 50 * 1024 * 1024:  # 50MB 미만
-        return "medium"
-    else:
-        return "complex"
+        """파일 크기로 복잡도 추정"""
+        self.logger.info(
+            f"""
+                STEP3-1e 파일 크기로 복잡도 추정 시작: {file_size}
+            """
+        )
+        if file_size < 1024 * 1024:  # 1MB 미만
+            return "simple"
+        elif file_size < 50 * 1024 * 1024:  # 50MB 미만
+            return "medium"
+        else:
+            return "complex"
 
 
-async def _estimate_tables_from_filename(
-        logger,
+    async def estimate_tables_from_filename(
+        self,
         filename: str
     ) -> bool:
-    """파일명에서 테이블 존재 추정"""
-    logger.info(
-        f"""
-            STEP3-1f 파일명에서 테이블 존재 추정 시작: {filename}
-        """
-    )
-    table_keywords = ['table', '표', 'chart', '차트', 'data', '데이터', 'excel', 'sheet']
-    filename_lower = filename.lower()
-    return any(keyword in filename_lower for keyword in table_keywords)
+        """파일명에서 테이블 존재 추정"""
+        self.logger.info(
+            f"""
+                STEP3-1f 파일명에서 테이블 존재 추정 시작: {filename}
+            """
+        )
+        table_keywords = ['table', '표', 'chart', '차트', 'data', '데이터', 'excel', 'sheet']
+        filename_lower = filename.lower()
+        return any(keyword in filename_lower for keyword in table_keywords)
 
 
-async def _estimate_images_from_size(
-        logger,
+    async def estimate_images_from_size(
+        self,
         file_size: int
     ) -> bool:
-    """파일 크기로 이미지 존재 추정"""
-    logger.info(
-        f"""
-            STEP3-1g 파일 크기로 이미지 존재 추정 시작: {file_size}
-        """
-    )
-    # 5MB 이상이면 이미지가 있을 가능성 높음
-    return file_size > 5 * 1024 * 1024
+        """파일 크기로 이미지 존재 추정"""
+        self.logger.info(
+            f"""
+                STEP3-1g 파일 크기로 이미지 존재 추정 시작: {file_size}
+            """
+        )
+        # 5MB 이상이면 이미지가 있을 가능성 높음
+        return file_size > 5 * 1024 * 1024
 
 
-async def _estimate_text_density(
-        logger,
+    async def estimate_text_density(
+        self,
         file_size: int,
         pages: int
     ) -> str:
-    """텍스트 밀도 추정"""
-    logger.info(
-        f"""
-            STEP3-1h 텍스트 밀도 추정 시작: {file_size}, {pages}
-        """
-    )
-    if pages == 0:
-        return "medium"
+        """텍스트 밀도 추정"""
+        self.logger.info(
+            f"""
+                STEP3-1h 텍스트 밀도 추정 시작: {file_size}, {pages}
+            """
+        )
+        if pages == 0:
+            return "medium"
 
-    size_per_page = file_size / pages
+        size_per_page = file_size / pages
 
-    if size_per_page < 50 * 1024:  # 50KB per page
-        return "low"
-    elif size_per_page < 200 * 1024:  # 200KB per page
-        return "medium"
-    else:
-        return "high"
+        if size_per_page < 50 * 1024:  # 50KB per page
+            return "low"
+        elif size_per_page < 200 * 1024:  # 200KB per page
+            return "medium"
+        else:
+            return "high"
 
 
 
-async def _estimate_font_complexity(
-        logger,
+    async def estimate_font_complexity(
+        self,
         language: str,
         complexity: str
     ) -> str:
         """폰트 복잡도 추정"""
-        logger.info(
+        self.logger.info(
             f"""
                 STEP3-1i 폰트 복잡도 추정 시작: {language}, {complexity}
             """
@@ -269,12 +270,12 @@ async def _estimate_font_complexity(
         else:
             return "simple"
 
-async def _recommend_loader(
-        logger,
+    async def recommend_loader(
+        self,
         analysis: PDFAnalysisResult
     ) -> str:
         """분석 결과를 바탕으로 최적 로더 추천"""
-        logger.info(
+        self.logger.info(
             f"""
                 STEP3-1j 분석 결과를 바탕으로 최적 로더 추천 시작: {analysis}
             """
@@ -305,8 +306,8 @@ async def _recommend_loader(
         # 6. 기본값: PyMuPDF (최고 성능)
         return "pymupdf"
 
-async def analyze_pdf_characteristics(
-        logger,
+    async def analyze_pdf_characteristics(
+        self,
         file: UploadFile
     ) -> PDFAnalysisResult:
         """PDF 파일 특성 분석"""
@@ -316,55 +317,47 @@ async def analyze_pdf_characteristics(
 
             # 파일명 기반 1차 언어 추정
             filename = file.filename or ""
-            filename_language = await _detect_language_from_filename(
-                logger=logger,
+            filename_language = await self.detect_language_from_filename(
                 filename=filename
             )
 
             # 실제 텍스트 기반 언어 감지
-            text_language = await _detect_language_from_content(
-                logger=logger,
+            text_language = await self.detect_language_from_content(
                 file=file
             )
 
             # 파일명과 텍스트 분석 결과 종합
-            language = await _combine_language_results(
-                logger=logger,
+            language = await self.combine_language_results(
                 filename_lang=filename_language,
                 text_lang=text_language
             )
-            logger.info(
+            self.logger.info(
                 f"""
                     STEP3-1 언어 감지 완료: 파일명={filename_language}, 텍스트={text_language}, 최종={language}
                 """
             )
 
             # 파일 크기 기반 복잡도 추정
-            complexity = await _estimate_complexity_from_size(
-                logger=logger,
+            complexity = await self.estimate_complexity_from_size(
                 file_size=file_size
             )
 
             # 테이블/이미지 존재 추정 (파일명/크기 기반)
-            has_tables = await _estimate_tables_from_filename(
-                logger=logger,
+            has_tables = await self.estimate_tables_from_filename(
                 filename=filename
             )
-            has_images = await _estimate_images_from_size(
-                logger=logger,
+            has_images = await self.estimate_images_from_size(
                 file_size=file_size
             )
 
             # 텍스트 밀도 추정
-            text_density = await _estimate_text_density(
-                logger=logger,
+            text_density = await self.estimate_text_density(
                 file_size=file_size,
                 pages=estimated_pages
             )
 
             # 폰트 복잡도 추정
-            font_complexity = await _estimate_font_complexity(
-                logger=logger,
+            font_complexity = await self.estimate_font_complexity(
                 language=language,
                 complexity=complexity
             )
@@ -382,13 +375,12 @@ async def analyze_pdf_characteristics(
             )
 
             # 최적 로더 추천
-            recommended_loader = await _recommend_loader(
-                logger=logger,
+            recommended_loader = await self.recommend_loader(
                 analysis=analysis_result
             )
             analysis_result.recommended_loader = recommended_loader
 
-            logger.info(
+            self.logger.info(
                 f"""
                     STEP3-2 PDF 분석 완료: {filename} -> {recommended_loader}
                 """
@@ -396,7 +388,7 @@ async def analyze_pdf_characteristics(
             return analysis_result
 
         except Exception as e:
-            logger.error(f"ERROR PDF 분석 실패: {e}")
+            self.logger.error(f"ERROR PDF 분석 실패: {e}")
             # 기본값 반환
             return PDFAnalysisResult(
                 language="unknown",

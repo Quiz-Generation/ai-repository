@@ -19,6 +19,7 @@ package_abs_path=$(dirname $(dirname $(realpath "$0")))
 cd "$package_abs_path"
 
 export PYTHONPATH=$PYTHONPATH:`pwd`
+export PYTHONDONTWRITEBYTECODE=1
 
 . .venv/bin/activate
 

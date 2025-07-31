@@ -1,15 +1,23 @@
 import time
-from fastapi import APIRouter, Form, Request, UploadFile, File
+
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 
-from src.app.docs import document as document_docs
-from src.app.service import document as document_service
+from src.app.document import docs as document_docs
+from src.app.document.service import DocumentService
 from src.common.utils.logger import set_logger
 
 logger = set_logger("api.document")
 
 router = APIRouter(tags=["documents"])
 
+def get_document_service(
+    request: Request
+) -> DocumentService:
+    return DocumentService(
+        logger=logger,
+        vector_db=request.app.state.vector_db,
+    )
 
 @router.post(
     "/upload",
@@ -18,11 +26,10 @@ router = APIRouter(tags=["documents"])
 )
 async def upload_pdf_to_vector_db(
     request: Request,
+    document_service: DocumentService = Depends(get_document_service),
     file: UploadFile = File(...),
 ) -> JSONResponse:
     return await document_service.upload_document(
-        logger=logger,
-        vector_db=request.app.state.vector_db,
         file=file
     )
 
@@ -35,6 +42,7 @@ async def upload_pdf_to_vector_db(
 )
 async def clear_all_documents(
     request: Request,
+    document_service: DocumentService = Depends(get_document_service),
     confirm_token: str = Form(..., description="삭제 확인 토큰: CLEAR_ALL_CONFIRM"),
 ) -> JSONResponse:
     """
@@ -44,7 +52,5 @@ async def clear_all_documents(
     confirm_token에 "CLEAR_ALL_CONFIRM"을 입력해야 합니다.
     """
     return await document_service.clear_all_documents(
-        logger=logger,
-        vector_db=request.app.state.vector_db,
         confirm_token=confirm_token
     )
