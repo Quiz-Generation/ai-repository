@@ -111,20 +111,53 @@ pipeline {
             }
         }
     }
-    
+
     post {
         success {
-            echo '✅ CI/CD 파이프라인 성공!'
-            echo "이미지: ${FINAL_IMAGE}"
-            echo 'ArgoCD에서 배포 상태를 확인하세요.'
+            slackSend(
+                channel: '#deployment',
+                message: "빌드 성공! - ${env.JOB_NAME} (#${FINAL_IMAGE})",
+                color: 'good'
+            )
+            echo 'AI server CD 배포가 성공적으로 완료되었습니다'
+            script {
+                sh '''
+                    echo ""
+                    echo "===== CD 배포 성공 ====="
+                    echo "이미지: ${FINAL_IMAGE}"
+                    echo 'ArgoCD에서 배포 상태를 확인하세요.'
+                    echo "========================="
+                '''
+            }
         }
+        
         failure {
-            echo '❌ CI/CD 파이프라인 실패!'
-            echo 'Jenkins 로그를 확인하여 문제를 해결하세요.'
+            slackSend(
+                channel: '#deployment',
+                message: "빌드 실패 - ${env.JOB_NAME} (#${env.BUILD_NUMBER})",
+                color: 'danger'
+            )
+            echo 'AI serverCD 배포가 실패했습니다'
+            script {
+                sh '''
+                    echo ""
+                    echo "===== CD 배포 실패 ====="
+                    echo 'Jenkins 로그를 확인하여 문제를 해결하세요.'
+                    sh '''
+                        docker stop test-${BUILD_NUMBER} || true
+                        docker rm test-${BUILD_NUMBER} || true
+                        docker system prune -f
+                    '''
+                    echo "======================="
+                '''
+            }
+        }
+        
+        always {
+            cleanWs()
+            echo 'CD 정리 작업을 수행하고 있습니다...'
             sh '''
-                docker stop test-${BUILD_NUMBER} || true
-                docker rm test-${BUILD_NUMBER} || true
-                docker system prune -f
+                echo "CD 정리 작업이 완료되었습니다"
             '''
         }
     }
