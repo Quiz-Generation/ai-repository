@@ -1,12 +1,11 @@
 from typing import Dict, Generic, Optional, Type, TypeVar
 
 from pydantic import BaseModel
-from pydantic.generics import GenericModel
 
 T = TypeVar('T')
 
 
-class JSendResponse(GenericModel, Generic[T]):
+class JSendResponse(BaseModel, Generic[T]):
     status: str = "success"
     data: Optional[T] = None
 
