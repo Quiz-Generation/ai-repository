@@ -2,6 +2,7 @@
 🎯 Quiz Generation API Routes
 """
 import logging
+import uuid
 from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, HTTPException, Request
 from ..docs import quiz_docs
@@ -34,9 +35,9 @@ async def get_available_files(
     return JSONResponse(content=result)
 
 
-# 🤖 2. AI 문제 생성 (POST 방식)
+# 🤖 2. AI 문제 생성 (POST 방식) - 스트리밍 방식으로 변경
 @router.post("/generate",
-    summary="AI 문제 생성",
+    summary="AI 문제 생성 (스트리밍)",
     description=quiz_docs.generate_quiz_description,
 )
 async def generate_quiz(
@@ -45,22 +46,68 @@ async def generate_quiz(
 ) -> JSONResponse:
     """
     AI를 사용하여 PDF 문서에서 문제를 생성합니다.
+    문제 생성은 백그라운드에서 진행되며, 생성된 문제는 Redis 스트림을 통해 실시간으로 전송됩니다.
     """
-    result = await quiz_service.generate_quiz_from_file(
-        logger=logger,
-        vector_db=request.app.state.vector_db,
-        file_id=quiz_request.file_id,
-        num_questions=quiz_request.num_questions,
-        difficulty=quiz_request.difficulty,
-        question_type=quiz_request.question_type,
-        custom_topic=quiz_request.custom_topic,
-        category=getattr(quiz_request, 'category', None),
-        sub_category=getattr(quiz_request, 'sub_category', None)
+    # 고유 요청 ID 생성
+    request_id = str(uuid.uuid4())
+    
+    # 백그라운드에서 문제 생성 시작
+    import asyncio
+    asyncio.create_task(
+        quiz_service.generate_quiz_from_file_streaming(
+            request_id=request_id,
+            logger=logger,
+            vector_db=request.app.state.vector_db,
+            file_id=quiz_request.file_id,
+            num_questions=quiz_request.num_questions,
+            difficulty=quiz_request.difficulty,
+            question_type=quiz_request.question_type,
+            custom_topic=quiz_request.custom_topic,
+            category=getattr(quiz_request, 'category', None),
+            sub_category=getattr(quiz_request, 'sub_category', None)
+        )
     )
-    return JSONResponse(content=result)
+    
+    return JSONResponse(content={
+        "success": True,
+        "message": "문제 생성이 시작되었습니다. Redis 스트림을 통해 실시간으로 진행 상황을 확인할 수 있습니다.",
+        "request_id": request_id,
+        "stream_key": f"quiz-stream",
+        "status": "started"
+    })
 
 
-# 📊 3. 문제 생성 옵션 조회
+# 📡 3. 문제 생성 스트림 구독 (스프링 서버용)
+@router.get("/stream/{request_id}",
+    summary="문제 생성 스트림 구독",
+    description="특정 요청의 문제 생성 진행 상황을 Redis 스트림에서 조회합니다."
+)
+async def get_quiz_stream(
+    request_id: str,
+    count: int = 10
+) -> JSONResponse:
+    """
+    문제 생성 스트림에서 메시지를 조회합니다.
+    스프링 서버에서 이 엔드포인트를 주기적으로 호출하여 진행 상황을 확인할 수 있습니다.
+    """
+    from src.common.redis.connect import get_quiz_stream_messages
+    
+    try:
+        messages = await get_quiz_stream_messages(request_id, count)
+        
+        return JSONResponse(content={
+            "success": True,
+            "request_id": request_id,
+            "messages": messages,
+            "message_count": len(messages)
+        })
+        
+    except Exception as e:
+        logger.error(f"스트림 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# 📊 4. 문제 생성 옵션 조회
 @router.get("/options")
 async def get_quiz_options() -> JSONResponse:
     """

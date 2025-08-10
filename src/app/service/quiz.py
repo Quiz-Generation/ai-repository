@@ -17,6 +17,124 @@ from src.common.error import ErrorCode, JSendError
 logger = logging.getLogger(__name__)
 
 
+async def generate_quiz_from_file_streaming(
+    request_id: str,
+    logger,
+    vector_db: VectorDBService,
+    file_id: str,
+    num_questions: int = 5,
+    difficulty: str = "medium",
+    question_type: str = "multiple_choice",
+    custom_topic: Optional[str] = None,
+    category: Optional[str] = None,
+    sub_category: Optional[str] = None
+) -> None:
+    """
+    스트리밍 방식으로 문제 생성 (Redis 스트림으로 실시간 전송)
+    """
+    from src.common.redis.connect import (
+        push_quiz_batch_to_stream,
+        push_quiz_completion_to_stream,
+        push_quiz_error_to_stream
+    )
+    
+    try:
+        logger.info(f"🚀 스트리밍 문제 생성 서비스 시작: {request_id} - {file_id}")
+        
+        # 시작 알림 전송
+        await push_quiz_batch_to_stream(
+            request_id=request_id,
+            batch_num=0,
+            questions=None,  # 문제가 아직 생성되지 않았으므로 None
+            total_batches=1,
+            status="started",
+            metadata={
+                "file_id": file_id,
+                "num_questions": num_questions,
+                "difficulty": difficulty,
+                "question_type": question_type
+            }
+        )
+        
+        # 1. 파일 ID로 문서 조회
+        document_data = await _get_document_by_file_id(logger, vector_db, file_id)
+        if not document_data:
+            await push_quiz_error_to_stream(
+                request_id=request_id,
+                error_message=f"파일 ID '{file_id}'에 해당하는 문서를 찾을 수 없습니다"
+            )
+            return
+
+        # 2. 요청 객체 생성
+        try:
+            difficulty_enum = DifficultyLevel(difficulty.lower())
+            question_type_enum = QuestionType(question_type.lower())
+        except ValueError as e:
+            await push_quiz_error_to_stream(
+                request_id=request_id,
+                error_message=f"잘못된 파라미터: {str(e)}"
+            )
+            return
+
+        # 3. AI 에이전트 초기화
+        import os
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            await push_quiz_error_to_stream(
+                request_id=request_id,
+                error_message="OpenAI API 키가 설정되지 않았습니다"
+            )
+            return
+
+        # 에이전트 캐시에서 재사용
+        if not hasattr(generate_quiz_from_file_streaming, '_cached_agent'):
+            generate_quiz_from_file_streaming._cached_agent = QuizGeneratorAgent(openai_api_key)
+            logger.info("🔄 AI 에이전트 캐시 생성")
+
+        quiz_agent = generate_quiz_from_file_streaming._cached_agent
+
+        # 4. 문제 생성 요청 객체 생성
+        quiz_request = QuizRequest(
+            file_ids=[file_id],
+            num_questions=num_questions,
+            difficulty=difficulty_enum,
+            question_type=question_type_enum,
+            custom_topic=custom_topic,
+            category=category,
+            sub_category=sub_category,
+            additional_instructions=[
+                f"전체 {num_questions}개 문제를 생성하되, 난이도는 '{difficulty}'로 통일하세요.",
+                "각 문제는 구체적인 예시나 실제 응용 사례를 포함해야 합니다.",
+                "문제는 서로 중복되지 않아야 하며, 각각 독립적인 개념을 다뤄야 합니다.",
+                "선택지의 경우, 명확한 정답과 그럴듯한 오답을 포함해야 합니다.",
+                "문제의 난이도는 일관성을 유지해야 합니다.",
+                "문제는 실제 학습 목표와 연관되어야 합니다."
+            ]
+        )
+
+        # 5. 스트리밍 방식으로 문제 생성
+        logger.info(f"STEP_AGENT 스트리밍 AI 에이전트 문제 생성 시작 ({num_questions}개 문제)")
+        
+        # 스트리밍 문제 생성 호출
+        result = await quiz_agent.generate_quiz_streaming(
+            request_id=request_id,
+            request=quiz_request,
+            documents=[document_data]
+        )
+        
+        if result["success"]:
+            logger.info(f"✅ 스트리밍 문제 생성 완료: {request_id}")
+        else:
+            logger.error(f"❌ 스트리밍 문제 생성 실패: {request_id} - {result.get('error')}")
+            
+    except Exception as e:
+        logger.error(f"❌ 스트리밍 문제 생성 서비스 실패: {request_id} - {e}")
+        await push_quiz_error_to_stream(
+            request_id=request_id,
+            error_message=f"서비스 오류: {str(e)}"
+        )
+
+
 async def generate_quiz_from_file(
     logger,
     vector_db: VectorDBService,
@@ -144,12 +262,11 @@ async def generate_quiz_from_file(
         }
 
     except Exception as e:
-        logger.error(f"ERROR 문제 생성 서비스 실패: {e}")
+        logger.error(f"❌ 문제 생성 서비스 실패: {file_id} - {e}")
         return {
             "success": False,
-            "error": str(e),
-            "file_id": file_id,
-            "timestamp": datetime.now().isoformat()
+            "error": f"서비스 오류: {str(e)}",
+            "file_id": file_id
         }
 
 
@@ -197,7 +314,7 @@ async def get_available_files(
         }
 
     except Exception as e:
-        logger.error(f"ERROR 파일 목록 조회 실패: {e}")
+        logger.error(f"❌ 파일 목록 조회 실패: {e}")
         return {
             "success": False,
             "error": str(e),
@@ -307,7 +424,7 @@ async def _get_document_by_file_id(
             return document
 
     except Exception as e:
-        logger.error(f"ERROR 문서 조회 실패: {e}")
+        logger.error(f"❌ 문서 조회 실패: {e}")
         return None
 
 
@@ -338,7 +455,7 @@ async def _get_file_chunks(
         return file_chunks
 
     except Exception as e:
-        logger.error(f"ERROR 파일 청크 조회 실패: {e}")
+        logger.error(f"❌ 파일 청크 조회 실패: {e}")
         return []
 
 
