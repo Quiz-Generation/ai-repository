@@ -12,6 +12,11 @@ QUIZ_STREAM_KEY = "quiz-stream"  # 문제 생성 전용 스트림
 
 logger = set_logger('redis')
 
+# Redis 연결 URL 로깅
+logger.info(f"Redis 연결 URL: {REDIS_URL}")
+logger.info(f"Redis 호스트: {settings.REDIS_HOST}")
+logger.info(f"Redis 포트: {settings.REDIS_PORT}")
+
 # --- Redis Stream Producer ---
 async def push_quiz_to_stream(quiz_data: dict):
     redis = Redis.from_url(REDIS_URL, decode_responses=True)
