@@ -48,6 +48,8 @@ async def generate_quiz(
     AI를 사용하여 PDF 문서에서 문제를 생성합니다.
     문제 생성은 백그라운드에서 진행되며, 생성된 문제는 Redis 스트림을 통해 실시간으로 전송됩니다.
     """
+    # Pydantic 모델에서 자동으로 검증이 수행되므로 추가 검증 불필요
+    
     # 고유 요청 ID 생성
     request_id = str(uuid.uuid4())
     
@@ -56,6 +58,7 @@ async def generate_quiz(
     asyncio.create_task(
         quiz_service.generate_quiz_from_file_streaming(
             request_id=request_id,
+            user_idx=quiz_request.user_idx,
             logger=logger,
             vector_db=request.app.state.vector_db,
             file_id=quiz_request.file_id,
@@ -72,7 +75,7 @@ async def generate_quiz(
         "success": True,
         "message": "문제 생성이 시작되었습니다. Redis 스트림을 통해 실시간으로 진행 상황을 확인할 수 있습니다.",
         "request_id": request_id,
-        "stream_key": f"quiz-stream",
+        "stream_key": "quiz-stream",
         "status": "started"
     })
 
@@ -95,11 +98,31 @@ async def get_quiz_stream(
     try:
         messages = await get_quiz_stream_messages(request_id, count)
         
+        # 메시지 분석하여 현재 상태 파악
+        current_status = "unknown"
+        progress_percent = 0
+        total_questions = 0
+        error_message = None
+        
+        if messages:
+            latest_message = messages[0]  # 가장 최근 메시지
+            message_data = latest_message.get("data", {})
+            current_status = message_data.get("status", "unknown")
+            progress_percent = message_data.get("progress_percent", 0)
+            total_questions = message_data.get("total_questions", 0)
+            error_message = message_data.get("error_message")
+        
         return JSONResponse(content={
             "success": True,
             "request_id": request_id,
+            "stream_key": "quiz-stream",
+            "current_status": current_status,
+            "progress_percent": progress_percent,
+            "total_questions": total_questions,
+            "error_message": error_message,
             "messages": messages,
-            "message_count": len(messages)
+            "message_count": len(messages),
+            "last_updated": messages[0].get("data", {}).get("timestamp") if messages else None
         })
         
     except Exception as e:

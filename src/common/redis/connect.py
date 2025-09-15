@@ -202,32 +202,36 @@ async def get_quiz_stream_messages(request_id: str, count: int = 10):
     redis = Redis.from_url(REDIS_URL, decode_responses=True)
     
     try:
-        # stream_key = f"{QUIZ_STREAM_KEY}:{request_id}"
         stream_key = f"{QUIZ_STREAM_KEY}"
         
-        # 최근 메시지들 조회
-        messages = await redis.xrevrange(stream_key, count=count)
+        # 최근 메시지들 조회 (더 많은 메시지를 가져와서 필터링)
+        all_messages = await redis.xrevrange(stream_key, count=count * 5)  # 5배 더 가져와서 필터링
         
-        # 메시지 형식 변환 (JSON 문자열을 다시 파싱)
-        formatted_messages = []
-        for msg_id, msg_data in messages:
-            # JSON 문자열로 저장된 리스트 데이터를 파싱
-            processed_data = {}
-            for key, value in msg_data.items():
-                if key in ["questions", "final_questions"] and isinstance(value, str):
-                    try:
-                        processed_data[key] = json.loads(value)
-                    except json.JSONDecodeError:
-                        processed_data[key] = value  # 파싱 실패 시 원본 값 유지
-                else:
-                    processed_data[key] = value
-            
-            formatted_messages.append({
-                "message_id": msg_id,
-                "data": processed_data
-            })
+        # request_id로 필터링
+        filtered_messages = []
+        for msg_id, msg_data in all_messages:
+            if msg_data.get("request_id") == request_id:
+                # JSON 문자열로 저장된 리스트 데이터를 파싱
+                processed_data = {}
+                for key, value in msg_data.items():
+                    if key in ["questions", "final_questions"] and isinstance(value, str):
+                        try:
+                            processed_data[key] = json.loads(value)
+                        except json.JSONDecodeError:
+                            processed_data[key] = value  # 파싱 실패 시 원본 값 유지
+                    else:
+                        processed_data[key] = value
+                
+                filtered_messages.append({
+                    "message_id": msg_id,
+                    "data": processed_data
+                })
+                
+                # 요청된 개수만큼 수집되면 중단
+                if len(filtered_messages) >= count:
+                    break
         
-        return formatted_messages
+        return filtered_messages
         
     except Exception as e:
         logger.error(f"❌ 스트림 메시지 조회 실패: {e}")

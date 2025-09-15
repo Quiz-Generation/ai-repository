@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 async def generate_quiz_from_file_streaming(
     request_id: str,
+    user_idx: int,
     logger,
     vector_db: VectorDBService,
     file_id: str,
@@ -41,27 +42,16 @@ async def generate_quiz_from_file_streaming(
     try:
         logger.info(f"🚀 스트리밍 문제 생성 서비스 시작: {request_id} - {file_id}")
         
-        # 시작 알림 전송
-        await push_quiz_batch_to_stream(
-            request_id=request_id,
-            batch_num=0,
-            questions=None,  # 문제가 아직 생성되지 않았으므로 None
-            total_batches=1,
-            status="started",
-            metadata={
-                "file_id": file_id,
-                "num_questions": num_questions,
-                "difficulty": difficulty,
-                "question_type": question_type
-            }
-        )
-        
         # 1. 파일 ID로 문서 조회
         document_data = await _get_document_by_file_id(logger, vector_db, file_id)
         if not document_data:
+            # 더 자세한 오류 메시지 제공
+            error_message = f"파일 ID '{file_id}'에 해당하는 문서를 찾을 수 없습니다. "
+            error_message += "사용 가능한 파일 목록을 확인하려면 /api/v2/quiz/available-files 엔드포인트를 사용하세요."
+            
             await push_quiz_error_to_stream(
                 request_id=request_id,
-                error_message=f"파일 ID '{file_id}'에 해당하는 문서를 찾을 수 없습니다"
+                error_message=error_message
             )
             return
 
