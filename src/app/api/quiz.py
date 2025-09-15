@@ -81,12 +81,11 @@ async def generate_quiz(
 
 
 # 📡 3. 문제 생성 스트림 구독 (스프링 서버용)
-@router.get("/stream/{request_id}",
+@router.get("/stream",
     summary="문제 생성 스트림 구독",
-    description="특정 요청의 문제 생성 진행 상황을 Redis 스트림에서 조회합니다."
+    description="문제 생성 진행 상황을 Redis 스트림에서 조회합니다."
 )
 async def get_quiz_stream(
-    request_id: str,
     count: int = 10
 ) -> JSONResponse:
     """
@@ -96,30 +95,11 @@ async def get_quiz_stream(
     from src.common.redis.connect import get_quiz_stream_messages
     
     try:
-        messages = await get_quiz_stream_messages(request_id, count)
-        
-        # 메시지 분석하여 현재 상태 파악
-        current_status = "unknown"
-        progress_percent = 0
-        total_questions = 0
-        error_message = None
-        
-        if messages:
-            latest_message = messages[0]  # 가장 최근 메시지
-            message_data = latest_message.get("data", {})
-            current_status = message_data.get("status", "unknown")
-            progress_percent = message_data.get("progress_percent", 0)
-            total_questions = message_data.get("total_questions", 0)
-            error_message = message_data.get("error_message")
+        messages = await get_quiz_stream_messages(count)
         
         return JSONResponse(content={
             "success": True,
-            "request_id": request_id,
             "stream_key": "quiz-stream",
-            "current_status": current_status,
-            "progress_percent": progress_percent,
-            "total_questions": total_questions,
-            "error_message": error_message,
             "messages": messages,
             "message_count": len(messages),
             "last_updated": messages[0].get("data", {}).get("timestamp") if messages else None

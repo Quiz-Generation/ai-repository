@@ -215,7 +215,6 @@ class QuizPromptManager:
       "learning_objective": "학습 목표",
       "problem_level": "basic/concept/application",
       "keywords": ["키워드1", "키워드2"],
-      "source": "pdf_based/ai_generated"
     }}
   ]
 }}

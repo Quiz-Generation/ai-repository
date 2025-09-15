@@ -248,14 +248,14 @@ class QuizGeneratorAgent:
             if request.additional_instructions:
                 additional_guide = "\n\n📝 **추가 지시사항**:\n" + "\n".join(f"- {instruction}" for instruction in request.additional_instructions)
 
-            # 🎯 최적화된 배치 크기 계산 (더 작은 배치로 다양성 확보)
+            #최적화된 배치 크기 계산 (5개씩 배치로 변경)
             target_questions = request.num_questions
-            batch_size = min(2, max(1, target_questions // 3))  # 1-2개씩 배치로 다양성 확보
+            batch_size = min(5, max(1, target_questions // 2))  # 5개씩 배치로 변경
             num_batches = (target_questions + batch_size - 1) // batch_size
 
             logger.info(f"배치 처리 설정: {num_batches}개 배치, 배치당 {batch_size}개 문제")
 
-            # 🎯 키워드 분산 전략
+            # 키워드 분산 전략
             keyword_groups = self._distribute_keywords(keywords, num_batches)
             topic_groups = self._distribute_topics(topics, num_batches)
 
@@ -1006,7 +1006,7 @@ class QuizGeneratorAgent:
 
             # 🔥 최적화: 토큰 제한 고려한 배치 크기 조정
             target_questions = int(request.num_questions * 1.3)  # 1.3배로 조정 (토큰 제한 고려)
-            batch_size = 3  # 배치 크기 5에서 3으로 줄임 (토큰 제한 고려)
+            batch_size = 5  # 배치 크기 5개로 변경
             total_batches = (target_questions + batch_size - 1) // batch_size
 
             logger.info(f"🎯 목표 생성: {target_questions}개 (요청: {request.num_questions}개 + 여유분)")
@@ -1240,13 +1240,12 @@ class QuizGeneratorAgent:
                 }
             }
 
-    async def generate_quiz_streaming(self, request_id: str, request: QuizRequest, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def generate_quiz_streaming(self, request_id: str, user_idx: int, request: QuizRequest, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         스트리밍 방식으로 문제 생성 (각 배치마다 Redis 스트림으로 전송)
         """
         from src.common.redis.connect import (
             push_quiz_batch_to_stream,
-            push_quiz_completion_to_stream,
             push_quiz_error_to_stream
         )
         
@@ -1332,7 +1331,8 @@ class QuizGeneratorAgent:
                     "summary": summary[:200] + "..." if len(summary) > 200 else summary,
                     "topics_count": len(topics),
                     "keywords_count": len(keywords)
-                }
+                },
+                user_idx=user_idx
             )
 
             # 2. 문제 생성: 배치별로 생성하고 즉시 전송
@@ -1341,24 +1341,12 @@ class QuizGeneratorAgent:
 
             # 배치 설정
             target_questions = int(request.num_questions * 1.3)  # 1.3배로 조정
-            batch_size = 3  # 배치 크기 3개
+            batch_size = 5  # 배치 크기 5개로 변경
             total_batches = (target_questions + batch_size - 1) // batch_size
 
             logger.info(f"🎯 목표 생성: {target_questions}개 (요청: {request.num_questions}개 + 여유분): {request_id}")
 
-            # 문제 생성 시작 알림
-            await push_quiz_batch_to_stream(
-                request_id=request_id,
-                batch_num=2,
-                questions=None,  # 문제가 아직 생성되지 않았으므로 None
-                total_batches=3,
-                status="generation_started",
-                metadata={
-                    "target_questions": target_questions,
-                    "batch_size": batch_size,
-                    "total_batches": total_batches
-                }
-            )
+            # 문제 생성 시작 - 상태 알림 제거
 
             async def generate_questions_batch_streaming(batch_num):
                 """스트리밍용 배치 문제 생성"""
@@ -1401,16 +1389,14 @@ class QuizGeneratorAgent:
                     
                     questions = self._parse_questions(response.content)
                     
-                    # 배치 완료 즉시 Redis 스트림으로 전송
+                    # 배치 완료 즉시 Redis 스트림으로 전송 (문제만)
                     await push_quiz_batch_to_stream(
                         request_id=request_id,
-                        batch_num=batch_num + 2,  # 3부터 시작 (전처리=1, 시작=2)
+                        batch_num=batch_num,
                         questions=questions,
-                        total_batches=total_batches + 2,
-                        status="batch_completed",
-                        metadata={
-                            "batch_quality_score": sum([self._calculate_question_score(q) for q in questions]) / len(questions) if questions else 0
-                        }
+                        total_batches=total_batches,
+                        status="questions",
+                        user_idx=user_idx
                     )
                     
                     return questions
@@ -1423,7 +1409,8 @@ class QuizGeneratorAgent:
                     await push_quiz_error_to_stream(
                         request_id=request_id,
                         error_message=f"배치 {batch_num} 생성 실패: {error_msg}",
-                        batch_num=batch_num
+                        batch_num=batch_num,
+                        user_idx=user_idx
                     )
                     
                     return []
@@ -1474,18 +1461,8 @@ class QuizGeneratorAgent:
 
             logger.info(f"[문제 생성] 완료 (소요 시간: {time.time() - generate_start:.2f}초): {request_id}")
 
-            # 4. 완료 알림 전송
+            # 완료 - 상태 알림 제거
             total_end = time.time()
-            await push_quiz_completion_to_stream(
-                request_id=request_id,
-                total_questions=len(questions),
-                final_questions=questions,
-                metadata={
-                    "total_time": total_end - total_start,
-                    "avg_quality_score": avg_quality,
-                    "failed_batches": failed_batches
-                }
-            )
 
             logger.info(f"🎉 SUCCESS 스트리밍 문제 생성 완료: {request_id}")
 
@@ -1500,7 +1477,8 @@ class QuizGeneratorAgent:
             logger.error(f"ERROR 스트리밍 문제 생성 실패: {request_id} - {e}")
             await push_quiz_error_to_stream(
                 request_id=request_id,
-                error_message=f"전체 프로세스 실패: {str(e)}"
+                error_message=f"전체 프로세스 실패: {str(e)}",
+                user_idx=user_idx
             )
             return {
                 "success": False,

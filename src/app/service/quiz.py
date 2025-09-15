@@ -34,8 +34,6 @@ async def generate_quiz_from_file_streaming(
     스트리밍 방식으로 문제 생성 (Redis 스트림으로 실시간 전송)
     """
     from src.common.redis.connect import (
-        push_quiz_batch_to_stream,
-        push_quiz_completion_to_stream,
         push_quiz_error_to_stream
     )
     
@@ -51,7 +49,8 @@ async def generate_quiz_from_file_streaming(
             
             await push_quiz_error_to_stream(
                 request_id=request_id,
-                error_message=error_message
+                error_message=error_message,
+                user_idx=user_idx
             )
             return
 
@@ -62,7 +61,8 @@ async def generate_quiz_from_file_streaming(
         except ValueError as e:
             await push_quiz_error_to_stream(
                 request_id=request_id,
-                error_message=f"잘못된 파라미터: {str(e)}"
+                error_message=f"잘못된 파라미터: {str(e)}",
+                user_idx=user_idx
             )
             return
 
@@ -72,7 +72,8 @@ async def generate_quiz_from_file_streaming(
         if not openai_api_key:
             await push_quiz_error_to_stream(
                 request_id=request_id,
-                error_message="OpenAI API 키가 설정되지 않았습니다"
+                error_message="OpenAI API 키가 설정되지 않았습니다",
+                user_idx=user_idx
             )
             return
 
@@ -108,6 +109,7 @@ async def generate_quiz_from_file_streaming(
         # 스트리밍 문제 생성 호출
         result = await quiz_agent.generate_quiz_streaming(
             request_id=request_id,
+            user_idx=user_idx,
             request=quiz_request,
             documents=[document_data]
         )
@@ -121,7 +123,8 @@ async def generate_quiz_from_file_streaming(
         logger.error(f"❌ 스트리밍 문제 생성 서비스 실패: {request_id} - {e}")
         await push_quiz_error_to_stream(
             request_id=request_id,
-            error_message=f"서비스 오류: {str(e)}"
+            error_message=f"서비스 오류: {str(e)}",
+            user_idx=user_idx
         )
 
 
