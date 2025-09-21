@@ -83,6 +83,64 @@ async def push_quiz_batch_to_stream(
     finally:
         await redis.close()
 
+async def push_quiz_batch_to_stream_test(
+    request_id: str,
+    batch_num: int,
+    questions: list = None,
+    total_batches: int = 1,
+    status: str = "processing",
+    metadata: dict = None,
+    user_idx: int = None
+):
+    """
+    문제 생성 배치를 Redis 스트림으로 전송 (스프링 서버로 실시간 전송)
+    """
+    redis = Redis.from_url(REDIS_URL, decode_responses=True)
+    
+    try:
+        # 스트림 키 생성 (요청별로 구분)
+        # stream_key = f"{QUIZ_STREAM_KEY}:{request_id}"
+        stream_key = f"{QUIZ_STREAM_KEY}-test"
+        
+        # 문제가 있는 경우만 전송 (상태 알림 제거)
+        if questions and len(questions) > 0:
+            batch_data = {
+                "message_id": f"{int(datetime.now().timestamp() * 1000)}-{batch_num}",
+                "user_idx": user_idx if user_idx is not None else 0,
+                "questions": json.dumps(questions, ensure_ascii=False)
+            }
+        else:
+            # 문제가 없으면 전송하지 않음
+            logger.info(f"문제가 없어서 전송하지 않음: {request_id}")
+            return
+        
+        # 메타데이터가 있으면 추가 (Redis 호환성을 위해 리스트를 JSON 문자열로 변환)
+        if metadata:
+            # 메타데이터의 리스트 타입을 JSON 문자열로 변환
+            processed_metadata = {}
+            for key, value in metadata.items():
+                if isinstance(value, list):
+                    processed_metadata[key] = json.dumps(value, ensure_ascii=False)
+                else:
+                    processed_metadata[key] = value
+            batch_data.update(processed_metadata)
+        
+        # Redis 스트림에 추가
+        await redis.xadd(stream_key, batch_data)
+        
+        # 스트림 만료 시간 설정 (24시간)
+        await redis.expire(stream_key, 86400)
+        
+        if questions and len(questions) > 0:
+            logger.info(f"✅ 배치 {batch_num}/{total_batches} Redis 스트림 전송 완료: {len(questions)}개 문제")
+        else:
+            logger.info(f"✅ 배치 {batch_num}/{total_batches} 상태 알림 Redis 스트림 전송 완료")
+        
+    except Exception as e:
+        logger.error(f"❌ Redis 스트림 전송 실패: {e}")
+    finally:
+        await redis.close()
+
 # --- 문제 생성 완료 알림 전송 (제거됨) ---
 # 완료 알림은 제거하고 문제만 전송
 
@@ -102,6 +160,52 @@ async def push_quiz_error_to_stream(
     try:
         # stream_key = f"{QUIZ_STREAM_KEY}:{request_id}"
         stream_key = f"{QUIZ_STREAM_KEY}"
+        
+        error_data = {
+            "message_id": f"{int(datetime.now().timestamp() * 1000)}-error",
+            "user_idx": user_idx if user_idx is not None else 0,
+            "error_message": error_message,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        if batch_num is not None:
+            error_data["batch_num"] = batch_num
+            
+        if metadata:
+            # 메타데이터의 리스트 타입을 JSON 문자열로 변환
+            processed_metadata = {}
+            for key, value in metadata.items():
+                if isinstance(value, list):
+                    processed_metadata[key] = json.dumps(value, ensure_ascii=False)
+                else:
+                    processed_metadata[key] = value
+            error_data.update(processed_metadata)
+        
+        await redis.xadd(stream_key, error_data)
+        await redis.expire(stream_key, 86400)
+        
+        logger.error(f"❌ 에러 Redis 스트림 전송: {error_message}")
+        
+    except Exception as e:
+        logger.error(f"❌ 에러 알림 Redis 스트림 전송 실패: {e}")
+    finally:
+        await redis.close()
+
+async def push_quiz_error_to_stream_test(
+    request_id: str,
+    error_message: str,
+    batch_num: int = None,
+    metadata: dict = None,
+    user_idx: int = None
+):
+    """
+    문제 생성 에러를 Redis 스트림으로 전송
+    """
+    redis = Redis.from_url(REDIS_URL, decode_responses=True)
+    
+    try:
+        # stream_key = f"{QUIZ_STREAM_KEY}:{request_id}"
+        stream_key = f"{QUIZ_STREAM_KEY}-test"
         
         error_data = {
             "message_id": f"{int(datetime.now().timestamp() * 1000)}-error",
@@ -187,6 +291,46 @@ async def get_quiz_stream_messages(count: int = 10):
         
     except Exception as e:
         logger.error(f"❌ 스트림 메시지 조회 실패: {e}")
+        return []
+    finally:
+        await redis.close()
+
+# --- 테스트용 스트림 조회 함수 ---
+async def get_quiz_stream_messages_test(count: int = 10):
+    """
+    문제 생성 스트림 메시지들을 조회 (테스트용)
+    """
+    redis = Redis.from_url(REDIS_URL, decode_responses=True)
+    
+    try:
+        stream_key = f"{QUIZ_STREAM_KEY}-test"
+        
+        # 최근 메시지들 조회
+        messages = await redis.xrevrange(stream_key, count=count)
+        
+        # 메시지 형식 변환 (JSON 문자열을 다시 파싱)
+        formatted_messages = []
+        for msg_id, msg_data in messages:
+            # JSON 문자열로 저장된 리스트 데이터를 파싱
+            processed_data = {}
+            for key, value in msg_data.items():
+                if key in ["questions", "final_questions"] and isinstance(value, str):
+                    try:
+                        processed_data[key] = json.loads(value)
+                    except json.JSONDecodeError:
+                        processed_data[key] = value  # 파싱 실패 시 원본 값 유지
+                else:
+                    processed_data[key] = value
+            
+            formatted_messages.append({
+                "message_id": msg_id,
+                "data": processed_data
+            })
+        
+        return formatted_messages
+        
+    except Exception as e:
+        logger.error(f"❌ 테스트 스트림 메시지 조회 실패: {e}")
         return []
     finally:
         await redis.close()

@@ -1259,7 +1259,7 @@ class QuizGeneratorAgent:
                 try:
                     request.difficulty = DifficultyLevel(request.difficulty)
                 except ValueError:
-                    await push_quiz_error_to_stream(
+                    await push_quiz_error_to_stream_test(
                         request_id=request_id,
                         error_message=f"잘못된 파라미터: '{request.difficulty}' is not a valid DifficultyLevel"
                     )
@@ -1273,7 +1273,7 @@ class QuizGeneratorAgent:
                 try:
                     request.question_type = QuestionType(request.question_type)
                 except ValueError:
-                    await push_quiz_error_to_stream(
+                    await push_quiz_error_to_stream_test(
                         request_id=request_id,
                         error_message=f"잘못된 파라미터: '{request.question_type}' is not a valid QuestionType"
                     )
@@ -1390,7 +1390,7 @@ class QuizGeneratorAgent:
                     questions = self._parse_questions(response.content)
                     
                     # 배치 완료 즉시 Redis 스트림으로 전송 (문제만)
-                    await push_quiz_batch_to_stream(
+                    await push_quiz_batch_to_stream_test(
                         request_id=request_id,
                         batch_num=batch_num,
                         questions=questions,
@@ -1406,7 +1406,7 @@ class QuizGeneratorAgent:
                     logger.error(f"배치 {batch_num} 실패: {error_msg}")
                     
                     # 에러 알림 전송
-                    await push_quiz_error_to_stream(
+                    await push_quiz_error_to_stream_test(
                         request_id=request_id,
                         error_message=f"배치 {batch_num} 생성 실패: {error_msg}",
                         batch_num=batch_num,
@@ -1475,7 +1475,253 @@ class QuizGeneratorAgent:
 
         except Exception as e:
             logger.error(f"ERROR 스트리밍 문제 생성 실패: {request_id} - {e}")
-            await push_quiz_error_to_stream(
+            await push_quiz_error_to_stream_test(
+                request_id=request_id,
+                error_message=f"전체 프로세스 실패: {str(e)}",
+                user_idx=user_idx
+            )
+            return {
+                "success": False,
+                "error": str(e),
+                "request_id": request_id
+            }
+
+    async def generate_quiz_streaming_test(self, request_id: str, user_idx: int, request: QuizRequest, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        스트리밍 방식으로 문제 생성 (각 배치마다 Redis 스트림으로 전송)
+        """
+        from src.common.redis.connect import (
+            push_quiz_batch_to_stream_test,
+            push_quiz_error_to_stream_test
+        )
+        
+        import time
+        try:
+            total_start = time.time()
+            logger.info(f"🚀 스트리밍 문제 생성 AI 에이전트 시작: {request_id}")
+
+            # 난이도 값 검증
+            if not isinstance(request.difficulty, DifficultyLevel):
+                try:
+                    request.difficulty = DifficultyLevel(request.difficulty)
+                except ValueError:
+                    await push_quiz_error_to_stream_test(
+                        request_id=request_id,
+                        error_message=f"잘못된 파라미터: '{request.difficulty}' is not a valid DifficultyLevel"
+                    )
+                    return {
+                        "success": False,
+                        "error": f"잘못된 파라미터: '{request.difficulty}' is not a valid DifficultyLevel"
+                    }
+
+            # 문제 유형 값 검증
+            if not isinstance(request.question_type, QuestionType):
+                try:
+                    request.question_type = QuestionType(request.question_type)
+                except ValueError:
+                    await push_quiz_error_to_stream_test(
+                        request_id=request_id,
+                        error_message=f"잘못된 파라미터: '{request.question_type}' is not a valid QuestionType"
+                    )
+                    return {
+                        "success": False,
+                        "error": f"잘못된 파라미터: '{request.question_type}' is not a valid QuestionType"
+                    }
+
+            # 1. 전처리: 문서별 완전 비동기
+            preprocess_start = time.time()
+            logger.info(f"[전처리] 시작: {request_id}")
+
+            async def process_single_doc(doc):
+                filename = doc.get("filename", "Unknown")
+                content = doc.get("content", "")
+                
+                # 컨텐츠 길이 제한 (토큰 제한 방지)
+                max_content_length = 3000
+                if len(content) > max_content_length:
+                    content = content[:max_content_length] + "..."
+
+                combined_prompt = self.prompt_manager.get_prompt("combined_preprocessing").format(
+                    content=content,
+                    difficulty=request.difficulty.value,
+                    question_type=request.question_type.value,
+                    num_questions=request.num_questions
+                )
+
+                # 단일 AI 호출
+                combined_resp = await self.summary_chain.ainvoke({"prompt": combined_prompt})
+                return self.prompt_manager.parse_combined_response(combined_resp.content)
+
+            doc_tasks = [process_single_doc(doc) for doc in documents]
+            doc_results = await asyncio.gather(*doc_tasks)
+
+            # 결과 합치기
+            summary = "\n".join([str(r.get("summary", "")) for r in doc_results])
+            topics = []
+            for r in doc_results:
+                topics.extend([line.strip().lstrip('- •').strip() for line in r["topics"].split('\n') if line.strip().startswith(('-', '•'))])
+            keywords = []
+            for r in doc_results:
+                keywords.extend([kw.strip() for kw in r["keywords"].split(',') if kw.strip()])
+            
+            logger.info(f"[전처리] 완료 (총 소요 시간: {time.time() - preprocess_start:.2f}초): {request_id}")
+
+            # 전처리 완료 알림 전송
+            await push_quiz_batch_to_stream_test(
+                request_id=request_id,
+                batch_num=1,
+                questions=None,  # 문제가 아직 생성되지 않았으므로 None
+                total_batches=3,
+                status="preprocessing_completed",
+                metadata={
+                    "summary": summary[:200] + "..." if len(summary) > 200 else summary,
+                    "topics_count": len(topics),
+                    "keywords_count": len(keywords)
+                },
+                user_idx=user_idx
+            )
+
+            # 2. 문제 생성: 배치별로 생성하고 즉시 전송
+            generate_start = time.time()
+            logger.info(f"[문제 생성] 시작 (목표: {request.num_questions}개): {request_id}")
+
+            # 배치 설정
+            target_questions = int(request.num_questions * 1.3)  # 1.3배로 조정
+            batch_size = 5  # 배치 크기 5개로 변경
+            total_batches = (target_questions + batch_size - 1) // batch_size
+
+            logger.info(f"🎯 목표 생성: {target_questions}개 (요청: {request.num_questions}개 + 여유분): {request_id}")
+
+            # 문제 생성 시작 - 상태 알림 제거
+
+            async def generate_questions_batch_streaming_test(batch_num):
+                """스트리밍용 배치 문제 생성"""
+                try:
+                    # 요약과 주제 길이 제한
+                    summary_limited = summary[:1000] if len(summary) > 1000 else summary
+                    topics_limited = topics[:10]
+                    keywords_limited = keywords[:15]
+
+                    base_prompt = self.prompt_manager.get_prompt("question").format(
+                        summary=summary_limited,
+                        topics="\n".join(f"- {topic}" for topic in topics_limited),
+                        keywords="\n".join(f"- {keyword}" for keyword in keywords_limited),
+                        num_questions=batch_size,
+                        difficulty=request.difficulty.value,
+                        question_type=request.question_type.value
+                    )
+
+                    # 카테고리 특화 프롬프트 추가
+                    if request.category or request.sub_category:
+                        category_prompt = self.prompt_manager.get_category_prompt(
+                            request.category or "general",
+                            request.sub_category
+                        )
+                        if len(category_prompt) > 2000:
+                            category_prompt = category_prompt[:2000] + "..."
+                        question_prompt = base_prompt + "\n\n" + category_prompt
+                    else:
+                        question_prompt = base_prompt
+
+                    # 프롬프트 길이 체크
+                    if len(question_prompt) > 8000:
+                        logger.warning(f"프롬프트가 너무 깁니다: {len(question_prompt)}자")
+                        question_prompt = question_prompt[:8000] + "..."
+
+                    response = await self.question_chain.ainvoke({
+                        "system_message": "당신은 전문 교육 컨텐츠 개발자입니다. 고품질의 문제를 생성하세요.",
+                        "prompt": question_prompt
+                    })
+                    
+                    questions = self._parse_questions(response.content)
+                    
+                    # 배치 완료 즉시 Redis 스트림으로 전송 (문제만)
+                    await push_quiz_batch_to_stream_test(
+                        request_id=request_id,
+                        batch_num=batch_num,
+                        questions=questions,
+                        total_batches=total_batches,
+                        status="questions",
+                        user_idx=user_idx
+                    )
+                    
+                    return questions
+                    
+                except Exception as e:
+                    error_msg = str(e)
+                    logger.error(f"배치 {batch_num} 실패: {error_msg}")
+                    
+                    # 에러 알림 전송
+                    await push_quiz_error_to_stream_test(
+                        request_id=request_id,
+                        error_message=f"배치 {batch_num} 생성 실패: {error_msg}",
+                        batch_num=batch_num,
+                        user_idx=user_idx
+                    )
+                    
+                    return []
+
+            # 배치별 문제 생성 및 스트리밍
+            tasks = [generate_questions_batch_streaming_test(i) for i in range(total_batches)]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # 성공한 배치만 수집
+            questions = []
+            failed_batches = 0
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.error(f"배치 {i} 실패: {result}")
+                    failed_batches += 1
+                else:
+                    questions.extend(result)
+
+            if failed_batches > 0:
+                logger.warning(f"⚠️ {failed_batches}/{total_batches} 배치 실패: {request_id}")
+
+            logger.info(f"생성된 문제: {len(questions)}개: {request_id}")
+
+            # 3. 품질 검증 및 최종 정리
+            questions = self._advanced_quality_check(questions, target_questions)
+            
+            # 품질 점수 계산
+            quality_scores = [self._calculate_question_score(q) for q in questions]
+            avg_quality = sum(quality_scores) / len(quality_scores) if quality_scores else 0
+            
+            # 품질이 낮은 문제 필터링
+            high_quality_questions = [q for q, score in zip(questions, quality_scores) if score >= 0.5]
+            
+            # 여유분이 충분한지 확인
+            if len(high_quality_questions) >= request.num_questions:
+                questions = self._distribute_difficulty_levels(
+                    high_quality_questions,
+                    request.num_questions,
+                    request.difficulty.value
+                )
+            else:
+                questions = high_quality_questions
+
+            # 최종 문제 정리
+            questions = questions[:request.num_questions]
+            for i, question in enumerate(questions, 1):
+                question["id"] = i
+
+            logger.info(f"[문제 생성] 완료 (소요 시간: {time.time() - generate_start:.2f}초): {request_id}")
+
+            # 완료 - 상태 알림 제거
+            total_end = time.time()
+
+            logger.info(f"🎉 SUCCESS 스트리밍 문제 생성 완료: {request_id}")
+
+            return {
+                "success": True,
+                "request_id": request_id,
+                "questions_count": len(questions),
+                "total_time": total_end - total_start
+            }
+
+        except Exception as e:
+            logger.error(f"ERROR 스트리밍 문제 생성 실패: {request_id} - {e}")
+            await push_quiz_error_to_stream_test(
                 request_id=request_id,
                 error_message=f"전체 프로세스 실패: {str(e)}",
                 user_idx=user_idx
