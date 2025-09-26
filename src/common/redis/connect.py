@@ -50,6 +50,7 @@ async def push_quiz_batch_to_stream(
             batch_data = {
                 "message_id": f"{int(datetime.now().timestamp() * 1000)}-{batch_num}",
                 "user_idx": user_idx if user_idx is not None else 0,
+                "quizset_idx": quizset_idx if quizset_idx is not None else 0,
                 "questions": json.dumps(questions, ensure_ascii=False)
             }
         else:
@@ -109,6 +110,7 @@ async def push_quiz_error_to_stream(
         error_data = {
             "message_id": f"{int(datetime.now().timestamp() * 1000)}-error",
             "user_idx": user_idx if user_idx is not None else 0,
+            "quizset_idx": quizset_idx if quizset_idx is not None else 0,
             "error_message": error_message,
             "timestamp": datetime.now().isoformat()
         }
