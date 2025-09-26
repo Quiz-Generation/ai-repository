@@ -23,6 +23,12 @@ from langchain.prompts import ChatPromptTemplate
 from .prompt import QuizPromptManager
 from .prompt.quiz_prompt_manager import DifficultyLevel, QuestionType
 
+# Redis 함수들 임포트
+from src.common.redis.connect import (
+    push_quiz_batch_to_stream,
+    push_quiz_error_to_stream
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -831,22 +837,35 @@ class QuizGeneratorAgent:
     def _parse_questions(self, content: str) -> List[Dict]:
         """JSON 응답 파싱"""
         try:
+            logger.info(f"🔍 LLM 응답 파싱 시작 (길이: {len(content)} 문자)")
+            
             if "```json" in content:
                 json_start = content.find("```json") + 7
                 json_end = content.find("```", json_start)
                 json_content = content[json_start:json_end].strip()
+                logger.info("📝 ```json 블록에서 JSON 추출")
             elif "```" in content:
                 json_start = content.find("```") + 3
                 json_end = content.find("```", json_start)
                 json_content = content[json_start:json_end].strip()
+                logger.info("📝 ``` 블록에서 JSON 추출")
             else:
                 json_content = content.strip()
+                logger.info("📝 전체 응답에서 JSON 추출")
+
+            logger.info(f"📄 추출된 JSON 길이: {len(json_content)} 문자")
+            logger.info(f"📄 JSON 미리보기: {json_content[:200]}...")
 
             questions_data = json.loads(json_content)
             questions = questions_data.get("questions", [])
+            
+            logger.info(f"✅ JSON 파싱 성공: {len(questions)}개 문제 추출")
 
             # 전처리 적용
-            return self._preprocess_questions(questions)
+            processed_questions = self._preprocess_questions(questions)
+            logger.info(f"🔄 전처리 완료: {len(processed_questions)}개 문제")
+            
+            return processed_questions
 
         except json.JSONDecodeError as e:
             logger.error(f"ERROR JSON 파싱 실패: {e}")
@@ -1240,14 +1259,10 @@ class QuizGeneratorAgent:
                 }
             }
 
-    async def generate_quiz_streaming(self, request_id: str, user_idx: int, request: QuizRequest, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def generate_quiz_streaming(self, request_id: str, user_idx: int, quizset_idx: int, request: QuizRequest, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         스트리밍 방식으로 문제 생성 (각 배치마다 Redis 스트림으로 전송)
         """
-        from src.common.redis.connect import (
-            push_quiz_batch_to_stream,
-            push_quiz_error_to_stream
-        )
         
         import time
         try:
@@ -1259,9 +1274,11 @@ class QuizGeneratorAgent:
                 try:
                     request.difficulty = DifficultyLevel(request.difficulty)
                 except ValueError:
-                    await push_quiz_error_to_stream_test(
+                    await push_quiz_error_to_stream(
                         request_id=request_id,
-                        error_message=f"잘못된 파라미터: '{request.difficulty}' is not a valid DifficultyLevel"
+                        error_message=f"잘못된 파라미터: '{request.difficulty}' is not a valid DifficultyLevel",
+                        user_idx=user_idx,
+                        quizset_idx=quizset_idx
                     )
                     return {
                         "success": False,
@@ -1273,9 +1290,11 @@ class QuizGeneratorAgent:
                 try:
                     request.question_type = QuestionType(request.question_type)
                 except ValueError:
-                    await push_quiz_error_to_stream_test(
+                    await push_quiz_error_to_stream(
                         request_id=request_id,
-                        error_message=f"잘못된 파라미터: '{request.question_type}' is not a valid QuestionType"
+                        error_message=f"잘못된 파라미터: '{request.question_type}' is not a valid QuestionType",
+                        user_idx=user_idx,
+                        quizset_idx=quizset_idx
                     )
                     return {
                         "success": False,
@@ -1332,7 +1351,8 @@ class QuizGeneratorAgent:
                     "topics_count": len(topics),
                     "keywords_count": len(keywords)
                 },
-                user_idx=user_idx
+                user_idx=user_idx,
+                quizset_idx=quizset_idx
             )
 
             # 2. 문제 생성: 배치별로 생성하고 즉시 전송
@@ -1390,13 +1410,15 @@ class QuizGeneratorAgent:
                     questions = self._parse_questions(response.content)
                     
                     # 배치 완료 즉시 Redis 스트림으로 전송 (문제만)
-                    await push_quiz_batch_to_stream_test(
+                    await push_quiz_batch_to_stream(
                         request_id=request_id,
                         batch_num=batch_num,
                         questions=questions,
+                        user_idx=user_idx,
+                        quizset_idx=quizset_idx,
                         total_batches=total_batches,
-                        status="questions",
-                        user_idx=user_idx
+                        status="questions"
+
                     )
                     
                     return questions
@@ -1406,11 +1428,13 @@ class QuizGeneratorAgent:
                     logger.error(f"배치 {batch_num} 실패: {error_msg}")
                     
                     # 에러 알림 전송
-                    await push_quiz_error_to_stream_test(
+                    await push_quiz_error_to_stream(
                         request_id=request_id,
                         error_message=f"배치 {batch_num} 생성 실패: {error_msg}",
                         batch_num=batch_num,
-                        user_idx=user_idx
+                        user_idx=user_idx,
+                        quizset_idx=quizset_idx,
+
                     )
                     
                     return []
@@ -1475,10 +1499,12 @@ class QuizGeneratorAgent:
 
         except Exception as e:
             logger.error(f"ERROR 스트리밍 문제 생성 실패: {request_id} - {e}")
-            await push_quiz_error_to_stream_test(
+            await push_quiz_error_to_stream(
                 request_id=request_id,
                 error_message=f"전체 프로세스 실패: {str(e)}",
-                user_idx=user_idx
+                user_idx=user_idx,
+                quizset_idx=quizset_idx,
+
             )
             return {
                 "success": False,
@@ -1486,14 +1512,9 @@ class QuizGeneratorAgent:
                 "request_id": request_id
             }
 
-    async def generate_quiz_streaming_test(self, request_id: str, user_idx: int, request: QuizRequest, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         스트리밍 방식으로 문제 생성 (각 배치마다 Redis 스트림으로 전송)
         """
-        from src.common.redis.connect import (
-            push_quiz_batch_to_stream_test,
-            push_quiz_error_to_stream_test
-        )
         
         import time
         try:
@@ -1505,9 +1526,11 @@ class QuizGeneratorAgent:
                 try:
                     request.difficulty = DifficultyLevel(request.difficulty)
                 except ValueError:
-                    await push_quiz_error_to_stream_test(
+                    await push_quiz_error_to_stream(
                         request_id=request_id,
-                        error_message=f"잘못된 파라미터: '{request.difficulty}' is not a valid DifficultyLevel"
+                        error_message=f"잘못된 파라미터: '{request.difficulty}' is not a valid DifficultyLevel",
+                        user_idx=user_idx,
+                        quizset_idx=quizset_idx
                     )
                     return {
                         "success": False,
@@ -1519,9 +1542,11 @@ class QuizGeneratorAgent:
                 try:
                     request.question_type = QuestionType(request.question_type)
                 except ValueError:
-                    await push_quiz_error_to_stream_test(
+                    await push_quiz_error_to_stream(
                         request_id=request_id,
-                        error_message=f"잘못된 파라미터: '{request.question_type}' is not a valid QuestionType"
+                        error_message=f"잘못된 파라미터: '{request.question_type}' is not a valid QuestionType",
+                        user_idx=user_idx,
+                        quizset_idx=quizset_idx
                     )
                     return {
                         "success": False,
@@ -1571,6 +1596,8 @@ class QuizGeneratorAgent:
                 request_id=request_id,
                 batch_num=1,
                 questions=None,  # 문제가 아직 생성되지 않았으므로 None
+                user_idx=user_idx,
+                quizset_idx=quizset_idx,
                 total_batches=3,
                 status="preprocessing_completed",
                 metadata={
@@ -1578,7 +1605,6 @@ class QuizGeneratorAgent:
                     "topics_count": len(topics),
                     "keywords_count": len(keywords)
                 },
-                user_idx=user_idx
             )
 
             # 2. 문제 생성: 배치별로 생성하고 즉시 전송
@@ -1597,7 +1623,7 @@ class QuizGeneratorAgent:
             async def generate_questions_batch_streaming_test(batch_num):
                 """스트리밍용 배치 문제 생성"""
                 try:
-                    # 요약과 주제 길이 제한
+                    # 요약과 주제 길이 제한 
                     summary_limited = summary[:1000] if len(summary) > 1000 else summary
                     topics_limited = topics[:10]
                     keywords_limited = keywords[:15]
@@ -1635,14 +1661,23 @@ class QuizGeneratorAgent:
                     
                     questions = self._parse_questions(response.content)
                     
+                    # 생성된 문제들 상세 로깅
+                    logger.info(f"🔍 배치 {batch_num}에서 파싱된 문제 {len(questions)}개:")
+                    for i, question in enumerate(questions, 1):
+                        logger.info(f"  문제 {i}: {question.get('question', 'N/A')[:100]}...")
+                        logger.info(f"    선택지: {question.get('choices', [])}")
+                        logger.info(f"    정답: {question.get('correct_answer', 'N/A')}")
+                        logger.info(f"    난이도: {question.get('difficulty', 'N/A')}")
+                    
                     # 배치 완료 즉시 Redis 스트림으로 전송 (문제만)
-                    await push_quiz_batch_to_stream_test(
+                    await push_quiz_batch_to_stream(
                         request_id=request_id,
                         batch_num=batch_num,
                         questions=questions,
+                        user_idx=user_idx,
+                        quizset_idx=quizset_idx,
                         total_batches=total_batches,
                         status="questions",
-                        user_idx=user_idx
                     )
                     
                     return questions
@@ -1652,11 +1687,12 @@ class QuizGeneratorAgent:
                     logger.error(f"배치 {batch_num} 실패: {error_msg}")
                     
                     # 에러 알림 전송
-                    await push_quiz_error_to_stream_test(
+                    await push_quiz_batch_to_stream(
                         request_id=request_id,
                         error_message=f"배치 {batch_num} 생성 실패: {error_msg}",
                         batch_num=batch_num,
-                        user_idx=user_idx
+                        user_idx=user_idx,
+                        quizset_idx=quizset_idx,
                     )
                     
                     return []
@@ -1721,10 +1757,11 @@ class QuizGeneratorAgent:
 
         except Exception as e:
             logger.error(f"ERROR 스트리밍 문제 생성 실패: {request_id} - {e}")
-            await push_quiz_error_to_stream_test(
+            await push_quiz_batch_to_stream(
                 request_id=request_id,
                 error_message=f"전체 프로세스 실패: {str(e)}",
-                user_idx=user_idx
+                user_idx=user_idx,
+                quizset_idx=quizset_idx
             )
             return {
                 "success": False,

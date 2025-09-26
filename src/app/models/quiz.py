@@ -7,6 +7,7 @@ from pydantic import BaseModel, field_validator
 class QuizGenerationRequest(BaseModel):
     """문제 생성 요청 모델"""
     user_idx: int 
+    quizset_idx: int
     file_id: str  # 단일 파일 ID만 받음
     num_questions: int = 10
     difficulty: str = "medium"  # easy, medium, hard
@@ -22,6 +23,13 @@ class QuizGenerationRequest(BaseModel):
             raise ValueError("user_idx is required")
         if not isinstance(v, int) or v <= 0:
             raise ValueError("user_idx must be a positive integer")
+        return v
+    
+    @field_validator('quizset_idx')
+    @classmethod
+    def validate_quizset_idx(cls, v):
+        if not isinstance(v, int) or v < 1:
+            raise ValueError("quizset_idx must be a positive integer")
         return v
 
     @field_validator('file_id')
