@@ -1376,25 +1376,38 @@ class QuizGeneratorAgent:
                     topics_limited = topics[:10]
                     keywords_limited = keywords[:15]
 
-                    # 배치별로 다른 키워드와 난이도 할당
-                    batch_keywords = keywords_limited[batch_num * 3:(batch_num + 1) * 3] if len(keywords_limited) > batch_num * 3 else keywords_limited
-                    batch_topics = topics_limited[batch_num * 2:(batch_num + 1) * 2] if len(topics_limited) > batch_num * 2 else topics_limited
+                    # 배치별로 완전히 다른 키워드와 주제 할당 (중복 방지)
+                    used_keywords = set()
+                    if 'generated_questions' in locals() and generated_questions:
+                        for prev_q in generated_questions:
+                            used_keywords.update(prev_q.get('keywords', []))
                     
-                    # 배치별 난이도 할당 (1-2: easy, 3-4: medium, 5+: hard)
-                    if batch_num < 2:
-                        batch_difficulty = "easy"
-                    elif batch_num < 4:
-                        batch_difficulty = "medium"
-                    else:
-                        batch_difficulty = "hard"
+                    # 사용되지 않은 키워드만 선택
+                    available_keywords = [k for k in keywords_limited if k not in used_keywords]
+                    if not available_keywords:
+                        available_keywords = keywords_limited
                     
-                    # 배치별 접근 방식
+                    # 배치별로 다른 키워드 선택
+                    batch_keywords = available_keywords[batch_num * 3:(batch_num + 1) * 3] if len(available_keywords) > batch_num * 3 else available_keywords[:3]
+                    batch_topics = topics_limited[batch_num * 2:(batch_num + 1) * 2] if len(topics_limited) > batch_num * 2 else topics_limited[:2]
+                    
+                    # 배치별 난이도 할당 (요청된 난이도 중심으로 분배)
+                    if request.difficulty.value == "easy":
+                        difficulty_cycle = ["easy", "easy", "medium", "medium", "easy"]
+                    elif request.difficulty.value == "medium":
+                        difficulty_cycle = ["easy", "medium", "medium", "hard", "medium"]
+                    else:  # hard
+                        difficulty_cycle = ["medium", "hard", "hard", "hard", "hard"]
+                    
+                    batch_difficulty = difficulty_cycle[batch_num % len(difficulty_cycle)]
+                    
+                    # 배치별 접근 방식 (더 구체적이고 다양하게)
                     approaches = [
-                        "기본 개념과 정의 중심으로 문제를 출제하세요.",
-                        "실무 적용과 실제 사례 중심으로 문제를 출제하세요.", 
-                        "고급 분석과 심화 내용 중심으로 문제를 출제하세요.",
-                        "문제 해결과 트러블슈팅 중심으로 문제를 출제하세요.",
-                        "이론과 실습의 통합 관점에서 문제를 출제하세요."
+                        "기본 개념과 정의를 묻는 문제를 출제하세요. '~는 무엇인가요?' 형태를 피하고 구체적인 상황이나 예시를 포함하세요.",
+                        "실무 적용과 실제 사례 중심으로 문제를 출제하세요. '어떤 상황에서', '왜 사용하는가' 형태로 출제하세요.", 
+                        "고급 분석과 심화 내용 중심으로 문제를 출제하세요. '비교', '분석', '장단점' 형태로 출제하세요.",
+                        "문제 해결과 트러블슈팅 중심으로 문제를 출제하세요. '어떻게 해결', '어떤 문제가 발생' 형태로 출제하세요.",
+                        "이론과 실습의 통합 관점에서 문제를 출제하세요. '구현 시 고려사항', '설계 원칙' 형태로 출제하세요."
                     ]
                     batch_approach = approaches[batch_num % len(approaches)]
                     
@@ -1405,8 +1418,9 @@ class QuizGeneratorAgent:
                         for i, prev_q in enumerate(generated_questions[-10:], 1):  # 최근 10개만
                             prev_question_text = prev_q.get('question', '')[:100]
                             prev_keywords = ', '.join(prev_q.get('keywords', [])[:3])
-                            previous_questions_context += f"{i}. {prev_question_text}... (키워드: {prev_keywords})\n"
-                        previous_questions_context += "\n**중요**: 위 문제들과 완전히 다른 주제, 관점, 키워드로 문제를 생성하세요."
+                            prev_topic = prev_q.get('learning_objective', '')[:50]
+                            previous_questions_context += f"{i}. {prev_question_text}... (주제: {prev_topic}, 키워드: {prev_keywords})\n"
+                        previous_questions_context += "\n**🚨 절대 금지사항**: 위 문제들과 동일하거나 유사한 주제, 키워드, 개념으로 문제를 생성하지 마세요. 예를 들어, 위에 'FastAPI 마이그레이션' 문제가 있다면 'FastAPI'나 '마이그레이션' 관련 문제를 절대 생성하지 마세요. 완전히 다른 기술이나 개념으로 문제를 생성하세요."
                     
                     base_prompt = self.prompt_manager.get_prompt("question").format(
                         summary=summary_limited,
@@ -1415,7 +1429,7 @@ class QuizGeneratorAgent:
                         num_questions=batch_size,
                         difficulty=batch_difficulty,
                         question_type=request.question_type.value
-                    ) + f"\n\n**배치 {batch_num + 1} 특별 지침**: {batch_approach}\n**중복 방지**: 이전 배치와 완전히 다른 주제와 관점으로 문제를 생성하세요." + previous_questions_context
+                    ) + f"\n\n**배치 {batch_num + 1} 특별 지침**: {batch_approach}\n**🚨 중복 방지 필수**: 이전 배치와 완전히 다른 주제와 관점으로 문제를 생성하세요. 동일한 기술명이나 키워드를 사용하지 마세요." + previous_questions_context + f"\n\n**현재 배치 전용 키워드**: {', '.join(batch_keywords)}\n**사용 금지 키워드**: {', '.join(used_keywords) if used_keywords else '없음'}"
 
                     # 카테고리 특화 프롬프트 추가
                     if request.category or request.sub_category:
