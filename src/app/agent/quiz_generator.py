@@ -1024,7 +1024,7 @@ class QuizGeneratorAgent:
             logger.info(f"📊 진행률: {progress['progress_percent']}% - {progress['step_name']}")
 
             # 🔥 최적화: 토큰 제한 고려한 배치 크기 조정
-            target_questions = int(request.num_questions * 1.3)  # 1.3배로 조정 (토큰 제한 고려)
+            target_questions = request.num_questions  # 정확히 요청한 수만 생성 (토큰 제한 고려)
             batch_size = 5  # 배치 크기 5개로 변경
             total_batches = (target_questions + batch_size - 1) // batch_size
 
@@ -1360,11 +1360,11 @@ class QuizGeneratorAgent:
             logger.info(f"[문제 생성] 시작 (목표: {request.num_questions}개): {request_id}")
 
             # 배치 설정
-            target_questions = int(request.num_questions * 1.3)  # 1.3배로 조정
+            target_questions = request.num_questions  # 정확히 요청한 수만 생성
             batch_size = 5  # 배치 크기 5개로 변경
             total_batches = (target_questions + batch_size - 1) // batch_size
 
-            logger.info(f"🎯 목표 생성: {target_questions}개 (요청: {request.num_questions}개 + 여유분): {request_id}")
+            logger.info(f"🎯 목표 생성: {target_questions}개 (요청: {request.num_questions}개): {request_id}")
 
             # 문제 생성 시작 - 상태 알림 제거
 
@@ -1376,14 +1376,46 @@ class QuizGeneratorAgent:
                     topics_limited = topics[:10]
                     keywords_limited = keywords[:15]
 
+                    # 배치별로 다른 키워드와 난이도 할당
+                    batch_keywords = keywords_limited[batch_num * 3:(batch_num + 1) * 3] if len(keywords_limited) > batch_num * 3 else keywords_limited
+                    batch_topics = topics_limited[batch_num * 2:(batch_num + 1) * 2] if len(topics_limited) > batch_num * 2 else topics_limited
+                    
+                    # 배치별 난이도 할당 (1-2: easy, 3-4: medium, 5+: hard)
+                    if batch_num < 2:
+                        batch_difficulty = "easy"
+                    elif batch_num < 4:
+                        batch_difficulty = "medium"
+                    else:
+                        batch_difficulty = "hard"
+                    
+                    # 배치별 접근 방식
+                    approaches = [
+                        "기본 개념과 정의 중심으로 문제를 출제하세요.",
+                        "실무 적용과 실제 사례 중심으로 문제를 출제하세요.", 
+                        "고급 분석과 심화 내용 중심으로 문제를 출제하세요.",
+                        "문제 해결과 트러블슈팅 중심으로 문제를 출제하세요.",
+                        "이론과 실습의 통합 관점에서 문제를 출제하세요."
+                    ]
+                    batch_approach = approaches[batch_num % len(approaches)]
+                    
+                    # 이전 배치의 문제들을 중복 방지 입력으로 사용
+                    previous_questions_context = ""
+                    if 'generated_questions' in locals() and generated_questions:
+                        previous_questions_context = "\n\n**이전에 생성된 문제들 (중복 방지용)**:\n"
+                        for i, prev_q in enumerate(generated_questions[-10:], 1):  # 최근 10개만
+                            prev_question_text = prev_q.get('question', '')[:100]
+                            prev_keywords = ', '.join(prev_q.get('keywords', [])[:3])
+                            previous_questions_context += f"{i}. {prev_question_text}... (키워드: {prev_keywords})\n"
+                        previous_questions_context += "\n**중요**: 위 문제들과 완전히 다른 주제, 관점, 키워드로 문제를 생성하세요."
+                    
                     base_prompt = self.prompt_manager.get_prompt("question").format(
                         summary=summary_limited,
-                        topics="\n".join(f"- {topic}" for topic in topics_limited),
-                        keywords="\n".join(f"- {keyword}" for keyword in keywords_limited),
+                        topics="\n".join(f"- {topic}" for topic in batch_topics),
+                        keywords="\n".join(f"- {keyword}" for keyword in batch_keywords),
                         num_questions=batch_size,
-                        difficulty=request.difficulty.value,
+                        difficulty=batch_difficulty,
                         question_type=request.question_type.value
-                    )
+                    ) + f"\n\n**배치 {batch_num + 1} 특별 지침**: {batch_approach}\n**중복 방지**: 이전 배치와 완전히 다른 주제와 관점으로 문제를 생성하세요." + previous_questions_context
 
                     # 카테고리 특화 프롬프트 추가
                     if request.category or request.sub_category:
@@ -1592,7 +1624,7 @@ class QuizGeneratorAgent:
             logger.info(f"[전처리] 완료 (총 소요 시간: {time.time() - preprocess_start:.2f}초): {request_id}")
 
             # 전처리 완료 알림 전송
-            await push_quiz_batch_to_stream_test(
+            await push_quiz_batch_to_stream(
                 request_id=request_id,
                 batch_num=1,
                 questions=None,  # 문제가 아직 생성되지 않았으므로 None
@@ -1612,15 +1644,15 @@ class QuizGeneratorAgent:
             logger.info(f"[문제 생성] 시작 (목표: {request.num_questions}개): {request_id}")
 
             # 배치 설정
-            target_questions = int(request.num_questions * 1.3)  # 1.3배로 조정
+            target_questions = request.num_questions  # 정확히 요청한 수만 생성
             batch_size = 5  # 배치 크기 5개로 변경
             total_batches = (target_questions + batch_size - 1) // batch_size
 
-            logger.info(f"🎯 목표 생성: {target_questions}개 (요청: {request.num_questions}개 + 여유분): {request_id}")
+            logger.info(f"🎯 목표 생성: {target_questions}개 (요청: {request.num_questions}개): {request_id}")
 
             # 문제 생성 시작 - 상태 알림 제거
 
-            async def generate_questions_batch_streaming_test(batch_num):
+            async def generate_questions_batch_streaming(batch_num):
                 """스트리밍용 배치 문제 생성"""
                 try:
                     # 요약과 주제 길이 제한 
@@ -1628,14 +1660,40 @@ class QuizGeneratorAgent:
                     topics_limited = topics[:10]
                     keywords_limited = keywords[:15]
 
+                    # 배치별로 완전히 다른 주제와 키워드 선택 (중복 방지 강화)
+                    used_keywords = set()
+                    for prev_question in generated_questions:
+                        if 'keywords' in prev_question:
+                            used_keywords.update(prev_question['keywords'])
+                    
+                    # 사용되지 않은 키워드들만 선택
+                    available_keywords = [k for k in keywords_limited if k not in used_keywords]
+                    if not available_keywords:
+                        available_keywords = keywords_limited
+                    
+                    # 배치별로 다른 키워드 선택
+                    keyword_start = (batch_num * 4) % len(available_keywords) if available_keywords else 0
+                    keyword_end = min(keyword_start + 5, len(available_keywords)) if available_keywords else 0
+                    batch_keywords = available_keywords[keyword_start:keyword_end] if available_keywords else keywords_limited[:5]
+                    
+                    # 배치별 고유 접근 방식
+                    batch_approaches = [
+                        "기본 개념과 정의 중심으로 문제를 출제하세요.",
+                        "실무 적용과 실제 사례 중심으로 문제를 출제하세요.", 
+                        "고급 분석과 심화 내용 중심으로 문제를 출제하세요.",
+                        "문제 해결과 트러블슈팅 중심으로 문제를 출제하세요.",
+                        "이론과 실습의 통합 관점에서 문제를 출제하세요."
+                    ]
+                    batch_approach = batch_approaches[batch_num % len(batch_approaches)]
+                    
                     base_prompt = self.prompt_manager.get_prompt("question").format(
                         summary=summary_limited,
                         topics="\n".join(f"- {topic}" for topic in topics_limited),
-                        keywords="\n".join(f"- {keyword}" for keyword in keywords_limited),
+                        keywords="\n".join(f"- {keyword}" for keyword in batch_keywords),
                         num_questions=batch_size,
                         difficulty=request.difficulty.value,
                         question_type=request.question_type.value
-                    )
+                    ) + f"\n\n**배치별 특별 지침**: {batch_approach}\n**중복 방지**: 이전 배치와 완전히 다른 주제와 관점으로 문제를 생성하세요."
 
                     # 카테고리 특화 프롬프트 추가
                     if request.category or request.sub_category:
@@ -1661,12 +1719,26 @@ class QuizGeneratorAgent:
                     
                     questions = self._parse_questions(response.content)
                     
+                    # 문제 ID 연속성 보장 (1~10번)
+                    start_id = batch_num * batch_size + 1
+                    for i, question in enumerate(questions):
+                        question['id'] = start_id + i
+                    
+                    # 생성된 문제들을 전역 리스트에 추가 (중복 방지용)
+                    if 'generated_questions' not in locals():
+                        generated_questions = []
+                    generated_questions.extend(questions)
+                    
+                    logger.info(f"📝 배치 {batch_num + 1} 문제 ID 할당: {start_id}~{start_id + len(questions) - 1}")
+                    logger.info(f"📊 현재까지 생성된 총 문제 수: {len(generated_questions)}개")
+                    
                     # 생성된 문제들 상세 로깅
-                    logger.info(f"🔍 배치 {batch_num}에서 파싱된 문제 {len(questions)}개:")
+                    logger.info(f"🔍 배치 {batch_num + 1}에서 파싱된 문제 {len(questions)}개:")
                     for i, question in enumerate(questions, 1):
-                        logger.info(f"  문제 {i}: {question.get('question', 'N/A')[:100]}...")
-                        logger.info(f"    선택지: {question.get('choices', [])}")
-                        logger.info(f"    정답: {question.get('correct_answer', 'N/A')}")
+                        logger.info(f"  문제 {question['id']}: {question.get('question', 'N/A')[:100]}...")
+                        logger.info(f"    난이도: {batch_difficulty}")
+                        logger.info(f"    키워드: {', '.join(batch_keywords[:3])}")
+                        logger.info(f"    접근방식: {batch_approach[:30]}...")
                         logger.info(f"    난이도: {question.get('difficulty', 'N/A')}")
                     
                     # 배치 완료 즉시 Redis 스트림으로 전송 (문제만)
