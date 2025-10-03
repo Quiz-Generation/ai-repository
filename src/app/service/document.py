@@ -1,11 +1,14 @@
 import time
+
 from fastapi import UploadFile
 from fastapi.responses import JSONResponse
-from src.common.vector.connect import VectorDBService
-from src.common.error import ErrorCode, JSendError
-from src.app.func import document_loader as document_loader_func
+
 from src.app.func import document as document_func
+from src.app.func import document_loader as document_loader_func
 from src.app.func import vector as vector_func
+from src.common.error import ErrorCode, JSendError
+from src.common.vector.connect import VectorDBService
+
 
 async def upload_document(
         logger,
@@ -44,31 +47,63 @@ async def upload_document(
             )
 
         #2. 해당 파일 특성 분석 및 최적 로더 선택
-        analysis_start_time = time.time()
-        logger.info(
-            f"""
-                STEP2 PDF 특성 분석 시작
-            """
-        )
-        analysis_result = await document_loader_func.analyze_pdf_characteristics(
-            logger=logger,
-            file=file
-        )
-        analysis_time = time.time() - analysis_start_time
-        logger.info(f"⏱️ PDF 분석 완료: {analysis_time:.2f}초")
+        from src.common.conf.settings import settings
 
-        if not analysis_result.recommended_loader:
-            logger.error(
+        analysis_start_time = time.time()
+
+        # 🚀 빠른 로더 강제 모드 체크
+        if settings.PDF_FORCE_FAST_LOADER:
+            # 분석 생략하고 빠른 로더 직접 사용
+            fast_loader = settings.PDF_FAST_LOADER_TYPE
+            logger.info(
                 f"""
-                    STEP2 PDF 특성 분석 실패
+                    STEP2 빠른 로더 강제 모드 활성화
                     "파일명": {file.filename}
-                    "최적 로더": {analysis_result.recommended_loader}
+                    "사용 로더": {fast_loader} (분석 생략)
                 """
             )
-            raise JSendError(
-                code=ErrorCode.Document.PDF_ANALYSIS_ERROR[0],
-                message=ErrorCode.Document.PDF_ANALYSIS_ERROR[1] + f" {analysis_result.recommended_loader}"
+
+            # 간단한 분석 결과 객체 생성 (언어 감지만 수행)
+            from src.app.models.document_loader import PDFAnalysisResult
+            analysis_result = PDFAnalysisResult(
+                language="unknown",
+                has_tables=False,
+                has_images=False,
+                complexity="simple",
+                file_size=file.size or 0,
+                estimated_pages=1,
+                text_density="medium",
+                font_complexity="simple",
+                recommended_loader=fast_loader
             )
+            analysis_time = time.time() - analysis_start_time
+            logger.info(f"⏱️ 빠른 로더 설정 완료: {analysis_time:.4f}초 (분석 생략)")
+        else:
+            # 기존 방식: 파일 분석 후 최적 로더 선택
+            logger.info(
+                f"""
+                    STEP2 PDF 특성 분석 시작
+                """
+            )
+            analysis_result = await document_loader_func.analyze_pdf_characteristics(
+                logger=logger,
+                file=file
+            )
+            analysis_time = time.time() - analysis_start_time
+            logger.info(f"⏱️ PDF 분석 완료: {analysis_time:.2f}초")
+
+            if not analysis_result.recommended_loader:
+                logger.error(
+                    f"""
+                        STEP2 PDF 특성 분석 실패
+                        "파일명": {file.filename}
+                        "최적 로더": {analysis_result.recommended_loader}
+                    """
+                )
+                raise JSendError(
+                    code=ErrorCode.Document.PDF_ANALYSIS_ERROR[0],
+                    message=ErrorCode.Document.PDF_ANALYSIS_ERROR[1] + f" {analysis_result.recommended_loader}"
+                )
 
         #3. PDF 내용 추출
         extraction_start_time = time.time()

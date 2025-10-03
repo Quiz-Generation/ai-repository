@@ -1,5 +1,6 @@
 import time
-from fastapi import APIRouter, Form, Request, UploadFile, File
+
+from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from src.app.docs import document as document_docs

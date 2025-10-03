@@ -3,6 +3,7 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings
 
+
 class Settings(BaseSettings):
     STAGE: str = os.getenv('STAGE', "")
 
@@ -14,6 +15,10 @@ class Settings(BaseSettings):
     #레디스
     REDIS_HOST: str = os.getenv('REDIS_HOST', "")
     REDIS_PORT: int = int(os.getenv('REDIS_PORT', 0))
+
+    # PDF 로더 설정
+    PDF_FORCE_FAST_LOADER: bool = os.getenv('PDF_FORCE_FAST_LOADER', 'true').lower() == 'true'
+    PDF_FAST_LOADER_TYPE: str = os.getenv('PDF_FAST_LOADER_TYPE', 'pymupdf')  # pymupdf, pypdf
 
 
     class Config:
