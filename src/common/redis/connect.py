@@ -2,8 +2,10 @@ import asyncio
 import json
 import uuid
 from datetime import datetime
-from src.common.conf.settings import settings
+
 from redis.asyncio import Redis
+
+from src.common.conf.settings import settings
 from src.common.utils.logger import set_logger
 
 REDIS_URL = f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/0"
@@ -39,12 +41,12 @@ async def push_quiz_batch_to_stream(
     문제 생성 배치를 Redis 스트림으로 전송 (스프링 서버로 실시간 전송)
     """
     redis = Redis.from_url(REDIS_URL, decode_responses=True)
-    
+
     try:
         # 스트림 키 생성 (요청별로 구분)
         # stream_key = f"{QUIZ_STREAM_KEY}:{request_id}"
         stream_key = f"{QUIZ_STREAM_KEY}"
-        
+
         # 문제가 있는 경우만 전송 (상태 알림 제거)
         if questions and len(questions) > 0:
             batch_data = {
@@ -57,7 +59,7 @@ async def push_quiz_batch_to_stream(
             # 문제가 없으면 전송하지 않음
             logger.info(f"문제가 없어서 전송하지 않음: {request_id}")
             return
-        
+
         # 메타데이터가 있으면 추가 (Redis 호환성을 위해 리스트를 JSON 문자열로 변환)
         if metadata:
             # 메타데이터의 리스트 타입을 JSON 문자열로 변환
@@ -68,18 +70,18 @@ async def push_quiz_batch_to_stream(
                 else:
                     processed_metadata[key] = value
             batch_data.update(processed_metadata)
-        
+
         # Redis 스트림에 추가
         await redis.xadd(stream_key, batch_data)
-        
+
         # 스트림 만료 시간 설정 (24시간)
         await redis.expire(stream_key, 86400)
-        
+
         if questions and len(questions) > 0:
             logger.info(f"✅ 배치 {batch_num}/{total_batches} Redis 스트림 전송 완료: {len(questions)}개 문제")
         else:
             logger.info(f"✅ 배치 {batch_num}/{total_batches} 상태 알림 Redis 스트림 전송 완료")
-        
+
     except Exception as e:
         logger.error(f"❌ Redis 스트림 전송 실패: {e}")
     finally:
@@ -102,11 +104,11 @@ async def push_quiz_error_to_stream(
     문제 생성 에러를 Redis 스트림으로 전송
     """
     redis = Redis.from_url(REDIS_URL, decode_responses=True)
-    
+
     try:
         # stream_key = f"{QUIZ_STREAM_KEY}:{request_id}"
         stream_key = f"{QUIZ_STREAM_KEY}"
-        
+
         error_data = {
             "message_id": f"{int(datetime.now().timestamp() * 1000)}-error",
             "user_idx": user_idx if user_idx is not None else 0,
@@ -114,10 +116,10 @@ async def push_quiz_error_to_stream(
             "error_message": error_message,
             "timestamp": datetime.now().isoformat()
         }
-        
+
         if batch_num is not None:
             error_data["batch_num"] = batch_num
-            
+
         if metadata:
             # 메타데이터의 리스트 타입을 JSON 문자열로 변환
             processed_metadata = {}
@@ -127,12 +129,12 @@ async def push_quiz_error_to_stream(
                 else:
                     processed_metadata[key] = value
             error_data.update(processed_metadata)
-        
+
         await redis.xadd(stream_key, error_data)
         await redis.expire(stream_key, 86400)
-        
+
         logger.error(f"❌ 에러 Redis 스트림 전송: {error_message}")
-        
+
     except Exception as e:
         logger.error(f"❌ 에러 알림 Redis 스트림 전송 실패: {e}")
     finally:
@@ -163,13 +165,13 @@ async def get_quiz_stream_messages(count: int = 10):
     문제 생성 스트림 메시지들을 조회 (스프링 서버에서 호출)
     """
     redis = Redis.from_url(REDIS_URL, decode_responses=True)
-    
+
     try:
         stream_key = f"{QUIZ_STREAM_KEY}"
-        
+
         # 최근 메시지들 조회
         messages = await redis.xrevrange(stream_key, count=count)
-        
+
         # 메시지 형식 변환 (JSON 문자열을 다시 파싱)
         formatted_messages = []
         for msg_id, msg_data in messages:
@@ -183,14 +185,14 @@ async def get_quiz_stream_messages(count: int = 10):
                         processed_data[key] = value  # 파싱 실패 시 원본 값 유지
                 else:
                     processed_data[key] = value
-            
+
             formatted_messages.append({
                 "message_id": msg_id,
                 "data": processed_data
             })
-        
+
         return formatted_messages
-        
+
     except Exception as e:
         logger.error(f"❌ 스트림 메시지 조회 실패: {e}")
         return []

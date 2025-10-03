@@ -2,17 +2,18 @@
 🎯 Quiz Generation Service
 """
 import logging
-from typing import Dict, List, Any, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from src.common.error import ErrorCode, JSendError
+from src.common.vector.connect import VectorDBService
 
 from ..agent.quiz_generator import (
+    DifficultyLevel,
+    QuestionType,
     QuizGeneratorAgent,
     QuizRequest,
-    DifficultyLevel,
-    QuestionType
 )
-from src.common.vector.connect import VectorDBService
-from src.common.error import ErrorCode, JSendError
 
 logger = logging.getLogger(__name__)
 
@@ -34,21 +35,19 @@ async def generate_quiz_from_file_streaming(
     """
     스트리밍 방식으로 문제 생성 (Redis 스트림으로 실시간 전송)
     """
-    from src.common.redis.connect import (
-        push_quiz_error_to_stream
-    )
-    
+    from src.common.redis.connect import push_quiz_error_to_stream
+
     try:
         logger.info(f"🚀 스트리밍 문제 생성 서비스 시작: {request_id} - {file_id}")
-        
+
         # 1. 파일 ID로 문서 조회
         document_data = await _get_document_by_file_id(logger, vector_db, file_id)
         if not document_data:
             # 더 자세한 오류 메시지 제공
             error_message = f"파일 ID '{file_id}'에 해당하는 문서를 찾을 수 없습니다. "
             error_message += "사용 가능한 파일 목록을 확인하려면 /api/v2/quiz/available-files 엔드포인트를 사용하세요."
-            
-            await push_quiz_error_to_stream_test(
+
+            await push_quiz_error_to_stream(
                 request_id=request_id,
                 error_message=error_message,
                 user_idx=user_idx
@@ -60,7 +59,7 @@ async def generate_quiz_from_file_streaming(
             difficulty_enum = DifficultyLevel(difficulty.lower())
             question_type_enum = QuestionType(question_type.lower())
         except ValueError as e:
-            await push_quiz_error_to_stream_test(
+            await push_quiz_error_to_stream(
                 request_id=request_id,
                 error_message=f"잘못된 파라미터: {str(e)}",
                 user_idx=user_idx
@@ -71,7 +70,7 @@ async def generate_quiz_from_file_streaming(
         import os
         openai_api_key = os.getenv("OPENAI_API_KEY")
         if not openai_api_key:
-            await push_quiz_error_to_stream_test(
+            await push_quiz_error_to_stream(
                 request_id=request_id,
                 error_message="OpenAI API 키가 설정되지 않았습니다",
                 user_idx=user_idx
@@ -106,7 +105,7 @@ async def generate_quiz_from_file_streaming(
 
         # 5. 스트리밍 방식으로 문제 생성
         logger.info(f"STEP_AGENT 스트리밍 AI 에이전트 문제 생성 시작 ({num_questions}개 문제)")
-        
+
         # 스트리밍 문제 생성 호출
         result = await quiz_agent.generate_quiz_streaming(
             request_id=request_id,
@@ -115,12 +114,12 @@ async def generate_quiz_from_file_streaming(
             request=quiz_request,
             documents=[document_data]
         )
-        
+
         if result["success"]:
             logger.info(f"✅ 스트리밍 문제 생성 완료: {request_id}")
         else:
             logger.error(f"❌ 스트리밍 문제 생성 실패: {request_id} - {result.get('error')}")
-            
+
     except Exception as e:
         logger.error(f"❌ 스트리밍 문제 생성 서비스 실패: {request_id} - {e}")
         await push_quiz_error_to_stream(
