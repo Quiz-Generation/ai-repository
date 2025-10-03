@@ -199,11 +199,126 @@ async def get_quiz_stream_messages(count: int = 10):
     finally:
         await redis.close()
 
+# --- 스트림 삭제 함수 ---
+async def clear_quiz_stream():
+    """
+    quiz-stream의 모든 메시지를 삭제
+    """
+    redis = Redis.from_url(REDIS_URL, decode_responses=True)
+
+    try:
+        stream_key = f"{QUIZ_STREAM_KEY}"
+
+        # 스트림이 존재하는지 확인
+        exists = await redis.exists(stream_key)
+
+        if not exists:
+            logger.info(f"ℹ️ 스트림 '{stream_key}'이(가) 존재하지 않습니다.")
+            return {
+                "success": True,
+                "message": f"스트림 '{stream_key}'이(가) 존재하지 않습니다.",
+                "deleted_count": 0
+            }
+
+        # 스트림 삭제 전 메시지 개수 확인
+        stream_info = await redis.xlen(stream_key)
+        logger.info(f"🗑️ 스트림 '{stream_key}' 삭제 시작 (메시지 수: {stream_info})")
+
+        # 스트림 전체 삭제 (키 자체를 삭제)
+        deleted = await redis.delete(stream_key)
+
+        if deleted:
+            logger.info(f"✅ 스트림 '{stream_key}' 삭제 완료 (총 {stream_info}개 메시지)")
+            return {
+                "success": True,
+                "message": f"스트림 '{stream_key}' 삭제 완료",
+                "deleted_count": stream_info
+            }
+        else:
+            logger.warning(f"⚠️ 스트림 '{stream_key}' 삭제 실패")
+            return {
+                "success": False,
+                "message": f"스트림 '{stream_key}' 삭제 실패",
+                "deleted_count": 0
+            }
+
+    except Exception as e:
+        logger.error(f"❌ 스트림 삭제 실패: {e}")
+        return {
+            "success": False,
+            "message": f"스트림 삭제 중 오류 발생: {str(e)}",
+            "deleted_count": 0
+        }
+    finally:
+        await redis.close()
+
+
+async def clear_quiz_stream_messages(max_age_seconds: int = None):
+    """
+    quiz-stream의 오래된 메시지만 삭제 (선택적)
+
+    Args:
+        max_age_seconds: 이 시간(초)보다 오래된 메시지를 삭제. None이면 모든 메시지 삭제
+    """
+    redis = Redis.from_url(REDIS_URL, decode_responses=True)
+
+    try:
+        stream_key = f"{QUIZ_STREAM_KEY}"
+
+        # 스트림이 존재하는지 확인
+        exists = await redis.exists(stream_key)
+
+        if not exists:
+            logger.info(f"ℹ️ 스트림 '{stream_key}'이(가) 존재하지 않습니다.")
+            return {
+                "success": True,
+                "message": f"스트림 '{stream_key}'이(가) 존재하지 않습니다.",
+                "deleted_count": 0
+            }
+
+        if max_age_seconds is None:
+            # 모든 메시지 삭제
+            stream_len = await redis.xlen(stream_key)
+            await redis.delete(stream_key)
+            logger.info(f"✅ 스트림 '{stream_key}'의 모든 메시지 삭제 완료 (총 {stream_len}개)")
+            return {
+                "success": True,
+                "message": f"모든 메시지 삭제 완료",
+                "deleted_count": stream_len
+            }
+        else:
+            # 특정 시간보다 오래된 메시지만 삭제
+            current_timestamp = int(datetime.now().timestamp() * 1000)
+            max_timestamp = current_timestamp - (max_age_seconds * 1000)
+
+            # 오래된 메시지 삭제
+            deleted_count = await redis.xtrim(stream_key, minid=max_timestamp)
+            logger.info(f"✅ 스트림 '{stream_key}'의 오래된 메시지 삭제 완료 (약 {deleted_count}개)")
+
+            return {
+                "success": True,
+                "message": f"{max_age_seconds}초보다 오래된 메시지 삭제 완료",
+                "deleted_count": deleted_count
+            }
+
+    except Exception as e:
+        logger.error(f"❌ 메시지 삭제 실패: {e}")
+        return {
+            "success": False,
+            "message": f"메시지 삭제 중 오류 발생: {str(e)}",
+            "deleted_count": 0
+        }
+    finally:
+        await redis.close()
+
+
 # --- 테스트용 스트림 조회 함수 ---
 
 # --- 사용 예시 (테스트 시 아래 주석 해제) ---
 # asyncio.run(push_quiz_to_stream({"quiz_id": "123", "status": "done", "result": "..."}))
 # asyncio.run(consume_quiz_stream())
+# asyncio.run(clear_quiz_stream())  # 스트림 전체 삭제
+# asyncio.run(clear_quiz_stream_messages(3600))  # 1시간보다 오래된 메시지만 삭제
 # asyncio.run(publish_quiz_pubsub("퀴즈 생성 완료!"))
 # asyncio.run(subscribe_quiz_pubsub())
 # asyncio.run(test_subscribe())
