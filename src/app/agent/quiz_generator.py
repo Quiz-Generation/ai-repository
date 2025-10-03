@@ -1,33 +1,33 @@
 """
 🤖 Quiz Generation AI Agent using LangGraph
 """
+import asyncio
+import json
 import logging
 import os
-import asyncio
-from typing import Dict, List, Any, Optional, TypedDict
+import time
 from dataclasses import dataclass
 from enum import Enum
-import json
-import time
+from typing import Any, Dict, List, Optional, TypedDict
 
 # tokenizers 병렬 처리 설정
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
-from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolNode
 from langchain.prompts import ChatPromptTemplate
-
-# 🔥 프롬프트 관리자 임포트
-from .prompt import QuizPromptManager
-from .prompt.quiz_prompt_manager import DifficultyLevel, QuestionType
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_openai import ChatOpenAI
+from langgraph.graph import END, StateGraph
+from langgraph.prebuilt import ToolNode
 
 # Redis 함수들 임포트
 from src.common.redis.connect import (
     push_quiz_batch_to_stream,
-    push_quiz_error_to_stream
+    push_quiz_error_to_stream,
 )
+
+# 🔥 프롬프트 관리자 임포트
+from .prompt import QuizPromptManager
+from .prompt.quiz_prompt_manager import DifficultyLevel, QuestionType
 
 logger = logging.getLogger(__name__)
 
@@ -838,7 +838,7 @@ class QuizGeneratorAgent:
         """JSON 응답 파싱"""
         try:
             logger.info(f"🔍 LLM 응답 파싱 시작 (길이: {len(content)} 문자)")
-            
+
             if "```json" in content:
                 json_start = content.find("```json") + 7
                 json_end = content.find("```", json_start)
@@ -858,13 +858,13 @@ class QuizGeneratorAgent:
 
             questions_data = json.loads(json_content)
             questions = questions_data.get("questions", [])
-            
+
             logger.info(f"✅ JSON 파싱 성공: {len(questions)}개 문제 추출")
 
             # 전처리 적용
             processed_questions = self._preprocess_questions(questions)
             logger.info(f"🔄 전처리 완료: {len(processed_questions)}개 문제")
-            
+
             return processed_questions
 
         except json.JSONDecodeError as e:
@@ -882,13 +882,22 @@ class QuizGeneratorAgent:
             # 선택지 전처리
             if isinstance(question.get("options"), list):
                 processed_options = []
-                for option in question["options"]:
-                    # 번호 중복 제거 (예: "1. 1. 내용" -> "1. 내용")
+                for idx, option in enumerate(question["options"], 1):
+                    # 번호 중복 제거 및 번호 없는 경우 처리
                     if isinstance(option, str):
                         # 정규표현식으로 번호 중복 패턴 찾기
                         import re
+
                         # "숫자. 숫자. 내용" 패턴을 "숫자. 내용"으로 변경
                         cleaned_option = re.sub(r'^(\d+)\.\s*\1\.\s*', r'\1. ', option)
+
+                        # 🔥 방어 로직: 번호가 없는 경우 자동으로 번호 추가
+                        # "숫자. " 패턴으로 시작하는지 확인
+                        if not re.match(r'^\d+\.\s+', cleaned_option):
+                            # 번호가 없으면 자동으로 추가
+                            cleaned_option = f"{idx}. {cleaned_option}"
+                            logger.warning(f"⚠️ 선택지에 번호가 없어서 자동으로 추가했습니다: {cleaned_option[:50]}...")
+
                         processed_options.append(cleaned_option)
                     else:
                         processed_options.append(option)
@@ -907,21 +916,46 @@ class QuizGeneratorAgent:
                         processed_question["correct_answer"] = f"{answer_number}. {answer_content}"
                         processed_question["correct_answer_number"] = answer_number
                     else:
-                        # correct_answer가 올바른 형식이 아닌 경우, 옵션에서 찾기
+                        # 🔥 방어 로직: correct_answer가 올바른 형식이 아닌 경우, 옵션에서 찾기
+                        correct_answer_stripped = correct_answer.strip()
+                        found = False
+
                         for i, option in enumerate(processed_options, 1):
                             # 옵션에서 번호 제거 후 내용만 비교
-                            option_content = re.sub(r'^\d+\.\s*', '', option)
-                            if option_content == correct_answer or option_content in correct_answer:
+                            option_content = re.sub(r'^\d+\.\s*', '', option).strip()
+
+                            # 정확히 일치하는 경우 또는 correct_answer가 option 내용에 포함된 경우
+                            if option_content == correct_answer_stripped or correct_answer_stripped == option_content:
                                 processed_question["correct_answer"] = f"{i}. {option_content}"
                                 processed_question["correct_answer_number"] = i
+                                found = True
                                 break
-                        else:
-                            # 찾지 못한 경우 첫 번째 옵션을 정답으로 설정
+                            # 부분 문자열 매칭 (더 관대한 매칭)
+                            elif correct_answer_stripped in option_content or option_content in correct_answer_stripped:
+                                processed_question["correct_answer"] = f"{i}. {option_content}"
+                                processed_question["correct_answer_number"] = i
+                                found = True
+                                break
+
+                        if not found:
+                            # 찾지 못한 경우, correct_answer_number가 이미 지정되어 있는지 확인
+                            if "correct_answer_number" in question and isinstance(question["correct_answer_number"], int):
+                                answer_num = question["correct_answer_number"]
+                                if 1 <= answer_num <= len(processed_options):
+                                    option_content = re.sub(r'^\d+\.\s*', '', processed_options[answer_num - 1]).strip()
+                                    processed_question["correct_answer"] = f"{answer_num}. {option_content}"
+                                    processed_question["correct_answer_number"] = answer_num
+                                    logger.warning(f"⚠️ correct_answer를 찾지 못해 correct_answer_number({answer_num})를 사용했습니다.")
+                                    found = True
+
+                        if not found:
+                            # 여전히 찾지 못한 경우 첫 번째 옵션을 정답으로 설정
                             if processed_options:
                                 first_option = processed_options[0]
-                                first_content = re.sub(r'^\d+\.\s*', '', first_option)
+                                first_content = re.sub(r'^\d+\.\s*', '', first_option).strip()
                                 processed_question["correct_answer"] = f"1. {first_content}"
                                 processed_question["correct_answer_number"] = 1
+                                logger.warning(f"⚠️ correct_answer를 찾지 못해 첫 번째 옵션을 정답으로 설정했습니다.")
 
             processed_questions.append(processed_question)
 
@@ -1218,8 +1252,9 @@ class QuizGeneratorAgent:
 
             # Redis 캐시에도 저장 (선택적)
             try:
-                import redis
                 import json
+
+                import redis
                 redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
                 redis_client.setex(cache_key, 3600, json.dumps(questions))  # 1시간 TTL
                 logger.info(f"🎯 Redis 캐시 저장 완료: {len(questions)}개")
@@ -1263,7 +1298,7 @@ class QuizGeneratorAgent:
         """
         스트리밍 방식으로 문제 생성 (각 배치마다 Redis 스트림으로 전송)
         """
-        
+
         import time
         try:
             total_start = time.time()
@@ -1308,7 +1343,7 @@ class QuizGeneratorAgent:
             async def process_single_doc(doc):
                 filename = doc.get("filename", "Unknown")
                 content = doc.get("content", "")
-                
+
                 # 컨텐츠 길이 제한 (토큰 제한 방지)
                 max_content_length = 3000
                 if len(content) > max_content_length:
@@ -1336,7 +1371,7 @@ class QuizGeneratorAgent:
             keywords = []
             for r in doc_results:
                 keywords.extend([kw.strip() for kw in r["keywords"].split(',') if kw.strip()])
-            
+
             logger.info(f"[전처리] 완료 (총 소요 시간: {time.time() - preprocess_start:.2f}초): {request_id}")
 
             # 전처리 완료 알림 전송
@@ -1381,16 +1416,16 @@ class QuizGeneratorAgent:
                     if 'generated_questions' in locals() and generated_questions:
                         for prev_q in generated_questions:
                             used_keywords.update(prev_q.get('keywords', []))
-                    
+
                     # 사용되지 않은 키워드만 선택
                     available_keywords = [k for k in keywords_limited if k not in used_keywords]
                     if not available_keywords:
                         available_keywords = keywords_limited
-                    
+
                     # 배치별로 다른 키워드 선택
                     batch_keywords = available_keywords[batch_num * 3:(batch_num + 1) * 3] if len(available_keywords) > batch_num * 3 else available_keywords[:3]
                     batch_topics = topics_limited[batch_num * 2:(batch_num + 1) * 2] if len(topics_limited) > batch_num * 2 else topics_limited[:2]
-                    
+
                     # 배치별 난이도 할당 (요청된 난이도 중심으로 분배)
                     if request.difficulty.value == "easy":
                         difficulty_cycle = ["easy", "easy", "medium", "medium", "easy"]
@@ -1398,19 +1433,19 @@ class QuizGeneratorAgent:
                         difficulty_cycle = ["easy", "medium", "medium", "hard", "medium"]
                     else:  # hard
                         difficulty_cycle = ["medium", "hard", "hard", "hard", "hard"]
-                    
+
                     batch_difficulty = difficulty_cycle[batch_num % len(difficulty_cycle)]
-                    
+
                     # 배치별 접근 방식 (더 구체적이고 다양하게)
                     approaches = [
                         "기본 개념과 정의를 묻는 문제를 출제하세요. '~는 무엇인가요?' 형태를 피하고 구체적인 상황이나 예시를 포함하세요.",
-                        "실무 적용과 실제 사례 중심으로 문제를 출제하세요. '어떤 상황에서', '왜 사용하는가' 형태로 출제하세요.", 
+                        "실무 적용과 실제 사례 중심으로 문제를 출제하세요. '어떤 상황에서', '왜 사용하는가' 형태로 출제하세요.",
                         "고급 분석과 심화 내용 중심으로 문제를 출제하세요. '비교', '분석', '장단점' 형태로 출제하세요.",
                         "문제 해결과 트러블슈팅 중심으로 문제를 출제하세요. '어떻게 해결', '어떤 문제가 발생' 형태로 출제하세요.",
                         "이론과 실습의 통합 관점에서 문제를 출제하세요. '구현 시 고려사항', '설계 원칙' 형태로 출제하세요."
                     ]
                     batch_approach = approaches[batch_num % len(approaches)]
-                    
+
                     # 이전 배치의 문제들을 중복 방지 입력으로 사용
                     previous_questions_context = ""
                     if 'generated_questions' in locals() and generated_questions:
@@ -1421,7 +1456,7 @@ class QuizGeneratorAgent:
                             prev_topic = prev_q.get('learning_objective', '')[:50]
                             previous_questions_context += f"{i}. {prev_question_text}... (주제: {prev_topic}, 키워드: {prev_keywords})\n"
                         previous_questions_context += "\n**🚨 절대 금지사항**: 위 문제들과 동일하거나 유사한 주제, 키워드, 개념으로 문제를 생성하지 마세요. 예를 들어, 위에 'FastAPI 마이그레이션' 문제가 있다면 'FastAPI'나 '마이그레이션' 관련 문제를 절대 생성하지 마세요. 완전히 다른 기술이나 개념으로 문제를 생성하세요."
-                    
+
                     base_prompt = self.prompt_manager.get_prompt("question").format(
                         summary=summary_limited,
                         topics="\n".join(f"- {topic}" for topic in batch_topics),
@@ -1452,9 +1487,9 @@ class QuizGeneratorAgent:
                         "system_message": "당신은 전문 교육 컨텐츠 개발자입니다. 고품질의 문제를 생성하세요.",
                         "prompt": question_prompt
                     })
-                    
+
                     questions = self._parse_questions(response.content)
-                    
+
                     # 배치 완료 즉시 Redis 스트림으로 전송 (문제만)
                     await push_quiz_batch_to_stream(
                         request_id=request_id,
@@ -1466,13 +1501,13 @@ class QuizGeneratorAgent:
                         status="questions"
 
                     )
-                    
+
                     return questions
-                    
+
                 except Exception as e:
                     error_msg = str(e)
                     logger.error(f"배치 {batch_num} 실패: {error_msg}")
-                    
+
                     # 에러 알림 전송
                     await push_quiz_error_to_stream(
                         request_id=request_id,
@@ -1482,7 +1517,7 @@ class QuizGeneratorAgent:
                         quizset_idx=quizset_idx,
 
                     )
-                    
+
                     return []
 
             # 배치별 문제 생성 및 스트리밍
@@ -1506,14 +1541,14 @@ class QuizGeneratorAgent:
 
             # 3. 품질 검증 및 최종 정리
             questions = self._advanced_quality_check(questions, target_questions)
-            
+
             # 품질 점수 계산
             quality_scores = [self._calculate_question_score(q) for q in questions]
             avg_quality = sum(quality_scores) / len(quality_scores) if quality_scores else 0
-            
+
             # 품질이 낮은 문제 필터링
             high_quality_questions = [q for q, score in zip(questions, quality_scores) if score >= 0.5]
-            
+
             # 여유분이 충분한지 확인
             if len(high_quality_questions) >= request.num_questions:
                 questions = self._distribute_difficulty_levels(
@@ -1561,7 +1596,7 @@ class QuizGeneratorAgent:
         """
         스트리밍 방식으로 문제 생성 (각 배치마다 Redis 스트림으로 전송)
         """
-        
+
         import time
         try:
             total_start = time.time()
@@ -1606,7 +1641,7 @@ class QuizGeneratorAgent:
             async def process_single_doc(doc):
                 filename = doc.get("filename", "Unknown")
                 content = doc.get("content", "")
-                
+
                 # 컨텐츠 길이 제한 (토큰 제한 방지)
                 max_content_length = 3000
                 if len(content) > max_content_length:
@@ -1634,7 +1669,7 @@ class QuizGeneratorAgent:
             keywords = []
             for r in doc_results:
                 keywords.extend([kw.strip() for kw in r["keywords"].split(',') if kw.strip()])
-            
+
             logger.info(f"[전처리] 완료 (총 소요 시간: {time.time() - preprocess_start:.2f}초): {request_id}")
 
             # 전처리 완료 알림 전송
@@ -1669,7 +1704,7 @@ class QuizGeneratorAgent:
             async def generate_questions_batch_streaming(batch_num):
                 """스트리밍용 배치 문제 생성"""
                 try:
-                    # 요약과 주제 길이 제한 
+                    # 요약과 주제 길이 제한
                     summary_limited = summary[:1000] if len(summary) > 1000 else summary
                     topics_limited = topics[:10]
                     keywords_limited = keywords[:15]
@@ -1679,27 +1714,27 @@ class QuizGeneratorAgent:
                     for prev_question in generated_questions:
                         if 'keywords' in prev_question:
                             used_keywords.update(prev_question['keywords'])
-                    
+
                     # 사용되지 않은 키워드들만 선택
                     available_keywords = [k for k in keywords_limited if k not in used_keywords]
                     if not available_keywords:
                         available_keywords = keywords_limited
-                    
+
                     # 배치별로 다른 키워드 선택
                     keyword_start = (batch_num * 4) % len(available_keywords) if available_keywords else 0
                     keyword_end = min(keyword_start + 5, len(available_keywords)) if available_keywords else 0
                     batch_keywords = available_keywords[keyword_start:keyword_end] if available_keywords else keywords_limited[:5]
-                    
+
                     # 배치별 고유 접근 방식
                     batch_approaches = [
                         "기본 개념과 정의 중심으로 문제를 출제하세요.",
-                        "실무 적용과 실제 사례 중심으로 문제를 출제하세요.", 
+                        "실무 적용과 실제 사례 중심으로 문제를 출제하세요.",
                         "고급 분석과 심화 내용 중심으로 문제를 출제하세요.",
                         "문제 해결과 트러블슈팅 중심으로 문제를 출제하세요.",
                         "이론과 실습의 통합 관점에서 문제를 출제하세요."
                     ]
                     batch_approach = batch_approaches[batch_num % len(batch_approaches)]
-                    
+
                     base_prompt = self.prompt_manager.get_prompt("question").format(
                         summary=summary_limited,
                         topics="\n".join(f"- {topic}" for topic in topics_limited),
@@ -1730,22 +1765,22 @@ class QuizGeneratorAgent:
                         "system_message": "당신은 전문 교육 컨텐츠 개발자입니다. 고품질의 문제를 생성하세요.",
                         "prompt": question_prompt
                     })
-                    
+
                     questions = self._parse_questions(response.content)
-                    
+
                     # 문제 ID 연속성 보장 (1~10번)
                     start_id = batch_num * batch_size + 1
                     for i, question in enumerate(questions):
                         question['id'] = start_id + i
-                    
+
                     # 생성된 문제들을 전역 리스트에 추가 (중복 방지용)
                     if 'generated_questions' not in locals():
                         generated_questions = []
                     generated_questions.extend(questions)
-                    
+
                     logger.info(f"📝 배치 {batch_num + 1} 문제 ID 할당: {start_id}~{start_id + len(questions) - 1}")
                     logger.info(f"📊 현재까지 생성된 총 문제 수: {len(generated_questions)}개")
-                    
+
                     # 생성된 문제들 상세 로깅
                     logger.info(f"🔍 배치 {batch_num + 1}에서 파싱된 문제 {len(questions)}개:")
                     for i, question in enumerate(questions, 1):
@@ -1754,7 +1789,7 @@ class QuizGeneratorAgent:
                         logger.info(f"    키워드: {', '.join(batch_keywords[:3])}")
                         logger.info(f"    접근방식: {batch_approach[:30]}...")
                         logger.info(f"    난이도: {question.get('difficulty', 'N/A')}")
-                    
+
                     # 배치 완료 즉시 Redis 스트림으로 전송 (문제만)
                     await push_quiz_batch_to_stream(
                         request_id=request_id,
@@ -1765,13 +1800,13 @@ class QuizGeneratorAgent:
                         total_batches=total_batches,
                         status="questions",
                     )
-                    
+
                     return questions
-                    
+
                 except Exception as e:
                     error_msg = str(e)
                     logger.error(f"배치 {batch_num} 실패: {error_msg}")
-                    
+
                     # 에러 알림 전송
                     await push_quiz_batch_to_stream(
                         request_id=request_id,
@@ -1780,7 +1815,7 @@ class QuizGeneratorAgent:
                         user_idx=user_idx,
                         quizset_idx=quizset_idx,
                     )
-                    
+
                     return []
 
             # 배치별 문제 생성 및 스트리밍
@@ -1804,14 +1839,14 @@ class QuizGeneratorAgent:
 
             # 3. 품질 검증 및 최종 정리
             questions = self._advanced_quality_check(questions, target_questions)
-            
+
             # 품질 점수 계산
             quality_scores = [self._calculate_question_score(q) for q in questions]
             avg_quality = sum(quality_scores) / len(quality_scores) if quality_scores else 0
-            
+
             # 품질이 낮은 문제 필터링
             high_quality_questions = [q for q, score in zip(questions, quality_scores) if score >= 0.5]
-            
+
             # 여유분이 충분한지 확인
             if len(high_quality_questions) >= request.num_questions:
                 questions = self._distribute_difficulty_levels(

@@ -116,7 +116,7 @@ async def get_quiz_stream(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# 🗑️ 3. 문제 생성 스트림 삭제
+# 3. 문제 생성 스트림 삭제
 @router.delete("/stream",
     summary="문제 생성 스트림 삭제",
     description="quiz-stream의 모든 메시지를 삭제합니다."
