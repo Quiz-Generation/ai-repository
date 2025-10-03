@@ -327,38 +327,55 @@ async def _get_document_by_file_id(
     try:
         logger.info(f"STEP_VECTOR 파일 ID로 문서 조회: {file_id}")
 
-        # 🔥 최적화: file_id로 직접 필터링하여 조회
+        # 🔥 최적화: file_id로 직접 필터링하여 조회 (Milvus 쿼리 사용)
         if hasattr(vector_db, 'vector_db') and vector_db.vector_db:
-            # 벡터 DB에서 해당 file_id를 가진 문서들만 조회
-            all_documents = await vector_db.vector_db.get_all_documents(10000)
+            # 🚀 get_documents_by_file_id 메서드가 있으면 사용 (최적화된 쿼리)
+            if hasattr(vector_db.vector_db, 'get_documents_by_file_id'):
+                logger.info(f"STEP_VECTOR 최적화된 file_id 쿼리 사용: {file_id}")
+                target_documents = await vector_db.vector_db.get_documents_by_file_id(file_id)
+            else:
+                # 폴백: 모든 문서 조회 후 필터링
+                logger.info(f"STEP_VECTOR 전체 문서 조회 후 필터링 방식 사용")
+                all_documents = await vector_db.vector_db.get_all_documents(50000)  # 제한을 크게 증가
+                target_documents = [doc for doc in all_documents if doc.metadata.get("file_id") == file_id]
 
-            # file_id 기준으로 필터링
+            # file_id 기준으로 청크 데이터 구성
             target_chunks = []
             target_file_info = None
 
-            for doc in all_documents:
-                if doc.metadata.get("file_id") == file_id:
-                    chunk_data = {
-                        "id": doc.id,
-                        "content": doc.content,
-                        "metadata": doc.metadata
-                    }
-                    target_chunks.append(chunk_data)
+            for doc in target_documents:
+                chunk_data = {
+                    "id": doc.id,
+                    "content": doc.content,
+                    "metadata": doc.metadata
+                }
+                target_chunks.append(chunk_data)
 
-                    # 파일 정보 추출 (첫 번째 청크에서)
-                    if not target_file_info:
-                        target_file_info = {
-                            "file_id": file_id,
-                            "filename": doc.metadata.get("filename", "Unknown"),
-                            "language": doc.metadata.get("language", "unknown"),
-                            "file_size": doc.metadata.get("file_size", 0),
-                            "pdf_loader": doc.metadata.get("pdf_loader", "unknown"),
-                            "upload_timestamp": doc.metadata.get("upload_timestamp"),
-                            "total_chunks": len([d for d in all_documents if d.metadata.get("file_id") == file_id])
-                        }
+                # 파일 정보 추출 (첫 번째 청크에서)
+                if not target_file_info:
+                    target_file_info = {
+                        "file_id": file_id,
+                        "filename": doc.metadata.get("filename", "Unknown"),
+                        "language": doc.metadata.get("language", "unknown"),
+                        "file_size": doc.metadata.get("file_size", 0),
+                        "pdf_loader": doc.metadata.get("pdf_loader", "unknown"),
+                        "upload_timestamp": doc.metadata.get("upload_timestamp"),
+                        "total_chunks": len(target_documents)
+                    }
 
             if not target_chunks:
                 logger.warning(f"WARNING 지정된 파일 ID를 찾을 수 없음: {file_id}")
+                # 🔥 디버깅: 사용 가능한 파일 ID 샘플 로깅
+                try:
+                    sample_docs = await vector_db.vector_db.get_all_documents(100)
+                    available_file_ids = set()
+                    for doc in sample_docs:
+                        fid = doc.metadata.get("file_id")
+                        if fid:
+                            available_file_ids.add(fid)
+                    logger.warning(f"WARNING 사용 가능한 파일 ID 샘플 (처음 10개): {list(available_file_ids)[:10]}")
+                except Exception as debug_error:
+                    logger.error(f"ERROR 디버깅 정보 조회 실패: {debug_error}")
                 return None
 
             # 청크들을 하나의 문서로 합치기 (정렬 후)
@@ -430,19 +447,25 @@ async def _get_file_chunks(
 ) -> List[Dict[str, Any]]:
     """특정 파일의 모든 청크 조회"""
     try:
-        # 벡터 DB에서 해당 file_id를 가진 모든 문서 조회
-        all_documents = await vector_db.vector_db.get_all_documents(10000)
+        # 🚀 최적화된 쿼리 사용
+        if hasattr(vector_db.vector_db, 'get_documents_by_file_id'):
+            logger.info(f"STEP_VECTOR 최적화된 file_id 쿼리로 청크 조회: {file_id}")
+            documents = await vector_db.vector_db.get_documents_by_file_id(file_id)
+        else:
+            # 폴백: 전체 문서 조회 후 필터링
+            logger.info(f"STEP_VECTOR 전체 문서 조회 후 필터링")
+            all_documents = await vector_db.vector_db.get_all_documents(50000)
+            documents = [doc for doc in all_documents if doc.metadata.get("file_id") == file_id]
 
         # file_id 기준으로 필터링
         file_chunks = []
-        for doc in all_documents:
-            if doc.metadata.get("file_id") == file_id:
-                chunk_data = {
-                    "id": doc.id,
-                    "content": doc.content,
-                    "metadata": doc.metadata
-                }
-                file_chunks.append(chunk_data)
+        for doc in documents:
+            chunk_data = {
+                "id": doc.id,
+                "content": doc.content,
+                "metadata": doc.metadata
+            }
+            file_chunks.append(chunk_data)
 
         # chunk_index 순서로 정렬 (가능한 경우)
         file_chunks.sort(key=lambda x: x["metadata"].get("chunk_index", 0))

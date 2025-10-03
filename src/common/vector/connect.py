@@ -1,16 +1,17 @@
 """
 🗄️ Vector Database Service
 """
-import logging
 import hashlib
+import logging
 import uuid
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from sentence_transformers import SentenceTransformer
 
-from src.common.vector.factory import VectorDBFactory
-from src.common.vector.base import  VectorDocument, SearchResult
 from src.app.func.text_helper import TextHelper
+from src.common.vector.base import SearchResult, VectorDocument
+from src.common.vector.factory import VectorDBFactory
 
 logger = logging.getLogger(__name__)
 
@@ -383,7 +384,7 @@ class VectorDBService:
             logger.info(f"STEP_VECTOR 파일 조회 시작 (제한: {file_limit}개 파일)")
 
             # 🔥 충분히 많은 청크를 조회해서 모든 파일을 찾기 위해
-            chunk_limit = 10000  # 충분히 큰 수로 설정
+            chunk_limit = 50000  # 충분히 큰 수로 설정 (파일 100개 x 평균 500청크)
             documents = await self.vector_db.get_all_documents(chunk_limit)
 
             # 🔥 파일별로 그룹화 (file_id 기준)

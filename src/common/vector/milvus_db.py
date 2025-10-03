@@ -4,8 +4,9 @@
 import logging
 import os
 import uuid
-from typing import List, Dict, Any, Optional
-from .base import VectorDatabase, VectorDocument, SearchResult
+from typing import Any, Dict, List, Optional
+
+from .base import SearchResult, VectorDatabase, VectorDocument
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,14 @@ class MilvusDB(VectorDatabase):
     async def initialize(self) -> None:
         """Milvus 클라이언트 초기화 및 컬렉션 생성"""
         try:
-            from pymilvus import connections, Collection, FieldSchema, CollectionSchema, DataType, utility
+            from pymilvus import (
+                Collection,
+                CollectionSchema,
+                DataType,
+                FieldSchema,
+                connections,
+                utility,
+            )
 
             logger.info("STEP_VECTOR Milvus 초기화 시작")
 
@@ -232,7 +240,7 @@ class MilvusDB(VectorDatabase):
             if not self.client:
                 await self.initialize()
 
-            limit_count = limit if limit else 1000  # 기본 제한
+            limit_count = limit if limit else 10000  # 기본 제한을 10000으로 증가
             logger.info(f"STEP_QUERY Milvus 전체 문서 조회 시작 (제한: {limit_count})")
 
             # 🔥 timestamp 기반 쿼리 (실제로 작동하는 방법)
@@ -264,6 +272,31 @@ class MilvusDB(VectorDatabase):
             )
             documents.append(doc)
         return documents
+
+    async def get_documents_by_file_id(self, file_id: str) -> List[VectorDocument]:
+        """특정 file_id를 가진 모든 문서 조회 (최적화된 쿼리)"""
+        try:
+            if not self.client:
+                await self.initialize()
+
+            logger.info(f"STEP_QUERY Milvus에서 file_id로 문서 조회 시작: {file_id}")
+
+            # 🔥 file_id로 직접 필터링하여 조회
+            expr = f'metadata["file_id"] == "{file_id}"'
+
+            query_results = self.client.query(
+                expr=expr,
+                output_fields=["id", "content", "metadata"],
+                limit=10000  # 충분히 큰 값으로 설정
+            )
+
+            documents = self._parse_query_results(query_results)
+            logger.info(f"SUCCESS file_id '{file_id}'의 {len(documents)}개 문서 조회 완료")
+            return documents
+
+        except Exception as e:
+            logger.error(f"ERROR file_id로 문서 조회 실패: {e}")
+            return []
 
     async def health_check(self) -> Dict[str, Any]:
         """Milvus 헬스체크"""

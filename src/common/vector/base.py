@@ -2,8 +2,8 @@
 🗄️ Vector Database Abstract Interface
 """
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -62,6 +62,11 @@ class VectorDatabase(ABC):
     @abstractmethod
     async def get_all_documents(self, limit: Optional[int] = None) -> List[VectorDocument]:
         """모든 문서 조회"""
+        pass
+
+    @abstractmethod
+    async def get_documents_by_file_id(self, file_id: str) -> List[VectorDocument]:
+        """특정 file_id를 가진 모든 문서 조회"""
         pass
 
     @abstractmethod
